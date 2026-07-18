@@ -1,0 +1,171 @@
+:root {
+  font-family:
+    Inter,
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  color: #172033;
+  background: #eef2f6;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 720px;
+  min-height: 100vh;
+}
+
+button {
+  border: 1px solid #aeb9c7;
+  border-radius: 8px;
+  padding: 0.55rem 0.85rem;
+  color: #172033;
+  background: #fff;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 3px solid #3974d8;
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.app-shell {
+  width: min(1180px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 36px 0 64px;
+}
+
+.hero,
+.viewer-card,
+.boundary-card {
+  border: 1px solid #d8e0e9;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 14px 42px rgb(24 39 63 / 8%);
+}
+
+.hero {
+  padding: 28px 32px;
+}
+
+.hero h1 {
+  margin: 0.35rem 0 0.7rem;
+  font-size: clamp(1.75rem, 3vw, 2.65rem);
+}
+
+.hero p {
+  max-width: 780px;
+  line-height: 1.7;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #3563a9;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.revision {
+  display: inline-block;
+  margin: 0.75rem 0 0;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  color: #1f4f92;
+  background: #e8f0fb;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.primary {
+  border-color: #2259ae;
+  color: #fff;
+  background: #2259ae;
+}
+
+.boundary-card {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 20px;
+  padding: 24px 28px;
+}
+
+.boundary-card span,
+.loading {
+  color: #526174;
+}
+
+.viewer-card {
+  margin-top: 20px;
+  overflow: hidden;
+}
+
+.viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 12px 14px;
+  border-bottom: 1px solid #d8e0e9;
+  background: #f8fafc;
+}
+
+.viewer-toolbar [role="status"] {
+  margin-left: auto;
+  color: #425168;
+}
+
+.canvas-shell {
+  display: grid;
+  min-height: 640px;
+  padding: 28px;
+  overflow: auto;
+  place-items: start center;
+  background: #dfe5ec;
+}
+
+canvas {
+  display: block;
+  max-width: none;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(26 38 58 / 18%);
+}
+
+.page-stage {
+  position: relative;
+}
+
+.selection-layer {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.selection-preview {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 2px solid #d63b32;
+  border-radius: 3px;
+  background: rgb(214 59 50 / 14%);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 85%) inset;
+  pointer-events: none;
+  transform-origin: top left;
+}
+
+.selection-preview[hidden] {
+  display: none;
+}

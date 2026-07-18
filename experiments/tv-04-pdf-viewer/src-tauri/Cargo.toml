@@ -1,0 +1,29 @@
+[package]
+name = "tv-04-pdf-viewer"
+version = "0.1.0"
+description = "Disposable PDF.js and controlled Blob protocol experiment for KyStudy TV-04"
+authors = ["KyStudy contributors"]
+edition = "2024"
+publish = false
+
+[lib]
+name = "tv_04_pdf_viewer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+tauri = { version = "2.11.5", features = [] }
+tempfile = "3.27.0"
+thiserror = "2.0.18"
+tv-03-blob-store = { path = "../../tv-03-blob-store" }
+
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"

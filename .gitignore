@@ -1,0 +1,33 @@
+# Local agent tooling downloaded for development
+.agents/
+
+# JavaScript dependencies and build output
+node_modules/
+dist/
+dist-ssr/
+artifacts/
+
+# Rust and Tauri build output
+target/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor and operating-system files
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.suo
+*.sw?

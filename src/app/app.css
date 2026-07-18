@@ -1,0 +1,383 @@
+:root {
+  color: #17231d;
+  background: #f4f1e8;
+  font-family: Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(
+      circle at 15% 10%,
+      rgb(217 232 216 / 80%),
+      transparent 34rem
+    ),
+    #f4f1e8;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.75rem 1.1rem;
+  color: #fff;
+  background: #1e5b42;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 3px solid #d08a35;
+  outline-offset: 3px;
+}
+
+.shell {
+  width: min(100% - 2rem, 72rem);
+  margin: 0 auto;
+  padding: clamp(2rem, 6vw, 5rem) 0;
+}
+
+.hero {
+  max-width: 52rem;
+  margin-bottom: clamp(2rem, 5vw, 4rem);
+}
+
+.eyebrow,
+.section-label {
+  margin: 0 0 0.75rem;
+  color: #42745f;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  max-width: 18ch;
+  margin-bottom: 1.25rem;
+  font-size: clamp(2.4rem, 7vw, 5.5rem);
+  line-height: 1.02;
+  letter-spacing: -0.05em;
+}
+
+h2 {
+  margin-bottom: 1rem;
+  font-size: clamp(1.35rem, 3vw, 2rem);
+}
+
+.lead {
+  max-width: 42rem;
+  color: #52625a;
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  line-height: 1.8;
+}
+
+.status-card,
+.workspace-card,
+.library-card,
+.backup-card,
+.boundary-card {
+  border: 1px solid rgb(30 91 66 / 16%);
+  border-radius: 1.5rem;
+  padding: clamp(1.4rem, 4vw, 2.5rem);
+  background: rgb(255 255 255 / 72%);
+  box-shadow: 0 1.25rem 3rem rgb(40 58 48 / 8%);
+  backdrop-filter: blur(12px);
+}
+
+.status-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.workspace-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.library-card {
+  margin-top: 1rem;
+}
+
+.backup-card {
+  margin-top: 1rem;
+}
+
+.library-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.backup-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.backup-description {
+  max-width: 42rem;
+  margin-bottom: 0;
+  color: #52625a;
+  line-height: 1.65;
+}
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.backup-status,
+.success-detail,
+.backup-note {
+  margin-top: 1.5rem;
+  border-radius: 1rem;
+  padding: 1rem;
+}
+
+.backup-status {
+  color: #46564d;
+  background: #edf3ed;
+  font-weight: 700;
+}
+
+.success-detail {
+  color: #245a43;
+  background: #e4f2e8;
+}
+
+.success-detail p {
+  margin: 0.35rem 0 0;
+}
+
+.backup-note {
+  margin-bottom: 0;
+  color: #716859;
+  background: #f5efe4;
+  line-height: 1.6;
+}
+
+.library-description {
+  max-width: 42rem;
+  margin-bottom: 0;
+  color: #52625a;
+  line-height: 1.65;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.import-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem 1rem;
+  align-items: center;
+  margin-top: 1.5rem;
+  border-radius: 1rem;
+  padding: 1rem;
+  background: #edf3ed;
+}
+
+.progress-copy {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  grid-column: 1 / -1;
+  color: #46564d;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.import-progress progress {
+  width: 100%;
+  accent-color: #1e5b42;
+}
+
+.secondary-button {
+  border: 1px solid rgb(30 91 66 / 24%);
+  padding: 0.55rem 0.9rem;
+  color: #1e5b42;
+  background: transparent;
+}
+
+.empty-state {
+  margin: 1.5rem 0 0;
+  border: 1px dashed rgb(30 91 66 / 24%);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  color: #657269;
+  text-align: center;
+}
+
+.resource-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resource-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-radius: 1rem;
+  padding: 1rem;
+  background: #f5efe4;
+}
+
+.resource-list li div {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.resource-list strong,
+.resource-list span {
+  overflow-wrap: anywhere;
+}
+
+.resource-list span {
+  color: #716859;
+  font-size: 0.85rem;
+}
+
+.resource-list code {
+  color: #52625a;
+  font-size: 0.78rem;
+}
+
+.runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(7rem, 1fr));
+  flex-basis: 100%;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(8rem, 1fr));
+  flex-basis: 100%;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.runtime-grid div {
+  border-radius: 1rem;
+  padding: 1rem;
+  background: #edf3ed;
+}
+
+.workspace-grid div {
+  border-radius: 1rem;
+  padding: 1rem;
+  background: #f5efe4;
+}
+
+.runtime-grid dt {
+  margin-bottom: 0.35rem;
+  color: #657269;
+  font-size: 0.8rem;
+}
+
+.workspace-grid dt {
+  margin-bottom: 0.35rem;
+  color: #716859;
+  font-size: 0.8rem;
+}
+
+.runtime-grid dd {
+  margin: 0;
+  font-weight: 800;
+}
+
+.workspace-grid dd {
+  margin: 0;
+  font-weight: 800;
+}
+
+.error-detail {
+  flex-basis: 100%;
+  border-radius: 1rem;
+  padding: 1rem;
+  color: #773b32;
+  background: #f9e8e2;
+}
+
+.error-detail p {
+  margin-bottom: 0.35rem;
+}
+
+.operation-id {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.boundary-card {
+  margin-top: 1rem;
+}
+
+.boundary-card ul {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding-left: 1.25rem;
+  color: #46564d;
+  line-height: 1.65;
+}
+
+@media (max-width: 42rem) {
+  .runtime-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .progress-copy,
+  .resource-list li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,23 @@
+[package]
+name = "tv-03-blob-store"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+fs4 = { version = "1.1.0", default-features = false, features = ["sync"] }
+rusqlite = { version = "0.40.1", default-features = false, features = ["backup", "bundled"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+sha2 = "0.11.0"
+tempfile = "3.27.0"
+thiserror = "2.0.18"
+
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+

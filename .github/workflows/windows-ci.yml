@@ -1,0 +1,107 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  quality-release-smoke:
+    name: Quality, Release, and Smoke
+    runs-on: windows-2025
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.18.0
+          package-manager-cache: false
+
+      - name: Install locked pnpm version
+        shell: pwsh
+        run: |
+          npm install --global pnpm@11.9.0
+          pnpm --version
+
+      - name: Verify Rust toolchain
+        shell: pwsh
+        run: |
+          rustc --version
+          cargo --version
+          cargo fmt --version
+          cargo clippy --version
+
+      - name: Install frontend dependencies
+        shell: pwsh
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate Release Smoke script syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path -LiteralPath '.\scripts\test-release-smoke.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List
+            exit 1
+          }
+
+      - name: Run frontend quality gate
+        shell: pwsh
+        run: pnpm check
+
+      - name: Check Rust formatting
+        shell: pwsh
+        run: cargo fmt --check --manifest-path src-tauri\Cargo.toml
+
+      - name: Run Rust tests
+        shell: pwsh
+        run: cargo test --locked --manifest-path src-tauri\Cargo.toml
+
+      - name: Run Rust Clippy
+        shell: pwsh
+        run: cargo clippy --all-targets --all-features --locked --manifest-path src-tauri\Cargo.toml -- -D warnings
+
+      - name: Build Windows Release executable
+        shell: pwsh
+        run: pnpm tauri build --no-bundle
+
+      - name: Run isolated Release startup Smoke
+        shell: pwsh
+        run: |
+          & .\scripts\test-release-smoke.ps1 `
+            -ExecutablePath .\src-tauri\target\release\kystudy.exe `
+            -ReportPath .\artifacts\windows-release-smoke.json
+
+      - name: Upload verified Windows Release
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: kystudy-windows-x64-${{ github.sha }}
+          path: |
+            src-tauri/target/release/kystudy.exe
+            artifacts/windows-release-smoke.json
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,20 @@
+{
+  "generatedAt": "deterministic",
+  "fixtures": [
+    {
+      "name": "mixed-samples.pdf",
+      "sizeBytes": 1106030,
+      "sha256": "eea92035be6ab34b5fc9076a1b1d3f2418190feaa06becdaa6460f834a56e427"
+    },
+    {
+      "name": "large-360-pages.pdf",
+      "sizeBytes": 25582761,
+      "sha256": "ef7c941745ef88a82c70ed1e4c0a8c3d470064958136981e8324a07c754ded42"
+    },
+    {
+      "name": "corrupted-truncated.pdf",
+      "sizeBytes": 2048,
+      "sha256": "217ebda1bf444e6944c096870ee64cd7077d0a11f44dc0fabc06b95659ed52f1"
+    }
+  ]
+}

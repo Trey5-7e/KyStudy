@@ -1,0 +1,53 @@
+{
+  "pdfJsVersion": "6.1.200",
+  "devicePixelRatio": 2,
+  "largePageCount": 360,
+  "mixedPageCount": 6,
+  "documentLoadMillis": 211.7999999821186,
+  "firstRenderMillis": 76.90000000596046,
+  "randomJumpMillis": [
+    15.200000017881393, 14.899999976158142, 11.800000011920929,
+    17.80000001192093
+  ],
+  "continuousRender": {
+    "pageCount": 216,
+    "totalMillis": 1680,
+    "meanMillis": 5.393055554893282,
+    "maximumMillis": 13.899999976158142,
+    "cycleEndHeapBytes": [3314200, 3398600, 3677268]
+  },
+  "coordinateMaximumNormalizedError": 2.220446049250313e-16,
+  "stablePhraseFound": true,
+  "chineseTextFound": true,
+  "scanTextItemCount": 0,
+  "corruptedPdfRejected": true,
+  "canceledRenderCount": 1,
+  "rangeMetrics": {
+    "large": {
+      "requestCount": 8,
+      "transferredBytes": 482473,
+      "largestRequestBytes": 65536
+    },
+    "mixed": {
+      "requestCount": 3,
+      "transferredBytes": 1106030,
+      "largestRequestBytes": 983040
+    }
+  },
+  "jsHeap": {
+    "baselineBytes": 3452608,
+    "peakBytes": 10310778,
+    "finalBytes": 3203970
+  },
+  "browserWorkingSet": {
+    "baselineBytes": 514248704,
+    "peakBytes": 545742848,
+    "finalBytes": 541089792
+  },
+  "viewerSmoke": {
+    "selectionStatus": "第 1 页区域：0.200, 0.300 → 0.660, 0.750",
+    "rotationChangedViewport": true,
+    "overlayRestoredAfterRotationAndZoom": true,
+    "overlayRestoredAfterReload": true
+  }
+}
