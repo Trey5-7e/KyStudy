@@ -1,7 +1,7 @@
 use super::{PersistenceError, current_utc_millis};
 use crate::domain::{
     DateRange, LocalDate, NewSubject, NewTask, ScheduleValidationError, Subject, SubjectColor,
-    Task, TaskDraft, TaskPriority, TaskTransition,
+    Task, TaskDetailsDraft, TaskDraft, TaskPriority, TaskTransition,
 };
 
 /// User-authored fields for one subject.
@@ -22,6 +22,16 @@ pub(crate) struct CreateTaskInput {
     pub(crate) estimated_minutes: Option<u32>,
     pub(crate) priority: String,
     pub(crate) manual_order: u32,
+}
+
+/// User-authored fields editable from task details.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UpdateTaskDetailsInput {
+    pub(crate) subject_id: Option<String>,
+    pub(crate) title: String,
+    pub(crate) description: Option<String>,
+    pub(crate) estimated_minutes: Option<u32>,
+    pub(crate) priority: String,
 }
 
 /// Stable failures from schedule use cases and persistence.
@@ -71,14 +81,26 @@ pub(crate) trait ScheduleRepository: Clone + Send + Sync + 'static {
     /// Creates one subject in the current workspace.
     fn create_subject(&self, subject: &NewSubject) -> Result<Subject, ScheduleError>;
 
-    /// Lists active subjects in stable user order.
+    /// Lists active and archived subjects in stable user order.
     fn list_subjects(&self) -> Result<Vec<Subject>, ScheduleError>;
+
+    /// Archives one subject without deleting or rewriting assigned tasks.
+    fn archive_subject(&self, subject_id: &str, archived_at: i64)
+    -> Result<Subject, ScheduleError>;
 
     /// Creates one task and its immutable `created` history in one transaction.
     fn create_task(&self, task: &NewTask) -> Result<Task, ScheduleError>;
 
     /// Lists non-trashed tasks within an inclusive local date range.
     fn list_tasks(&self, range: &DateRange) -> Result<Vec<Task>, ScheduleError>;
+
+    /// Updates editable task details and appends history in one transaction.
+    fn update_task_details(
+        &self,
+        task_id: &str,
+        details: TaskDetailsDraft,
+        changed_at: i64,
+    ) -> Result<Task, ScheduleError>;
 
     /// Applies one state transition and appends history in one transaction.
     fn transition_task(
@@ -119,9 +141,18 @@ impl<R: ScheduleRepository> ScheduleUseCases<R> {
         self.repository.create_subject(&subject)
     }
 
-    /// Lists active subjects in stable user order.
+    /// Lists active and archived subjects in stable user order.
     pub(crate) fn list_subjects(&self) -> Result<Vec<Subject>, ScheduleError> {
         self.repository.list_subjects()
+    }
+
+    /// Archives one subject using the current system timestamp.
+    pub(crate) fn archive_subject(&self, subject_id: &str) -> Result<Subject, ScheduleError> {
+        if uuid::Uuid::parse_str(subject_id).is_err() {
+            return Err(ScheduleValidationError::Identifier.into());
+        }
+        self.repository
+            .archive_subject(subject_id, current_utc_millis()?)
     }
 
     /// Creates one validated manual task using the current system timestamp.
@@ -155,6 +186,27 @@ impl<R: ScheduleRepository> ScheduleUseCases<R> {
         self.repository.list_tasks(&range)
     }
 
+    /// Updates validated task details without accepting a planned date.
+    pub(crate) fn update_task_details(
+        &self,
+        task_id: &str,
+        input: UpdateTaskDetailsInput,
+    ) -> Result<Task, ScheduleError> {
+        if uuid::Uuid::parse_str(task_id).is_err() {
+            return Err(ScheduleValidationError::Identifier.into());
+        }
+        let priority = TaskPriority::parse(&input.priority).ok_or(ScheduleValidationError::Text)?;
+        let details = TaskDetailsDraft::new(
+            input.subject_id,
+            &input.title,
+            input.description.as_deref(),
+            input.estimated_minutes,
+            priority,
+        )?;
+        self.repository
+            .update_task_details(task_id, details, current_utc_millis()?)
+    }
+
     /// Applies one supported task transition using the current system timestamp.
     pub(crate) fn transition_task(
         &self,
@@ -175,13 +227,15 @@ mod tests {
 
     use super::{
         CreateSubjectInput, CreateTaskInput, ScheduleError, ScheduleRepository, ScheduleUseCases,
+        UpdateTaskDetailsInput,
     };
     use crate::domain::{
-        DateRange, NewSubject, NewTask, Subject, Task, TaskStatus, TaskTransition,
+        DateRange, NewSubject, NewTask, Subject, Task, TaskDetailsDraft, TaskStatus, TaskTransition,
     };
 
     #[derive(Debug, Clone, Default)]
     struct MemoryScheduleRepository {
+        subjects: Arc<Mutex<Vec<Subject>>>,
         tasks: Arc<Mutex<Vec<Task>>>,
     }
 
@@ -189,11 +243,15 @@ mod tests {
         fn tasks(&self) -> MutexGuard<'_, Vec<Task>> {
             self.tasks.lock().unwrap_or_else(PoisonError::into_inner)
         }
+
+        fn subjects(&self) -> MutexGuard<'_, Vec<Subject>> {
+            self.subjects.lock().unwrap_or_else(PoisonError::into_inner)
+        }
     }
 
     impl ScheduleRepository for MemoryScheduleRepository {
         fn create_subject(&self, subject: &NewSubject) -> Result<Subject, ScheduleError> {
-            Ok(Subject {
+            let created = Subject {
                 id: subject.id.clone(),
                 name: subject.name.clone(),
                 color: subject.color,
@@ -201,11 +259,27 @@ mod tests {
                 archived_at: None,
                 created_at: subject.created_at,
                 updated_at: subject.created_at,
-            })
+            };
+            self.subjects().push(created.clone());
+            Ok(created)
         }
 
         fn list_subjects(&self) -> Result<Vec<Subject>, ScheduleError> {
-            Ok(Vec::new())
+            Ok(self.subjects().clone())
+        }
+
+        fn archive_subject(
+            &self,
+            subject_id: &str,
+            archived_at: i64,
+        ) -> Result<Subject, ScheduleError> {
+            let mut subjects = self.subjects();
+            let subject = subjects
+                .iter_mut()
+                .find(|subject| subject.id == subject_id)
+                .ok_or(ScheduleError::SubjectNotFound)?;
+            subject.archive(archived_at)?;
+            Ok(subject.clone())
         }
 
         fn create_task(&self, task: &NewTask) -> Result<Task, ScheduleError> {
@@ -235,6 +309,21 @@ mod tests {
                 .filter(|task| task.planned_date >= range.start && task.planned_date <= range.end)
                 .cloned()
                 .collect())
+        }
+
+        fn update_task_details(
+            &self,
+            task_id: &str,
+            details: TaskDetailsDraft,
+            changed_at: i64,
+        ) -> Result<Task, ScheduleError> {
+            let mut tasks = self.tasks();
+            let task = tasks
+                .iter_mut()
+                .find(|task| task.id == task_id)
+                .ok_or(ScheduleError::TaskNotFound)?;
+            task.update_details(details, changed_at)?;
+            Ok(task.clone())
         }
 
         fn transition_task(
@@ -289,6 +378,61 @@ mod tests {
                 1_700_000_000_000,
             )
             .expect_err("invalid date must be rejected");
+
+        assert_eq!(error.code(), "SCHEDULE_INPUT_INVALID");
+    }
+
+    #[test]
+    fn update_task_details_cannot_change_the_planned_date() {
+        let repository = MemoryScheduleRepository::default();
+        let use_cases = ScheduleUseCases::new(repository.clone());
+        let created = use_cases
+            .create_task_at(
+                CreateTaskInput {
+                    subject_id: None,
+                    title: "高等数学".to_owned(),
+                    description: None,
+                    planned_date: "2026-07-18".to_owned(),
+                    estimated_minutes: Some(60),
+                    priority: "normal".to_owned(),
+                    manual_order: 0,
+                },
+                1_700_000_000_000,
+            )
+            .expect("task should be created");
+        let details = TaskDetailsDraft::new(
+            None,
+            "高等数学复盘",
+            Some("整理错题"),
+            Some(45),
+            crate::domain::TaskPriority::High,
+        )
+        .expect("details should be valid");
+
+        let updated = repository
+            .update_task_details(&created.id, details, 1_700_000_000_100)
+            .expect("task should update");
+
+        assert_eq!(updated.planned_date, created.planned_date);
+        assert_eq!(updated.title, "高等数学复盘");
+    }
+
+    #[test]
+    fn update_task_details_rejects_an_invalid_identifier() {
+        let use_cases = ScheduleUseCases::new(MemoryScheduleRepository::default());
+
+        let error = use_cases
+            .update_task_details(
+                "not-a-task-id",
+                UpdateTaskDetailsInput {
+                    subject_id: None,
+                    title: "高等数学".to_owned(),
+                    description: None,
+                    estimated_minutes: None,
+                    priority: "normal".to_owned(),
+                },
+            )
+            .expect_err("malformed task id must be rejected");
 
         assert_eq!(error.code(), "SCHEDULE_INPUT_INVALID");
     }

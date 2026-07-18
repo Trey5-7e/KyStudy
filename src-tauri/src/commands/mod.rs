@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::application::{
     BackupError, BackupReport, CreateSubjectInput, CreateTaskInput, ImportError, ImportProgress,
-    ResourceDocument, RestoreReport, RuntimeStatus, ScheduleError,
+    ResourceDocument, RestoreReport, RuntimeStatus, ScheduleError, UpdateTaskDetailsInput,
     get_runtime_status as load_runtime_status,
 };
 use crate::bootstrap::AppState;
@@ -53,6 +53,9 @@ pub(crate) struct SubjectDto {
     name: String,
     color_key: &'static str,
     sort_order: u32,
+    archived_at: Option<i64>,
+    created_at: i64,
+    updated_at: i64,
 }
 
 impl From<Subject> for SubjectDto {
@@ -62,6 +65,9 @@ impl From<Subject> for SubjectDto {
             name: subject.name,
             color_key: subject.color.as_str(),
             sort_order: subject.sort_order,
+            archived_at: subject.archived_at,
+            created_at: subject.created_at,
+            updated_at: subject.updated_at,
         }
     }
 }
@@ -145,6 +151,28 @@ impl From<CreateTaskRequestDto> for CreateTaskInput {
             estimated_minutes: request.estimated_minutes,
             priority: request.priority,
             manual_order: request.manual_order,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UpdateTaskDetailsRequestDto {
+    subject_id: Option<String>,
+    title: String,
+    description: Option<String>,
+    estimated_minutes: Option<u32>,
+    priority: String,
+}
+
+impl From<UpdateTaskDetailsRequestDto> for UpdateTaskDetailsInput {
+    fn from(request: UpdateTaskDetailsRequestDto) -> Self {
+        Self {
+            subject_id: request.subject_id,
+            title: request.title,
+            description: request.description,
+            estimated_minutes: request.estimated_minutes,
+            priority: request.priority,
         }
     }
 }
@@ -470,6 +498,19 @@ pub(crate) async fn create_subject(
 }
 
 #[tauri::command]
+pub(crate) async fn archive_subject(
+    subject_id: String,
+    state: State<'_, AppState>,
+) -> Result<SubjectDto, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.archive_subject(&subject_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(SubjectDto::from)
+        .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn list_tasks_for_range(
     start_date: String,
     end_date: String,
@@ -494,6 +535,22 @@ pub(crate) async fn create_task(
         .map_err(|_| AppErrorDto::task_failed())?
         .map(TaskDto::from)
         .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn update_task_details(
+    task_id: String,
+    request: UpdateTaskDetailsRequestDto,
+    state: State<'_, AppState>,
+) -> Result<TaskDto, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.update_task_details(&task_id, request.into())
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(TaskDto::from)
+    .map_err(|error| AppErrorDto::from_schedule(&error))
 }
 
 #[tauri::command]
@@ -697,9 +754,47 @@ fn emit_import_event(app: &AppHandle, event: ImportEventDto) {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppErrorDto, BackupReportDto, ResourceDocumentDto, TaskDto, get_runtime_status};
+    use super::{
+        AppErrorDto, BackupReportDto, ResourceDocumentDto, SubjectDto, TaskDto,
+        UpdateTaskDetailsRequestDto, get_runtime_status,
+    };
     use crate::application::{BackupReport, PersistenceError, ResourceDocument, ScheduleError};
-    use crate::domain::{LocalDate, Task, TaskPriority, TaskStatus};
+    use crate::domain::{LocalDate, Subject, SubjectColor, Task, TaskPriority, TaskStatus};
+
+    #[test]
+    fn subject_dto_exposes_only_safe_management_fields() {
+        let dto = SubjectDto::from(Subject {
+            id: "019f7328-4b66-7613-9729-e3570fc41525".to_owned(),
+            name: "408".to_owned(),
+            color: SubjectColor::Blue,
+            sort_order: 0,
+            archived_at: Some(1_700_000_000_100),
+            created_at: 1_700_000_000_000,
+            updated_at: 1_700_000_000_100,
+        });
+
+        let value = serde_json::to_value(dto).expect("subject DTO should serialize");
+
+        assert_eq!(value["archivedAt"], 1_700_000_000_100_i64);
+        assert!(value.get("workspaceId").is_none());
+        assert!(value.get("databasePath").is_none());
+    }
+
+    #[test]
+    fn task_details_request_rejects_a_planned_date_field() {
+        let value = serde_json::json!({
+            "subjectId": null,
+            "title": "线性代数强化",
+            "description": null,
+            "estimatedMinutes": 90,
+            "priority": "normal",
+            "plannedDate": "2026-07-19"
+        });
+
+        let result = serde_json::from_value::<UpdateTaskDetailsRequestDto>(value);
+
+        assert!(result.is_err());
+    }
 
     #[test]
     fn backup_dto_serialization_never_exposes_destination_path() {

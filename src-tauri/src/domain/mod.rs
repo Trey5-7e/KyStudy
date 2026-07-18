@@ -5,6 +5,6 @@ mod workspace;
 
 pub(crate) use schedule::{
     DateRange, LocalDate, NewSubject, NewTask, ScheduleValidationError, Subject, SubjectColor,
-    Task, TaskDraft, TaskPriority, TaskStatus, TaskTransition,
+    Task, TaskDetailsDraft, TaskDraft, TaskPriority, TaskStatus, TaskTransition,
 };
 pub(crate) use workspace::{LATEST_SCHEMA_VERSION, NewWorkspace, Workspace};

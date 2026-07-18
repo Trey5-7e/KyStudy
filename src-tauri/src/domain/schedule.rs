@@ -177,6 +177,7 @@ impl TaskStatus {
 /// First supported task state changes exposed by the minimum vertical slice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TaskTransition {
+    Start,
     Complete,
     Reopen,
 }
@@ -185,6 +186,7 @@ impl TaskTransition {
     /// Parses one transition token accepted by the command boundary.
     pub(crate) fn parse(value: &str) -> Option<Self> {
         match value {
+            "start" => Some(Self::Start),
             "complete" => Some(Self::Complete),
             "reopen" => Some(Self::Reopen),
             _ => None,
@@ -215,34 +217,51 @@ impl TaskDraft {
         priority: TaskPriority,
         manual_order: u32,
     ) -> Result<Self, ScheduleValidationError> {
-        if subject_id
-            .as_deref()
-            .is_some_and(|value| Uuid::parse_str(value).is_err())
-        {
-            return Err(ScheduleValidationError::Identifier);
-        }
-        let title = title.trim().to_owned();
-        if title.is_empty() || title.chars().count() > 120 {
-            return Err(ScheduleValidationError::Text);
-        }
-        let description = description.map(str::trim).filter(|value| !value.is_empty());
-        if description
-            .as_ref()
-            .is_some_and(|value| value.chars().count() > 2_000)
-        {
-            return Err(ScheduleValidationError::Text);
-        }
-        if estimated_minutes.is_some_and(|minutes| !(1..=1_440).contains(&minutes)) {
-            return Err(ScheduleValidationError::EstimatedMinutes);
-        }
+        let subject_id = normalize_subject_id(subject_id)?;
+        let title = normalize_task_title(title)?;
+        let description = normalize_task_description(description)?;
+        validate_estimated_minutes(estimated_minutes)?;
         Ok(Self {
             subject_id,
             title,
-            description: description.map(str::to_owned),
+            description,
             planned_date,
             estimated_minutes,
             priority,
             manual_order,
+        })
+    }
+}
+
+/// Validated editable fields that deliberately exclude a task's planned date.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TaskDetailsDraft {
+    pub(crate) subject_id: Option<String>,
+    pub(crate) title: String,
+    pub(crate) description: Option<String>,
+    pub(crate) estimated_minutes: Option<u32>,
+    pub(crate) priority: TaskPriority,
+}
+
+impl TaskDetailsDraft {
+    /// Validates and normalizes the fields editable from task details.
+    pub(crate) fn new(
+        subject_id: Option<String>,
+        title: &str,
+        description: Option<&str>,
+        estimated_minutes: Option<u32>,
+        priority: TaskPriority,
+    ) -> Result<Self, ScheduleValidationError> {
+        let subject_id = normalize_subject_id(subject_id)?;
+        let title = normalize_task_title(title)?;
+        let description = normalize_task_description(description)?;
+        validate_estimated_minutes(estimated_minutes)?;
+        Ok(Self {
+            subject_id,
+            title,
+            description,
+            estimated_minutes,
+            priority,
         })
     }
 }
@@ -292,6 +311,19 @@ pub(crate) struct Subject {
     pub(crate) updated_at: i64,
 }
 
+impl Subject {
+    /// Archives an active subject without modifying tasks already assigned to it.
+    pub(crate) fn archive(&mut self, archived_at: i64) -> Result<bool, ScheduleValidationError> {
+        validate_change_timestamp(archived_at, self.updated_at)?;
+        if self.archived_at.is_some() {
+            return Ok(false);
+        }
+        self.archived_at = Some(archived_at);
+        self.updated_at = archived_at;
+        Ok(true)
+    }
+}
+
 /// New manual task ready for one transactional insert.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct NewTask {
@@ -334,14 +366,41 @@ pub(crate) struct Task {
 }
 
 impl Task {
+    /// Updates editable details while preserving schedule date and lifecycle state.
+    pub(crate) fn update_details(
+        &mut self,
+        details: TaskDetailsDraft,
+        changed_at: i64,
+    ) -> Result<bool, ScheduleValidationError> {
+        validate_change_timestamp(changed_at, self.updated_at)?;
+        let changed = self.subject_id != details.subject_id
+            || self.title != details.title
+            || self.description != details.description
+            || self.estimated_minutes != details.estimated_minutes
+            || self.priority != details.priority;
+        if !changed {
+            return Ok(false);
+        }
+        self.subject_id = details.subject_id;
+        self.title = details.title;
+        self.description = details.description;
+        self.estimated_minutes = details.estimated_minutes;
+        self.priority = details.priority;
+        self.updated_at = changed_at;
+        Ok(true)
+    }
+
     /// Applies one allowed lifecycle transition without touching study records.
     pub(crate) fn transition(
         &mut self,
         transition: TaskTransition,
         changed_at: i64,
     ) -> Result<(), ScheduleValidationError> {
-        validate_timestamp(changed_at)?;
+        validate_change_timestamp(changed_at, self.updated_at)?;
         match (self.status, transition) {
+            (TaskStatus::Todo, TaskTransition::Start) => {
+                self.status = TaskStatus::InProgress;
+            }
             (TaskStatus::Todo | TaskStatus::InProgress, TaskTransition::Complete) => {
                 self.status = TaskStatus::Done;
                 self.completed_at = Some(changed_at);
@@ -357,8 +416,65 @@ impl Task {
     }
 }
 
+fn normalize_subject_id(
+    subject_id: Option<String>,
+) -> Result<Option<String>, ScheduleValidationError> {
+    subject_id
+        .map(|value| {
+            Uuid::parse_str(&value)
+                .map(|identifier| identifier.to_string())
+                .map_err(|_| ScheduleValidationError::Identifier)
+        })
+        .transpose()
+}
+
+fn normalize_task_title(title: &str) -> Result<String, ScheduleValidationError> {
+    let title = title.trim().to_owned();
+    if title.is_empty() || title.chars().count() > 120 {
+        Err(ScheduleValidationError::Text)
+    } else {
+        Ok(title)
+    }
+}
+
+fn normalize_task_description(
+    description: Option<&str>,
+) -> Result<Option<String>, ScheduleValidationError> {
+    let description = description.map(str::trim).filter(|value| !value.is_empty());
+    if description
+        .as_ref()
+        .is_some_and(|value| value.chars().count() > 2_000)
+    {
+        Err(ScheduleValidationError::Text)
+    } else {
+        Ok(description.map(str::to_owned))
+    }
+}
+
+fn validate_estimated_minutes(
+    estimated_minutes: Option<u32>,
+) -> Result<(), ScheduleValidationError> {
+    if estimated_minutes.is_some_and(|minutes| !(1..=1_440).contains(&minutes)) {
+        Err(ScheduleValidationError::EstimatedMinutes)
+    } else {
+        Ok(())
+    }
+}
+
 fn validate_timestamp(value: i64) -> Result<(), ScheduleValidationError> {
     if value < 0 {
+        Err(ScheduleValidationError::Timestamp)
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_change_timestamp(
+    value: i64,
+    current_updated_at: i64,
+) -> Result<(), ScheduleValidationError> {
+    validate_timestamp(value)?;
+    if value < current_updated_at {
         Err(ScheduleValidationError::Timestamp)
     } else {
         Ok(())
@@ -389,7 +505,8 @@ const fn is_leap_year(year: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        LocalDate, ScheduleValidationError, Task, TaskPriority, TaskStatus, TaskTransition,
+        LocalDate, ScheduleValidationError, Subject, SubjectColor, Task, TaskDetailsDraft,
+        TaskPriority, TaskStatus, TaskTransition,
     };
 
     fn task(status: TaskStatus) -> Task {
@@ -433,6 +550,67 @@ mod tests {
 
         assert_eq!(task.status, TaskStatus::Done);
         assert_eq!(task.completed_at, Some(1_700_000_000_100));
+    }
+
+    #[test]
+    fn task_start_moves_a_todo_task_to_in_progress() {
+        let mut task = task(TaskStatus::Todo);
+
+        task.transition(TaskTransition::Start, 1_700_000_000_100)
+            .expect("todo task should start");
+
+        assert_eq!(task.status, TaskStatus::InProgress);
+        assert_eq!(task.completed_at, None);
+    }
+
+    #[test]
+    fn task_details_update_preserves_planned_date_and_status() {
+        let mut task = task(TaskStatus::InProgress);
+        let original_date = task.planned_date.clone();
+        let details = TaskDetailsDraft::new(
+            None,
+            "  线性代数错题复盘  ",
+            Some("  重点检查特征值  "),
+            Some(45),
+            TaskPriority::High,
+        )
+        .expect("details should be valid");
+
+        let changed = task
+            .update_details(details, 1_700_000_000_100)
+            .expect("details should update");
+
+        assert!(changed);
+        assert_eq!(task.title, "线性代数错题复盘");
+        assert_eq!(task.description.as_deref(), Some("重点检查特征值"));
+        assert_eq!(task.planned_date, original_date);
+        assert_eq!(task.status, TaskStatus::InProgress);
+    }
+
+    #[test]
+    fn archiving_a_subject_is_idempotent() {
+        let mut subject = Subject {
+            id: "019f7328-4b66-7613-9729-e3570fc41525".to_owned(),
+            name: "408".to_owned(),
+            color: SubjectColor::Blue,
+            sort_order: 0,
+            archived_at: None,
+            created_at: 1_700_000_000_000,
+            updated_at: 1_700_000_000_000,
+        };
+
+        assert!(
+            subject
+                .archive(1_700_000_000_100)
+                .expect("active subject should archive")
+        );
+        assert!(
+            !subject
+                .archive(1_700_000_000_200)
+                .expect("archived subject retry should be safe")
+        );
+        assert_eq!(subject.archived_at, Some(1_700_000_000_100));
+        assert_eq!(subject.updated_at, 1_700_000_000_100);
     }
 
     #[test]

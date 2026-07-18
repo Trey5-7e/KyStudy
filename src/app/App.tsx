@@ -73,7 +73,7 @@ export function App() {
         <p className="eyebrow">KyStudy · M2 日程闭环</p>
         <h1 id="page-title">把备考资料、执行与复习留在自己手中</h1>
         <p className="lead">
-          本地基础已经通过验收。现在从每天可用的手动任务清单开始，逐步连接计划与真实执行。
+          本地基础与今日任务已经通过验收。现在可以用科目组织任务、维护详情，并记录从待开始到学习中的真实状态。
         </p>
       </section>
 

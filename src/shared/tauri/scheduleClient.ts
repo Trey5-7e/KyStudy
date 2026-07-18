@@ -2,7 +2,19 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type TaskPriority = "low" | "normal" | "high";
 export type TaskStatus = "todo" | "in_progress" | "done" | "canceled";
-export type TaskTransition = "complete" | "reopen";
+export type TaskTransition = "start" | "complete" | "reopen";
+export type SubjectColor =
+  "slate" | "blue" | "cyan" | "green" | "amber" | "orange" | "rose" | "purple";
+
+export interface StudySubject {
+  id: string;
+  name: string;
+  colorKey: SubjectColor;
+  sortOrder: number;
+  archivedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
 
 export interface StudyTask {
   id: string;
@@ -30,6 +42,20 @@ export interface CreateTaskInput {
   manualOrder: number;
 }
 
+export interface CreateSubjectInput {
+  name: string;
+  colorKey: SubjectColor;
+  sortOrder: number;
+}
+
+export interface UpdateTaskDetailsInput {
+  subjectId?: string;
+  title: string;
+  description?: string;
+  estimatedMinutes?: number;
+  priority: TaskPriority;
+}
+
 export interface ScheduleCommandError {
   code: string;
   message: string;
@@ -38,6 +64,16 @@ export interface ScheduleCommandError {
 }
 
 const PRIORITIES = new Set<TaskPriority>(["low", "normal", "high"]);
+const SUBJECT_COLORS = new Set<SubjectColor>([
+  "slate",
+  "blue",
+  "cyan",
+  "green",
+  "amber",
+  "orange",
+  "rose",
+  "purple",
+]);
 const STATUSES = new Set<TaskStatus>([
   "todo",
   "in_progress",
@@ -54,6 +90,10 @@ const ERROR_COPY: Record<string, { message: string; action: string }> = {
   SCHEDULE_INPUT_INVALID: {
     message: "任务内容不符合要求。",
     action: "检查标题、日期和预计时长后重试。",
+  },
+  SUBJECT_NAME_CONFLICT: {
+    message: "已经存在同名的有效科目。",
+    action: "换一个科目名称，或先归档现有科目。",
   },
   TASK_TRANSITION_INVALID: {
     message: "当前任务状态不能执行这个操作。",
@@ -101,6 +141,52 @@ function optionalSafeInteger(value: unknown): number | undefined | null {
     : null;
 }
 
+export function parseStudySubject(value: unknown): StudySubject {
+  if (!isRecord(value)) {
+    throw new Error("SUBJECT_DTO_INVALID");
+  }
+  const archivedAt = optionalSafeInteger(value.archivedAt);
+  if (
+    typeof value.id !== "string" ||
+    value.id.length === 0 ||
+    typeof value.name !== "string" ||
+    value.name.length === 0 ||
+    value.name.length > 40 ||
+    typeof value.colorKey !== "string" ||
+    !SUBJECT_COLORS.has(value.colorKey as SubjectColor) ||
+    typeof value.sortOrder !== "number" ||
+    !Number.isSafeInteger(value.sortOrder) ||
+    value.sortOrder < 0 ||
+    archivedAt === null ||
+    typeof value.createdAt !== "number" ||
+    !Number.isSafeInteger(value.createdAt) ||
+    value.createdAt < 0 ||
+    typeof value.updatedAt !== "number" ||
+    !Number.isSafeInteger(value.updatedAt) ||
+    value.updatedAt < value.createdAt ||
+    (archivedAt !== undefined &&
+      (archivedAt < value.createdAt || archivedAt > value.updatedAt))
+  ) {
+    throw new Error("SUBJECT_DTO_INVALID");
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    colorKey: value.colorKey as SubjectColor,
+    sortOrder: value.sortOrder,
+    ...(archivedAt === undefined ? {} : { archivedAt }),
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+}
+
+export function parseSubjectList(value: unknown): StudySubject[] {
+  if (!Array.isArray(value)) {
+    throw new Error("SUBJECT_LIST_DTO_INVALID");
+  }
+  return value.map(parseStudySubject);
+}
+
 export function parseStudyTask(value: unknown): StudyTask {
   if (!isRecord(value)) {
     throw new Error("TASK_DTO_INVALID");
@@ -112,11 +198,14 @@ export function parseStudyTask(value: unknown): StudyTask {
   const completedAt = optionalSafeInteger(value.completedAt);
   if (
     typeof value.id !== "string" ||
+    value.id.length === 0 ||
     subjectId === null ||
     parentTaskId === null ||
     typeof value.title !== "string" ||
     value.title.length === 0 ||
+    value.title.length > 120 ||
     description === null ||
+    (description !== undefined && description.length > 2000) ||
     typeof value.plannedDate !== "string" ||
     !ISO_DATE_PATTERN.test(value.plannedDate) ||
     estimatedMinutes === null ||
@@ -132,8 +221,10 @@ export function parseStudyTask(value: unknown): StudyTask {
     completedAt === null ||
     typeof value.createdAt !== "number" ||
     !Number.isSafeInteger(value.createdAt) ||
+    value.createdAt < 0 ||
     typeof value.updatedAt !== "number" ||
-    !Number.isSafeInteger(value.updatedAt)
+    !Number.isSafeInteger(value.updatedAt) ||
+    value.updatedAt < value.createdAt
   ) {
     throw new Error("TASK_DTO_INVALID");
   }
@@ -192,8 +283,36 @@ export async function listTasksForRange(
   return parseTaskList(value);
 }
 
+export async function listSubjects(): Promise<StudySubject[]> {
+  const value: unknown = await invoke("list_subjects");
+  return parseSubjectList(value);
+}
+
+export async function createSubject(
+  request: CreateSubjectInput,
+): Promise<StudySubject> {
+  const value: unknown = await invoke("create_subject", { request });
+  return parseStudySubject(value);
+}
+
+export async function archiveSubject(subjectId: string): Promise<StudySubject> {
+  const value: unknown = await invoke("archive_subject", { subjectId });
+  return parseStudySubject(value);
+}
+
 export async function createTask(request: CreateTaskInput): Promise<StudyTask> {
   const value: unknown = await invoke("create_task", { request });
+  return parseStudyTask(value);
+}
+
+export async function updateTaskDetails(
+  taskId: string,
+  request: UpdateTaskDetailsInput,
+): Promise<StudyTask> {
+  const value: unknown = await invoke("update_task_details", {
+    taskId,
+    request,
+  });
   return parseStudyTask(value);
 }
 
@@ -215,6 +334,8 @@ export function normalizeScheduleCommandError(
     error instanceof Error &&
     (error.message === "TASK_DTO_INVALID" ||
       error.message === "TASK_LIST_DTO_INVALID" ||
+      error.message === "SUBJECT_DTO_INVALID" ||
+      error.message === "SUBJECT_LIST_DTO_INVALID" ||
       error.message === "LOCAL_DATE_UNAVAILABLE")
   ) {
     return {

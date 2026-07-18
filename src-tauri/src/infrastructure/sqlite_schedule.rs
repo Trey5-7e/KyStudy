@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use crate::application::{ScheduleError, ScheduleRepository};
 use crate::domain::{
-    DateRange, LocalDate, NewSubject, NewTask, Subject, SubjectColor, Task, TaskPriority,
-    TaskStatus, TaskTransition,
+    DateRange, LocalDate, NewSubject, NewTask, Subject, SubjectColor, Task, TaskDetailsDraft,
+    TaskPriority, TaskStatus, TaskTransition,
 };
 
 use super::sqlite_workspace::{SqliteWorkspaceRepository, database_error, migrate, open_database};
@@ -92,8 +92,8 @@ impl ScheduleRepository for SqliteScheduleRepository {
             .prepare(
                 "SELECT id, name, color_key, sort_order, archived_at, created_at, updated_at
                  FROM subject
-                 WHERE workspace_id = ?1 AND archived_at IS NULL
-                 ORDER BY sort_order, created_at, id",
+                 WHERE workspace_id = ?1
+                 ORDER BY archived_at IS NOT NULL, sort_order, created_at, id",
             )
             .map_err(schedule_database_error)?;
         let rows = statement
@@ -104,6 +104,41 @@ impl ScheduleRepository for SqliteScheduleRepository {
                 .and_then(subject_from_raw)
         })
         .collect()
+    }
+
+    fn archive_subject(
+        &self,
+        subject_id: &str,
+        archived_at: i64,
+    ) -> Result<Subject, ScheduleError> {
+        let (mut connection, workspace_id) = self.open_current()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(schedule_database_error)?;
+        let raw = transaction
+            .query_row(
+                "SELECT id, name, color_key, sort_order, archived_at, created_at, updated_at
+                 FROM subject
+                 WHERE id = ?1 AND workspace_id = ?2",
+                params![subject_id, workspace_id],
+                raw_subject,
+            )
+            .optional()
+            .map_err(schedule_database_error)?
+            .ok_or(ScheduleError::SubjectNotFound)?;
+        let mut subject = subject_from_raw(raw)?;
+        if subject.archive(archived_at)? {
+            transaction
+                .execute(
+                    "UPDATE subject
+                     SET archived_at = ?1, updated_at = ?1
+                     WHERE id = ?2 AND workspace_id = ?3",
+                    params![archived_at, subject.id, workspace_id],
+                )
+                .map_err(schedule_database_error)?;
+        }
+        transaction.commit().map_err(schedule_database_error)?;
+        Ok(subject)
     }
 
     fn create_task(&self, task: &NewTask) -> Result<Task, ScheduleError> {
@@ -182,6 +217,46 @@ impl ScheduleRepository for SqliteScheduleRepository {
             .collect()
     }
 
+    fn update_task_details(
+        &self,
+        task_id: &str,
+        details: TaskDetailsDraft,
+        changed_at: i64,
+    ) -> Result<Task, ScheduleError> {
+        let (mut connection, workspace_id) = self.open_current()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(schedule_database_error)?;
+        let mut task = load_task(&transaction, &workspace_id, task_id)?;
+        if details.subject_id != task.subject_id {
+            validate_subject(&transaction, &workspace_id, details.subject_id.as_deref())?;
+        }
+        let before = task.clone();
+        if task.update_details(details, changed_at)? {
+            transaction
+                .execute(
+                    "UPDATE task
+                     SET subject_id = ?1, title = ?2, description = ?3,
+                         estimated_minutes = ?4, priority = ?5, updated_at = ?6
+                     WHERE id = ?7 AND workspace_id = ?8",
+                    params![
+                        task.subject_id,
+                        task.title,
+                        task.description,
+                        task.estimated_minutes,
+                        task.priority.as_str(),
+                        task.updated_at,
+                        task.id,
+                        workspace_id
+                    ],
+                )
+                .map_err(schedule_database_error)?;
+            append_change(&transaction, &task, Some(&before), "edited", changed_at)?;
+        }
+        transaction.commit().map_err(schedule_database_error)?;
+        Ok(task)
+    }
+
     fn transition_task(
         &self,
         task_id: &str,
@@ -192,20 +267,7 @@ impl ScheduleRepository for SqliteScheduleRepository {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(schedule_database_error)?;
-        let raw = transaction
-            .query_row(
-                "SELECT id, subject_id, parent_task_id, title, description, planned_date,
-                        estimated_minutes, priority, status, manual_order, completed_at,
-                        created_at, updated_at
-                 FROM task
-                 WHERE id = ?1 AND workspace_id = ?2 AND deleted_at IS NULL",
-                params![task_id, workspace_id],
-                raw_task,
-            )
-            .optional()
-            .map_err(schedule_database_error)?
-            .ok_or(ScheduleError::TaskNotFound)?;
-        let mut task = task_from_raw(raw)?;
+        let mut task = load_task(&transaction, &workspace_id, task_id)?;
         let before = task.clone();
         task.transition(transition, changed_at)?;
         transaction
@@ -223,6 +285,7 @@ impl ScheduleRepository for SqliteScheduleRepository {
             )
             .map_err(schedule_database_error)?;
         let change_type = match transition {
+            TaskTransition::Start => "started",
             TaskTransition::Complete => "completed",
             TaskTransition::Reopen => "reopened",
         };
@@ -352,6 +415,27 @@ fn task_from_new(task: &NewTask) -> Task {
     }
 }
 
+fn load_task(
+    connection: &Connection,
+    workspace_id: &str,
+    task_id: &str,
+) -> Result<Task, ScheduleError> {
+    let raw = connection
+        .query_row(
+            "SELECT id, subject_id, parent_task_id, title, description, planned_date,
+                    estimated_minutes, priority, status, manual_order, completed_at,
+                    created_at, updated_at
+             FROM task
+             WHERE id = ?1 AND workspace_id = ?2 AND deleted_at IS NULL",
+            params![task_id, workspace_id],
+            raw_task,
+        )
+        .optional()
+        .map_err(schedule_database_error)?
+        .ok_or(ScheduleError::TaskNotFound)?;
+    task_from_raw(raw)
+}
+
 fn load_workspace_id(connection: &Connection) -> Result<String, ScheduleError> {
     connection
         .query_row(
@@ -463,8 +547,8 @@ mod tests {
     use super::SqliteScheduleRepository;
     use crate::application::{ScheduleError, ScheduleRepository, WorkspaceRepository};
     use crate::domain::{
-        DateRange, LocalDate, NewSubject, NewTask, NewWorkspace, SubjectColor, TaskDraft,
-        TaskPriority, TaskStatus, TaskTransition,
+        DateRange, LocalDate, NewSubject, NewTask, NewWorkspace, SubjectColor, TaskDetailsDraft,
+        TaskDraft, TaskPriority, TaskStatus, TaskTransition,
     };
     use crate::infrastructure::SqliteWorkspaceRepository;
 
@@ -488,9 +572,18 @@ mod tests {
     }
 
     fn new_task(title: &str, priority: TaskPriority, created_at: i64) -> NewTask {
+        new_task_for_subject(title, None, priority, created_at)
+    }
+
+    fn new_task_for_subject(
+        title: &str,
+        subject_id: Option<String>,
+        priority: TaskPriority,
+        created_at: i64,
+    ) -> NewTask {
         NewTask::manual(
             TaskDraft::new(
-                None,
+                subject_id,
                 title,
                 None,
                 LocalDate::parse("2026-07-18").expect("fixture date should parse"),
@@ -626,5 +719,137 @@ mod tests {
 
         assert_eq!(completed.status, TaskStatus::Done);
         assert_eq!(change_count, 2);
+    }
+
+    #[test]
+    fn transition_task_starts_and_appends_started_history() {
+        let fixture = initialized_fixture();
+        let created = fixture
+            .schedule
+            .create_task(&new_task(
+                "开始测试",
+                TaskPriority::Normal,
+                1_700_000_000_001,
+            ))
+            .expect("task should persist");
+
+        let started = fixture
+            .schedule
+            .transition_task(&created.id, TaskTransition::Start, 1_700_000_000_002)
+            .expect("task should start");
+        let connection =
+            Connection::open(fixture.workspace.database_path()).expect("database should reopen");
+        let started_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM task_change
+                 WHERE task_id = ?1 AND change_type = 'started'",
+                [created.id],
+                |row| row.get(0),
+            )
+            .expect("history should be readable");
+
+        assert_eq!(started.status, TaskStatus::InProgress);
+        assert_eq!(started_count, 1);
+    }
+
+    #[test]
+    fn update_task_details_is_atomic_and_preserves_planned_date() {
+        let fixture = initialized_fixture();
+        let created = fixture
+            .schedule
+            .create_task(&new_task("原任务", TaskPriority::Normal, 1_700_000_000_001))
+            .expect("task should persist");
+        let details = TaskDetailsDraft::new(
+            None,
+            "更新后的任务",
+            Some("复盘说明"),
+            Some(90),
+            TaskPriority::High,
+        )
+        .expect("details should be valid");
+
+        let updated = fixture
+            .schedule
+            .update_task_details(&created.id, details, 1_700_000_000_002)
+            .expect("details should update");
+        let connection =
+            Connection::open(fixture.workspace.database_path()).expect("database should reopen");
+        let (before_json, after_json): (String, String) = connection
+            .query_row(
+                "SELECT before_json, after_json FROM task_change
+                 WHERE task_id = ?1 AND change_type = 'edited'",
+                [created.id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("edited history should be readable");
+        let before: serde_json::Value =
+            serde_json::from_str(&before_json).expect("before snapshot should parse");
+        let after: serde_json::Value =
+            serde_json::from_str(&after_json).expect("after snapshot should parse");
+
+        assert_eq!(updated.title, "更新后的任务");
+        assert_eq!(updated.planned_date, created.planned_date);
+        assert_eq!(before["plannedDate"], after["plannedDate"]);
+    }
+
+    #[test]
+    fn archiving_a_subject_keeps_assigned_tasks_and_blocks_new_assignment() {
+        let fixture = initialized_fixture();
+        let subject = NewSubject::new("408", SubjectColor::Blue, 0, 1_700_000_000_001)
+            .expect("subject should be valid");
+        let created_subject = fixture
+            .schedule
+            .create_subject(&subject)
+            .expect("subject should persist");
+        let assigned = fixture
+            .schedule
+            .create_task(&new_task_for_subject(
+                "数据结构",
+                Some(created_subject.id.clone()),
+                TaskPriority::Normal,
+                1_700_000_000_002,
+            ))
+            .expect("assigned task should persist");
+
+        let archived = fixture
+            .schedule
+            .archive_subject(&created_subject.id, 1_700_000_000_003)
+            .expect("subject should archive");
+        let tasks = fixture
+            .schedule
+            .list_tasks(&one_day_range())
+            .expect("tasks should still list");
+        let subjects = fixture
+            .schedule
+            .list_subjects()
+            .expect("archived subject should still list");
+        let rejected = fixture.schedule.create_task(&new_task_for_subject(
+            "新任务",
+            Some(created_subject.id.clone()),
+            TaskPriority::Normal,
+            1_700_000_000_004,
+        ));
+        let preserved_details = TaskDetailsDraft::new(
+            Some(created_subject.id.clone()),
+            "数据结构复盘",
+            None,
+            Some(45),
+            TaskPriority::High,
+        )
+        .expect("details should be valid");
+        let preserved = fixture
+            .schedule
+            .update_task_details(&assigned.id, preserved_details, 1_700_000_000_005)
+            .expect("an existing archived assignment should be preservable");
+
+        assert_eq!(archived.archived_at, Some(1_700_000_000_003));
+        assert_eq!(
+            tasks[0].subject_id.as_deref(),
+            Some(created_subject.id.as_str())
+        );
+        assert_eq!(subjects.len(), 1);
+        assert!(subjects[0].archived_at.is_some());
+        assert!(matches!(rejected, Err(ScheduleError::SubjectNotFound)));
+        assert_eq!(preserved.subject_id, Some(created_subject.id));
     }
 }

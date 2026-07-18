@@ -3,9 +3,21 @@ import { describe, expect, it } from "vitest";
 import {
   localDateForTimezone,
   normalizeScheduleCommandError,
+  parseStudySubject,
   parseStudyTask,
+  parseSubjectList,
   parseTaskList,
 } from "./scheduleClient";
+
+const VALID_SUBJECT = {
+  id: "019f7328-4b66-7613-9729-e3570fc41525",
+  name: "408",
+  colorKey: "blue",
+  sortOrder: 0,
+  archivedAt: null,
+  createdAt: 1_700_000_000_000,
+  updatedAt: 1_700_000_000_000,
+};
 
 const VALID_TASK = {
   id: "019f7328-4b66-7613-9729-e3570fc41525",
@@ -41,6 +53,39 @@ describe("parseStudyTask", () => {
     expect(() =>
       parseStudyTask({ ...VALID_TASK, estimatedMinutes: 1441 }),
     ).toThrowError("TASK_DTO_INVALID");
+  });
+});
+
+describe("parseStudySubject", () => {
+  it("returns an active subject without an archived timestamp", () => {
+    const subject = parseStudySubject(VALID_SUBJECT);
+
+    expect(subject.name).toBe("408");
+    expect(subject.archivedAt).toBeUndefined();
+  });
+
+  it("accepts a safe archived subject", () => {
+    const subject = parseStudySubject({
+      ...VALID_SUBJECT,
+      archivedAt: 1_700_000_000_100,
+      updatedAt: 1_700_000_000_100,
+    });
+
+    expect(subject.archivedAt).toBe(1_700_000_000_100);
+  });
+
+  it("rejects an unknown color token", () => {
+    expect(() =>
+      parseStudySubject({ ...VALID_SUBJECT, colorKey: "url(secret)" }),
+    ).toThrowError("SUBJECT_DTO_INVALID");
+  });
+});
+
+describe("parseSubjectList", () => {
+  it("rejects a non-array response", () => {
+    expect(() => parseSubjectList({ subject: VALID_SUBJECT })).toThrowError(
+      "SUBJECT_LIST_DTO_INVALID",
+    );
   });
 });
 
