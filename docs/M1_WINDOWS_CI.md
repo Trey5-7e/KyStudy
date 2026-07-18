@@ -30,6 +30,7 @@ Job 超时为 45 分钟；同一分支的新提交会取消旧运行。工作流
 - `actions/checkout`、`actions/setup-node` 和 `actions/upload-artifact` 均固定到官方仓库的完整提交 SHA；
 - Node、pnpm 和 Rust 使用精确版本；
 - pnpm 与 Cargo 都必须遵守现有锁文件；
+- `.gitattributes` 强制文本文件以 LF 检出，避免 Windows `core.autocrlf` 造成 Prettier 误报；
 - CI 不接收发布密钥、AI Key、个人资料或生产工作区数据；
 - M1 只上传未签名测试 EXE，不发布安装包或 GitHub Release。
 

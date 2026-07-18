@@ -1,0 +1,14 @@
+# Keep source files deterministic across Windows and GitHub-hosted runners.
+* text=auto eol=lf
+
+# Preserve binary assets byte-for-byte.
+*.ico binary
+*.icns binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.pdf binary
+*.exe binary
+*.dll binary
+*.pdb binary
