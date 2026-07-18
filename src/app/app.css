@@ -88,6 +88,7 @@ h2 {
 
 .status-card,
 .workspace-card,
+.today-card,
 .library-card,
 .backup-card,
 .boundary-card {
@@ -114,6 +115,135 @@ h2 {
   justify-content: space-between;
   gap: 1.5rem;
   margin-top: 1rem;
+}
+
+.today-card {
+  margin-top: 1rem;
+}
+
+.today-heading,
+.quick-task-form,
+.task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.today-heading {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.date-control,
+.quick-task-form label {
+  display: grid;
+  gap: 0.4rem;
+  color: #52625a;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+input,
+select {
+  min-height: 2.8rem;
+  border: 1px solid rgb(30 91 66 / 24%);
+  border-radius: 0.8rem;
+  padding: 0.65rem 0.8rem;
+  color: #17231d;
+  background: #fff;
+  font: inherit;
+}
+
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid #d08a35;
+  outline-offset: 2px;
+}
+
+.today-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(8rem, 1fr));
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+
+.today-summary div {
+  border-radius: 1rem;
+  padding: 1rem;
+  background: #edf3ed;
+}
+
+.today-summary dt {
+  color: #657269;
+  font-size: 0.8rem;
+}
+
+.today-summary dd {
+  margin: 0.35rem 0 0;
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.quick-task-form {
+  align-items: end;
+  border-radius: 1rem;
+  padding: 1rem;
+  background: #f5efe4;
+}
+
+.task-title-field {
+  flex: 1 1 18rem;
+}
+
+.schedule-status {
+  margin: 1rem 0 0;
+  color: #52625a;
+}
+
+.task-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-item {
+  align-items: center;
+  border: 1px solid rgb(30 91 66 / 12%);
+  border-radius: 1rem;
+  padding: 0.9rem 1rem;
+  background: rgb(255 255 255 / 72%);
+}
+
+.task-check {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  font-size: 1.1rem;
+}
+
+.task-copy {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.task-copy strong {
+  overflow-wrap: anywhere;
+}
+
+.task-copy span {
+  color: #716859;
+  font-size: 0.85rem;
+}
+
+.task-done .task-copy strong {
+  color: #657269;
+  text-decoration: line-through;
 }
 
 .library-card {
@@ -368,9 +498,15 @@ button:disabled {
   }
 
   .progress-copy,
-  .resource-list li {
+  .resource-list li,
+  .quick-task-form {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .quick-task-form label,
+  .quick-task-form button {
+    width: 100%;
   }
 }
 

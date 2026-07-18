@@ -5,8 +5,10 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use crate::application::{BackupUseCases, ResourceUseCases, WorkspaceUseCases};
-use crate::infrastructure::{SqliteBackupStore, SqliteBlobStore, SqliteWorkspaceRepository};
+use crate::application::{BackupUseCases, ResourceUseCases, ScheduleUseCases, WorkspaceUseCases};
+use crate::infrastructure::{
+    SqliteBackupStore, SqliteBlobStore, SqliteScheduleRepository, SqliteWorkspaceRepository,
+};
 
 /// Tracks cancel flags without sharing `SQLite` connections across threads.
 #[derive(Debug, Clone, Default)]
@@ -60,6 +62,7 @@ impl ImportCoordinator {
 pub(crate) struct AppState {
     pub(crate) workspace: WorkspaceUseCases<SqliteWorkspaceRepository>,
     pub(crate) resources: ResourceUseCases<SqliteBlobStore>,
+    pub(crate) schedule: ScheduleUseCases<SqliteScheduleRepository>,
     pub(crate) backups: BackupUseCases<SqliteBackupStore>,
     pub(crate) imports: ImportCoordinator,
     pub(crate) operations: WorkspaceOperationGate,
@@ -70,10 +73,12 @@ impl AppState {
     pub(crate) fn new(application_data_directory: &Path) -> Self {
         let workspace_repository = SqliteWorkspaceRepository::new(application_data_directory);
         let blob_store = SqliteBlobStore::new(application_data_directory);
+        let schedule_repository = SqliteScheduleRepository::new(application_data_directory);
         let backup_store = SqliteBackupStore::new(application_data_directory);
         Self {
             workspace: WorkspaceUseCases::new(workspace_repository),
             resources: ResourceUseCases::new(blob_store),
+            schedule: ScheduleUseCases::new(schedule_repository),
             backups: BackupUseCases::new(backup_store),
             imports: ImportCoordinator::default(),
             operations: WorkspaceOperationGate::default(),

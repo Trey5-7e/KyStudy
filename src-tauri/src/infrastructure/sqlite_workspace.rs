@@ -31,7 +31,12 @@ const MIGRATION_002: Migration = Migration {
     name: "blob_import_foundation",
     sql: include_str!("../../migrations/0002_blob_import.sql"),
 };
-const MIGRATIONS: &[Migration] = &[MIGRATION_001, MIGRATION_002];
+const MIGRATION_003: Migration = Migration {
+    version: 3,
+    name: "schedule_foundation",
+    sql: include_str!("../../migrations/0003_schedule_foundation.sql"),
+};
+const MIGRATIONS: &[Migration] = &[MIGRATION_001, MIGRATION_002, MIGRATION_003];
 
 /// `rusqlite` adapter for the single local workspace used in M1.
 #[derive(Debug, Clone)]
@@ -190,11 +195,23 @@ pub(crate) fn migrate(connection: &mut Connection) -> Result<(), PersistenceErro
 
 /// Verifies an immutable database snapshot without applying migrations or changing pragmas.
 pub(crate) fn verify_database_snapshot(connection: &Connection) -> Result<(), PersistenceError> {
+    verify_database_snapshot_at_version(connection, LATEST_SCHEMA_VERSION)
+}
+
+/// Verifies a known historical snapshot without migrating or changing pragmas.
+pub(crate) fn verify_database_snapshot_at_version(
+    connection: &Connection,
+    expected_version: u32,
+) -> Result<(), PersistenceError> {
     let application_id = connection
         .pragma_query_value(None, "application_id", |row| row.get::<_, i32>(0))
         .map_err(database_error)?;
     let current = current_schema_version(connection)?;
-    if application_id != APPLICATION_ID || current != LATEST_SCHEMA_VERSION {
+    if expected_version == 0
+        || expected_version > LATEST_SCHEMA_VERSION
+        || application_id != APPLICATION_ID
+        || current != expected_version
+    {
         return Err(PersistenceError::UnsupportedConfiguration);
     }
     validate_migration_history(connection, current)?;
@@ -392,8 +409,8 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        APPLICATION_ID, MIGRATION_001, MIGRATION_002, Migration, SqliteWorkspaceRepository,
-        apply_migrations, configure_connection, migration_checksum,
+        APPLICATION_ID, MIGRATION_001, MIGRATION_002, MIGRATION_003, Migration,
+        SqliteWorkspaceRepository, apply_migrations, configure_connection, migration_checksum,
     };
     use crate::application::{PersistenceError, WorkspaceRepository};
     use crate::domain::NewWorkspace;
@@ -407,7 +424,7 @@ mod tests {
             .initialize_default(&NewWorkspace::default_at(1_700_000_000_000))
             .expect("workspace should initialize");
 
-        assert_eq!(workspace.schema_version, 2);
+        assert_eq!(workspace.schema_version, 3);
     }
 
     #[test]
@@ -457,7 +474,7 @@ mod tests {
             .pragma_update(None, "application_id", APPLICATION_ID)
             .expect("application ID should be set");
         connection
-            .pragma_update(None, "user_version", 3)
+            .pragma_update(None, "user_version", 4)
             .expect("future schema should be set");
 
         let error = repository
@@ -572,10 +589,11 @@ mod tests {
     #[test]
     fn migration_sql_does_not_include_business_feature_tables() {
         assert!(!MIGRATION_002.sql.contains("CREATE TABLE task"));
+        assert!(MIGRATION_003.sql.contains("CREATE TABLE task"));
     }
 
     #[test]
-    fn find_default_upgrades_an_existing_v1_database_to_v2() {
+    fn find_default_upgrades_an_existing_v1_database_to_v3() {
         let directory = tempdir().expect("temporary directory should exist");
         let repository = SqliteWorkspaceRepository::new(directory.path());
         std::fs::create_dir_all(repository.workspace_directory())
@@ -588,13 +606,13 @@ mod tests {
 
         repository
             .find_default()
-            .expect("opening should apply v2 migration");
+            .expect("opening should apply pending migrations");
         let connection =
             Connection::open(repository.database_path()).expect("upgraded database should reopen");
         let version: u32 = connection
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .expect("schema version should be readable");
 
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
     }
 }

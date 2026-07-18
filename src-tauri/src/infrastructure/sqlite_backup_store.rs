@@ -14,10 +14,11 @@ use crate::domain::LATEST_SCHEMA_VERSION;
 use super::sqlite_blob_store::{blob_path, validate_storage_key};
 use super::sqlite_workspace::{
     DATABASE_FILE_NAME, SqliteWorkspaceRepository, database_error, migrate, open_database,
-    verify_database_snapshot,
+    verify_database_snapshot, verify_database_snapshot_at_version,
 };
 
 const BACKUP_FORMAT_VERSION: u32 = 1;
+const MINIMUM_BACKUP_SCHEMA_VERSION: u32 = 2;
 const FREE_SPACE_RESERVE_BYTES: u64 = 64 * 1024 * 1024;
 const MANIFEST_FILE_NAME: &str = "manifest.json";
 const MAXIMUM_MANIFEST_BYTES: u64 = 16 * 1024 * 1024;
@@ -165,9 +166,10 @@ impl BackupRepository for SqliteBackupStore {
             .prefix(".kystudy-restore-")
             .tempdir_in(&parent)?;
 
+        let restored_database = temporary.path().join(DATABASE_FILE_NAME);
         copy_file_verified(
             &backup_directory.join(DATABASE_FILE_NAME),
-            &temporary.path().join(DATABASE_FILE_NAME),
+            &restored_database,
             &manifest.database.sha256,
             manifest.database.size_bytes,
         )?;
@@ -178,12 +180,22 @@ impl BackupRepository for SqliteBackupStore {
             fs::create_dir_all(target.parent().ok_or(BackupError::InvalidManagedPath)?)?;
             copy_file_verified(&source, &target, &blob.sha256, blob.size_bytes)?;
         }
-        write_manifest(temporary.path(), &manifest)?;
-        verify_backup_directory(temporary.path(), &manifest)?;
 
-        let blob_count =
-            u64::try_from(manifest.blobs.len()).map_err(|_| BackupError::InvalidManifest)?;
-        let total_bytes = total_backup_bytes(temporary.path(), &manifest)?;
+        let mut restored_connection = open_database(&restored_database, false)?;
+        migrate(&mut restored_connection)?;
+        verify_database_snapshot(&restored_connection)?;
+        drop(restored_connection);
+        let (database_sha256, database_size) = hash_file(&restored_database)?;
+        let mut restored_manifest = manifest;
+        restored_manifest.schema_version = LATEST_SCHEMA_VERSION;
+        restored_manifest.database.sha256 = database_sha256;
+        restored_manifest.database.size_bytes = database_size;
+        write_manifest(temporary.path(), &restored_manifest)?;
+        verify_backup_directory(temporary.path(), &restored_manifest)?;
+
+        let blob_count = u64::try_from(restored_manifest.blobs.len())
+            .map_err(|_| BackupError::InvalidManifest)?;
+        let total_bytes = total_backup_bytes(temporary.path(), &restored_manifest)?;
         let directory_name = directory_name(destination)?;
         commit_directory(temporary, destination)?;
 
@@ -312,7 +324,8 @@ fn read_manifest(directory: &Path) -> Result<BackupManifest, BackupError> {
 
 fn verify_backup_directory(directory: &Path, manifest: &BackupManifest) -> Result<(), BackupError> {
     if manifest.format_version != BACKUP_FORMAT_VERSION
-        || manifest.schema_version != LATEST_SCHEMA_VERSION
+        || manifest.schema_version < MINIMUM_BACKUP_SCHEMA_VERSION
+        || manifest.schema_version > LATEST_SCHEMA_VERSION
         || manifest.producer.is_empty()
         || manifest.created_at < 0
         || manifest.database.relative_path != DATABASE_FILE_NAME
@@ -325,7 +338,7 @@ fn verify_backup_directory(directory: &Path, manifest: &BackupManifest) -> Resul
         manifest.database.size_bytes,
     )?;
     let connection = open_snapshot(&directory.join(DATABASE_FILE_NAME))?;
-    verify_database_snapshot(&connection)?;
+    verify_database_snapshot_at_version(&connection, manifest.schema_version)?;
     let workspace_id = load_workspace_id(&connection)?;
     let records = load_blob_records(&connection)?;
     drop(connection);
@@ -485,11 +498,13 @@ mod tests {
     use std::fs;
     use std::sync::atomic::AtomicBool;
 
+    use rusqlite::Connection;
     use tempfile::{TempDir, tempdir};
     use uuid::Uuid;
 
     use super::{
-        BackupManifest, MANIFEST_FILE_NAME, SqliteBackupStore, managed_blob_path, read_manifest,
+        BackupManifest, MANIFEST_FILE_NAME, SqliteBackupStore, hash_file, managed_blob_path,
+        read_manifest,
     };
     use crate::application::{
         BackupRepository, ImportRequest, ResourceRepository, WorkspaceRepository,
@@ -668,6 +683,51 @@ mod tests {
 
         assert_eq!(report.blob_count, 1);
         assert!(destination.join("kystudy.sqlite3").is_file());
+    }
+
+    #[test]
+    fn restore_migrates_a_verified_v2_backup_copy_to_the_latest_schema() {
+        let fixture = initialized_fixture();
+        let output = tempdir().expect("output directory should exist");
+        let backup = create_backup(&fixture, &output);
+        let database_path = backup.join("kystudy.sqlite3");
+        let connection = Connection::open(&database_path).expect("backup database should open");
+        connection
+            .execute_batch(
+                "DROP TABLE task_change;
+                 DROP TABLE task;
+                 DROP TABLE subject;
+                 DELETE FROM schema_migration WHERE version = 3;
+                 PRAGMA user_version = 2;",
+            )
+            .expect("fixture should represent a v2 backup");
+        drop(connection);
+        let (sha256, size_bytes) = hash_file(&database_path).expect("database should hash");
+        let mut manifest = read_manifest(&backup).expect("manifest should load");
+        manifest.schema_version = 2;
+        manifest.database.sha256 = sha256;
+        manifest.database.size_bytes = size_bytes;
+        fs::write(
+            backup.join(MANIFEST_FILE_NAME),
+            serde_json::to_vec_pretty(&manifest).expect("manifest should serialize"),
+        )
+        .expect("historical manifest should update");
+        let destination = output.path().join("restored-v2");
+
+        fixture
+            .backup
+            .restore_backup(&backup, &destination)
+            .expect("known v2 backup should restore");
+        let restored = Connection::open(destination.join("kystudy.sqlite3"))
+            .expect("restored database should open");
+        let version: u32 = restored
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .expect("restored schema should be readable");
+        let restored_manifest =
+            read_manifest(&destination).expect("restored manifest should be readable");
+
+        assert_eq!(version, 3);
+        assert_eq!(restored_manifest.schema_version, 3);
     }
 
     #[test]

@@ -3,6 +3,7 @@
 mod backup;
 mod resource;
 mod runtime;
+mod schedule;
 mod workspace;
 
 pub(crate) use backup::{
@@ -13,6 +14,9 @@ pub(crate) use resource::{
     ResourceRepository, ResourceUseCases,
 };
 pub(crate) use runtime::{RuntimeStatus, get_runtime_status};
+pub(crate) use schedule::{
+    CreateSubjectInput, CreateTaskInput, ScheduleError, ScheduleRepository, ScheduleUseCases,
+};
 pub(crate) use workspace::{
     PersistenceError, WorkspaceRepository, WorkspaceUseCases, current_utc_millis,
 };

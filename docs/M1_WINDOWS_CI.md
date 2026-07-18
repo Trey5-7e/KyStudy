@@ -1,10 +1,10 @@
 # M1 Windows CI 与 Release Smoke 自动化
 
-| 项目 | 内容 |
-| --- | --- |
-| 工作项 | M1-013 |
-| 日期 | 2026-07-18 |
-| 状态 | implementation-complete / awaiting-first-hosted-run |
+| 项目   | 内容                               |
+| ------ | ---------------------------------- |
+| 工作项 | M1-013                             |
+| 日期   | 2026-07-18                         |
+| 状态   | completed                          |
 | 工作流 | `.github/workflows/windows-ci.yml` |
 
 ## CI 范围
@@ -80,15 +80,12 @@ SHA-256：63E733031D92C74C913BF97C777FDF7E8A82D8B8B02E28C96E2DDA7A6C2A3E4B
 
 ## 首次托管验收
 
-当前工作区尚不是 Git 仓库，也没有可用的 GitHub Actions 运行上下文，因此 M1-013 还不能标记为 `completed`。代码推送到 GitHub 后：
+2026-07-18，项目维护者确认提交 `170b3e0` 对应的 GitHub Windows CI 验收通过：
 
-1. 打开仓库的 **Actions** 页面；
-2. 选择 **Windows CI**；
-3. 点击 **Run workflow**，选择 `main`；
-4. 等待 `Quality, Release, and Smoke` Job 完成；
-5. 确认所有步骤为绿色；
-6. 下载 `kystudy-windows-x64-<commit>` Artifact；
-7. 确认其中包含 `kystudy.exe` 和 `windows-release-smoke.json`；
-8. 打开 JSON，确认 `status` 为 `passed`、`mainWindowObserved` 为 `true`、`workspaceDatabaseCreated` 为 `false`。
+- `Quality, Release, and Smoke` Job 全部通过；
+- Release Artifact 可正常生成；
+- `windows-release-smoke.json` 报告通过；
+- Runner 观察到主窗口正常启动；
+- 无用户操作时未创建工作区数据库。
 
-首次托管运行通过后，将本文档状态改为 `completed`，并进入 M1-014 总走查。
+M1-013 至此完成，项目进入 M1-014 总走查。后续若修改工作流、锁定工具链或 Release 启动路径，应重新执行同等范围的托管验收。

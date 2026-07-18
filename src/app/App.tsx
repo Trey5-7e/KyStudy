@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { ResourcePanel } from "../features/library/ResourcePanel";
 import { BackupPanel } from "../features/backup/BackupPanel";
+import { TodayTaskPanel } from "../features/schedule/TodayTaskPanel";
 import { WorkspacePanel } from "../features/workspace/WorkspacePanel";
 import {
   getRuntimeStatus,
@@ -14,7 +15,7 @@ type RuntimeState =
   | { kind: "ready"; status: RuntimeStatus }
   | { kind: "error"; message: string };
 
-const M1_BOUNDARIES = [
+const CURRENT_BOUNDARIES = [
   "前端只通过类型化 Command DTO 与本地核心通信",
   "SQLite 由 Rust Repository 管理，不向 WebView 暴露路径或 SQL",
   "PDF、OCR、导图和 AI 依赖在对应里程碑中按需引入",
@@ -69,10 +70,10 @@ export function App() {
   return (
     <main className="shell">
       <section className="hero" aria-labelledby="page-title">
-        <p className="eyebrow">KyStudy · M1 本地基础</p>
+        <p className="eyebrow">KyStudy · M2 日程闭环</p>
         <h1 id="page-title">把备考资料、执行与复习留在自己手中</h1>
         <p className="lead">
-          正式工程已经初始化。当前版本只验证安全的桌面边界，尚未实现业务功能。
+          本地基础已经通过验收。现在从每天可用的手动任务清单开始，逐步连接计划与真实执行。
         </p>
       </section>
 
@@ -113,6 +114,8 @@ export function App() {
 
       <WorkspacePanel />
 
+      <TodayTaskPanel />
+
       <ResourcePanel />
 
       <BackupPanel />
@@ -121,7 +124,7 @@ export function App() {
         <p className="section-label">已经锁定的边界</p>
         <h2 id="boundary-title">先把基础做稳，再增加功能</h2>
         <ul>
-          {M1_BOUNDARIES.map((boundary) => (
+          {CURRENT_BOUNDARIES.map((boundary) => (
             <li key={boundary}>{boundary}</li>
           ))}
         </ul>

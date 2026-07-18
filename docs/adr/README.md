@@ -21,7 +21,7 @@ ADR 用于记录已经做出的重要技术决策，以及当时的上下文、�
 
 ## 当前记录
 
-- [ADR-001：桌面运行时与前后端边界](001-desktop-runtime.md) — `proposed`
+- [ADR-001：桌面运行时与前后端边界](001-desktop-runtime.md) — `accepted`
 - [ADR-002：SQLite 驱动、迁移与 Repository 边界](002-sqlite-driver.md) — `accepted`
-- [ADR-003：PDF.js 显示层、受控 RangeSource 与区域坐标](003-pdf-rendering.md) — `proposed`
+- [ADR-003：PDF.js 显示层、受控 RangeSource 与区域坐标](003-pdf-rendering.md) — `accepted`
 - [ADR-004：Blob 文件存储、去重与备份格式](004-file-storage.md) — `accepted`

@@ -1,16 +1,17 @@
 //! Thin Tauri command adapters.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 use uuid::Uuid;
 
 use crate::application::{
-    BackupError, BackupReport, ImportError, ImportProgress, ResourceDocument, RestoreReport,
-    RuntimeStatus, get_runtime_status as load_runtime_status,
+    BackupError, BackupReport, CreateSubjectInput, CreateTaskInput, ImportError, ImportProgress,
+    ResourceDocument, RestoreReport, RuntimeStatus, ScheduleError,
+    get_runtime_status as load_runtime_status,
 };
 use crate::bootstrap::AppState;
-use crate::domain::Workspace;
+use crate::domain::{Subject, Task, TaskTransition, Workspace};
 
 #[tauri::command]
 pub(crate) fn get_runtime_status() -> RuntimeStatus {
@@ -40,6 +41,110 @@ impl From<Workspace> for WorkspaceStatusDto {
             early_fill_enabled: workspace.early_fill_enabled,
             created_at: workspace.created_at,
             schema_version: workspace.schema_version,
+        }
+    }
+}
+
+/// Subject metadata returned without database internals.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SubjectDto {
+    id: String,
+    name: String,
+    color_key: &'static str,
+    sort_order: u32,
+}
+
+impl From<Subject> for SubjectDto {
+    fn from(subject: Subject) -> Self {
+        Self {
+            id: subject.id,
+            name: subject.name,
+            color_key: subject.color.as_str(),
+            sort_order: subject.sort_order,
+        }
+    }
+}
+
+/// Formal task fields returned without history snapshots or persistence details.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TaskDto {
+    id: String,
+    subject_id: Option<String>,
+    parent_task_id: Option<String>,
+    title: String,
+    description: Option<String>,
+    planned_date: String,
+    estimated_minutes: Option<u32>,
+    priority: &'static str,
+    status: &'static str,
+    manual_order: u32,
+    completed_at: Option<i64>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<Task> for TaskDto {
+    fn from(task: Task) -> Self {
+        Self {
+            id: task.id,
+            subject_id: task.subject_id,
+            parent_task_id: task.parent_task_id,
+            title: task.title,
+            description: task.description,
+            planned_date: task.planned_date.as_str().to_owned(),
+            estimated_minutes: task.estimated_minutes,
+            priority: task.priority.as_str(),
+            status: task.status.as_str(),
+            manual_order: task.manual_order,
+            completed_at: task.completed_at,
+            created_at: task.created_at,
+            updated_at: task.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct CreateSubjectRequestDto {
+    name: String,
+    color_key: String,
+    sort_order: u32,
+}
+
+impl From<CreateSubjectRequestDto> for CreateSubjectInput {
+    fn from(request: CreateSubjectRequestDto) -> Self {
+        Self {
+            name: request.name,
+            color_key: request.color_key,
+            sort_order: request.sort_order,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct CreateTaskRequestDto {
+    subject_id: Option<String>,
+    title: String,
+    description: Option<String>,
+    planned_date: String,
+    estimated_minutes: Option<u32>,
+    priority: String,
+    manual_order: u32,
+}
+
+impl From<CreateTaskRequestDto> for CreateTaskInput {
+    fn from(request: CreateTaskRequestDto) -> Self {
+        Self {
+            subject_id: request.subject_id,
+            title: request.title,
+            description: request.description,
+            planned_date: request.planned_date,
+            estimated_minutes: request.estimated_minutes,
+            priority: request.priority,
+            manual_order: request.manual_order,
         }
     }
 }
@@ -278,6 +383,38 @@ impl AppErrorDto {
             operation_id: Uuid::new_v4().to_string(),
         }
     }
+
+    fn from_schedule(error: &ScheduleError) -> Self {
+        let (message, action) = match error {
+            ScheduleError::WorkspaceNotInitialized => {
+                ("尚未创建本地工作区。", "先创建本地工作区，再管理学习任务。")
+            }
+            ScheduleError::SubjectNameConflict => (
+                "已经存在同名的有效科目。",
+                "使用不同名称，或先归档现有科目。",
+            ),
+            ScheduleError::SubjectNotFound => (
+                "所选科目不存在或已经归档。",
+                "重新选择有效科目，或暂时使用未分类。",
+            ),
+            ScheduleError::TaskNotFound => ("该任务不存在或已进入回收站。", "刷新今日任务后重试。"),
+            ScheduleError::InvalidStoredData => (
+                "本地日程数据未通过完整性校验。",
+                "不要覆盖工作区；请先创建完整备份并保留诊断信息。",
+            ),
+            ScheduleError::Validation(_) => (
+                "任务内容或状态不符合要求。",
+                "检查标题、日期、预计时长和当前任务状态后重试。",
+            ),
+            ScheduleError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
 }
 
 #[tauri::command]
@@ -302,6 +439,80 @@ pub(crate) async fn initialize_default_workspace(
         .map_err(|_| AppErrorDto::task_failed())?
         .map(WorkspaceStatusDto::from)
         .map_err(|error| AppErrorDto::from_persistence(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_subjects(
+    state: State<'_, AppState>,
+) -> Result<Vec<SubjectDto>, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_subjects())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|subjects| subjects.into_iter().map(SubjectDto::from).collect())
+        .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn create_subject(
+    request: CreateSubjectRequestDto,
+    state: State<'_, AppState>,
+) -> Result<SubjectDto, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let input = CreateSubjectInput::from(request);
+        use_cases.create_subject(&input)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(SubjectDto::from)
+    .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_tasks_for_range(
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TaskDto>, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_tasks(&start_date, &end_date))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|tasks| tasks.into_iter().map(TaskDto::from).collect())
+        .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn create_task(
+    request: CreateTaskRequestDto,
+    state: State<'_, AppState>,
+) -> Result<TaskDto, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.create_task(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(TaskDto::from)
+        .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn transition_task(
+    task_id: String,
+    transition: String,
+    state: State<'_, AppState>,
+) -> Result<TaskDto, AppErrorDto> {
+    let transition = TaskTransition::parse(&transition).ok_or_else(|| {
+        AppErrorDto::from_schedule(&ScheduleError::Validation(
+            crate::domain::ScheduleValidationError::Transition,
+        ))
+    })?;
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.transition_task(&task_id, transition))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(TaskDto::from)
+        .map_err(|error| AppErrorDto::from_schedule(&error))
 }
 
 #[tauri::command]
@@ -486,8 +697,9 @@ fn emit_import_event(app: &AppHandle, event: ImportEventDto) {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppErrorDto, BackupReportDto, ResourceDocumentDto, get_runtime_status};
-    use crate::application::{BackupReport, PersistenceError, ResourceDocument};
+    use super::{AppErrorDto, BackupReportDto, ResourceDocumentDto, TaskDto, get_runtime_status};
+    use crate::application::{BackupReport, PersistenceError, ResourceDocument, ScheduleError};
+    use crate::domain::{LocalDate, Task, TaskPriority, TaskStatus};
 
     #[test]
     fn backup_dto_serialization_never_exposes_destination_path() {
@@ -523,6 +735,38 @@ mod tests {
         assert!(value.get("path").is_none());
         assert!(value.get("storageKey").is_none());
         assert!(value.get("originalName").is_none());
+    }
+
+    #[test]
+    fn task_dto_serialization_never_exposes_audit_or_storage_details() {
+        let dto = TaskDto::from(Task {
+            id: "019f7328-4b66-7613-9729-e3570fc41525".to_owned(),
+            subject_id: None,
+            parent_task_id: None,
+            title: "线性代数强化".to_owned(),
+            description: None,
+            planned_date: LocalDate::parse("2026-07-18").expect("fixture date should parse"),
+            estimated_minutes: Some(90),
+            priority: TaskPriority::High,
+            status: TaskStatus::Todo,
+            manual_order: 0,
+            completed_at: None,
+            created_at: 1_700_000_000_000,
+            updated_at: 1_700_000_000_000,
+        });
+
+        let value = serde_json::to_value(dto).expect("task DTO should serialize");
+
+        assert!(value.get("beforeJson").is_none());
+        assert!(value.get("afterJson").is_none());
+        assert!(value.get("databasePath").is_none());
+    }
+
+    #[test]
+    fn schedule_error_dto_does_not_expose_stored_data() {
+        let dto = AppErrorDto::from_schedule(&ScheduleError::InvalidStoredData);
+
+        assert_eq!(dto.message, "本地日程数据未通过完整性校验。");
     }
 
     #[test]
