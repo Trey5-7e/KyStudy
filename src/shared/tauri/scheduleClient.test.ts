@@ -5,7 +5,9 @@ import {
   normalizeScheduleCommandError,
   parseStudySubject,
   parseStudyTask,
+  parseStudyTaskChange,
   parseSubjectList,
+  parseTaskChangeList,
   parseTaskList,
 } from "./scheduleClient";
 
@@ -33,6 +35,35 @@ const VALID_TASK = {
   completedAt: null,
   createdAt: 1_700_000_000_000,
   updatedAt: 1_700_000_000_000,
+};
+
+const VALID_CHANGE = {
+  id: "019f7328-4b66-7613-9729-e3570fc41526",
+  changeType: "rescheduled",
+  before: {
+    subjectId: null,
+    title: "线性代数强化",
+    description: null,
+    plannedDate: "2026-07-18",
+    estimatedMinutes: 90,
+    priority: "normal",
+    status: "todo",
+    manualOrder: 0,
+    completedAt: null,
+  },
+  after: {
+    subjectId: null,
+    title: "线性代数强化",
+    description: null,
+    plannedDate: "2026-07-20",
+    estimatedMinutes: 90,
+    priority: "normal",
+    status: "todo",
+    manualOrder: 0,
+    completedAt: null,
+  },
+  reason: "先完成前置章节",
+  createdAt: 1_700_000_000_100,
 };
 
 describe("parseStudyTask", () => {
@@ -93,6 +124,45 @@ describe("parseTaskList", () => {
   it("rejects a non-array response", () => {
     expect(() => parseTaskList({ task: VALID_TASK })).toThrowError(
       "TASK_LIST_DTO_INVALID",
+    );
+  });
+});
+
+describe("parseStudyTaskChange", () => {
+  it("returns typed snapshots without raw audit JSON", () => {
+    const change = parseStudyTaskChange({
+      ...VALID_CHANGE,
+      beforeJson: "C:\\private\\audit.json",
+    });
+
+    expect(change.before?.plannedDate).toBe("2026-07-18");
+    expect("beforeJson" in change).toBe(false);
+  });
+
+  it("rejects a reschedule without a reason", () => {
+    expect(() =>
+      parseStudyTaskChange({ ...VALID_CHANGE, reason: null }),
+    ).toThrowError("TASK_CHANGE_DTO_INVALID");
+  });
+
+  it("rejects raw JSON without typed snapshots", () => {
+    expect(() =>
+      parseStudyTaskChange({
+        id: VALID_CHANGE.id,
+        changeType: "edited",
+        beforeJson: "{}",
+        afterJson: "{}",
+        reason: null,
+        createdAt: VALID_CHANGE.createdAt,
+      }),
+    ).toThrowError("TASK_CHANGE_DTO_INVALID");
+  });
+});
+
+describe("parseTaskChangeList", () => {
+  it("rejects a non-array response", () => {
+    expect(() => parseTaskChangeList({ change: VALID_CHANGE })).toThrowError(
+      "TASK_CHANGE_LIST_DTO_INVALID",
     );
   });
 });

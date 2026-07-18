@@ -2,7 +2,19 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type TaskPriority = "low" | "normal" | "high";
 export type TaskStatus = "todo" | "in_progress" | "done" | "canceled";
-export type TaskTransition = "start" | "complete" | "reopen";
+export type TaskTransition =
+  "start" | "complete" | "reopen" | "cancel" | "restore";
+export type TaskChangeType =
+  | "created"
+  | "edited"
+  | "rescheduled"
+  | "started"
+  | "completed"
+  | "reopened"
+  | "canceled"
+  | "restored"
+  | "split"
+  | "trashed";
 export type SubjectColor =
   "slate" | "blue" | "cyan" | "green" | "amber" | "orange" | "rose" | "purple";
 
@@ -32,6 +44,27 @@ export interface StudyTask {
   updatedAt: number;
 }
 
+export interface TaskChangeSnapshot {
+  subjectId?: string;
+  title: string;
+  description?: string;
+  plannedDate: string;
+  estimatedMinutes?: number;
+  priority: TaskPriority;
+  status: TaskStatus;
+  manualOrder: number;
+  completedAt?: number;
+}
+
+export interface StudyTaskChange {
+  id: string;
+  changeType: TaskChangeType;
+  before?: TaskChangeSnapshot;
+  after?: TaskChangeSnapshot;
+  reason?: string;
+  createdAt: number;
+}
+
 export interface CreateTaskInput {
   subjectId?: string;
   title: string;
@@ -54,6 +87,11 @@ export interface UpdateTaskDetailsInput {
   description?: string;
   estimatedMinutes?: number;
   priority: TaskPriority;
+}
+
+export interface RescheduleTaskInput {
+  plannedDate: string;
+  reason: string;
 }
 
 export interface ScheduleCommandError {
@@ -80,6 +118,18 @@ const STATUSES = new Set<TaskStatus>([
   "done",
   "canceled",
 ]);
+const CHANGE_TYPES = new Set<TaskChangeType>([
+  "created",
+  "edited",
+  "rescheduled",
+  "started",
+  "completed",
+  "reopened",
+  "canceled",
+  "restored",
+  "split",
+  "trashed",
+]);
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const ERROR_COPY: Record<string, { message: string; action: string }> = {
@@ -89,7 +139,7 @@ const ERROR_COPY: Record<string, { message: string; action: string }> = {
   },
   SCHEDULE_INPUT_INVALID: {
     message: "任务内容不符合要求。",
-    action: "检查标题、日期和预计时长后重试。",
+    action: "检查标题、日期、原因和预计时长后重试。",
   },
   SUBJECT_NAME_CONFLICT: {
     message: "已经存在同名的有效科目。",
@@ -255,6 +305,96 @@ export function parseTaskList(value: unknown): StudyTask[] {
   return value.map(parseStudyTask);
 }
 
+export function parseTaskChangeSnapshot(value: unknown): TaskChangeSnapshot {
+  if (!isRecord(value)) {
+    throw new Error("TASK_CHANGE_SNAPSHOT_DTO_INVALID");
+  }
+  const subjectId = optionalString(value.subjectId);
+  const description = optionalString(value.description);
+  const estimatedMinutes = optionalSafeInteger(value.estimatedMinutes);
+  const completedAt = optionalSafeInteger(value.completedAt);
+  if (
+    subjectId === null ||
+    typeof value.title !== "string" ||
+    value.title.length === 0 ||
+    value.title.length > 120 ||
+    description === null ||
+    (description !== undefined && description.length > 2000) ||
+    typeof value.plannedDate !== "string" ||
+    !ISO_DATE_PATTERN.test(value.plannedDate) ||
+    estimatedMinutes === null ||
+    (estimatedMinutes !== undefined &&
+      (estimatedMinutes < 1 || estimatedMinutes > 1440)) ||
+    typeof value.priority !== "string" ||
+    !PRIORITIES.has(value.priority as TaskPriority) ||
+    typeof value.status !== "string" ||
+    !STATUSES.has(value.status as TaskStatus) ||
+    typeof value.manualOrder !== "number" ||
+    !Number.isSafeInteger(value.manualOrder) ||
+    value.manualOrder < 0 ||
+    completedAt === null ||
+    (value.status === "done") !== (completedAt !== undefined)
+  ) {
+    throw new Error("TASK_CHANGE_SNAPSHOT_DTO_INVALID");
+  }
+  return {
+    ...(subjectId === undefined ? {} : { subjectId }),
+    title: value.title,
+    ...(description === undefined ? {} : { description }),
+    plannedDate: value.plannedDate,
+    ...(estimatedMinutes === undefined ? {} : { estimatedMinutes }),
+    priority: value.priority as TaskPriority,
+    status: value.status as TaskStatus,
+    manualOrder: value.manualOrder,
+    ...(completedAt === undefined ? {} : { completedAt }),
+  };
+}
+
+export function parseStudyTaskChange(value: unknown): StudyTaskChange {
+  if (!isRecord(value)) {
+    throw new Error("TASK_CHANGE_DTO_INVALID");
+  }
+  const before =
+    value.before === null || value.before === undefined
+      ? undefined
+      : parseTaskChangeSnapshot(value.before);
+  const after =
+    value.after === null || value.after === undefined
+      ? undefined
+      : parseTaskChangeSnapshot(value.after);
+  const reason = optionalString(value.reason);
+  if (
+    typeof value.id !== "string" ||
+    value.id.length === 0 ||
+    typeof value.changeType !== "string" ||
+    !CHANGE_TYPES.has(value.changeType as TaskChangeType) ||
+    (before === undefined && after === undefined) ||
+    reason === null ||
+    (reason !== undefined && (reason.length === 0 || reason.length > 500)) ||
+    (value.changeType === "rescheduled" && reason === undefined) ||
+    typeof value.createdAt !== "number" ||
+    !Number.isSafeInteger(value.createdAt) ||
+    value.createdAt < 0
+  ) {
+    throw new Error("TASK_CHANGE_DTO_INVALID");
+  }
+  return {
+    id: value.id,
+    changeType: value.changeType as TaskChangeType,
+    ...(before === undefined ? {} : { before }),
+    ...(after === undefined ? {} : { after }),
+    ...(reason === undefined ? {} : { reason }),
+    createdAt: value.createdAt,
+  };
+}
+
+export function parseTaskChangeList(value: unknown): StudyTaskChange[] {
+  if (!Array.isArray(value)) {
+    throw new Error("TASK_CHANGE_LIST_DTO_INVALID");
+  }
+  return value.map(parseStudyTaskChange);
+}
+
 export function localDateForTimezone(date: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat("en", {
     timeZone: timezone,
@@ -316,6 +456,14 @@ export async function updateTaskDetails(
   return parseStudyTask(value);
 }
 
+export async function rescheduleTask(
+  taskId: string,
+  request: RescheduleTaskInput,
+): Promise<StudyTask> {
+  const value: unknown = await invoke("reschedule_task", { taskId, request });
+  return parseStudyTask(value);
+}
+
 export async function transitionTask(
   taskId: string,
   transition: TaskTransition,
@@ -327,6 +475,13 @@ export async function transitionTask(
   return parseStudyTask(value);
 }
 
+export async function listTaskChanges(
+  taskId: string,
+): Promise<StudyTaskChange[]> {
+  const value: unknown = await invoke("list_task_changes", { taskId });
+  return parseTaskChangeList(value);
+}
+
 export function normalizeScheduleCommandError(
   error: unknown,
 ): ScheduleCommandError {
@@ -336,6 +491,9 @@ export function normalizeScheduleCommandError(
       error.message === "TASK_LIST_DTO_INVALID" ||
       error.message === "SUBJECT_DTO_INVALID" ||
       error.message === "SUBJECT_LIST_DTO_INVALID" ||
+      error.message === "TASK_CHANGE_SNAPSHOT_DTO_INVALID" ||
+      error.message === "TASK_CHANGE_DTO_INVALID" ||
+      error.message === "TASK_CHANGE_LIST_DTO_INVALID" ||
       error.message === "LOCAL_DATE_UNAVAILABLE")
   ) {
     return {

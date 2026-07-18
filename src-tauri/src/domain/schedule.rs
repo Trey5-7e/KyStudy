@@ -180,6 +180,8 @@ pub(crate) enum TaskTransition {
     Start,
     Complete,
     Reopen,
+    Cancel,
+    Restore,
 }
 
 impl TaskTransition {
@@ -189,7 +191,59 @@ impl TaskTransition {
             "start" => Some(Self::Start),
             "complete" => Some(Self::Complete),
             "reopen" => Some(Self::Reopen),
+            "cancel" => Some(Self::Cancel),
+            "restore" => Some(Self::Restore),
             _ => None,
+        }
+    }
+}
+
+/// Stable kinds stored for immutable task changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TaskChangeType {
+    Created,
+    Edited,
+    Rescheduled,
+    Started,
+    Completed,
+    Reopened,
+    Canceled,
+    Restored,
+    Split,
+    Trashed,
+}
+
+impl TaskChangeType {
+    /// Parses one task change token read from storage.
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "created" => Some(Self::Created),
+            "edited" => Some(Self::Edited),
+            "rescheduled" => Some(Self::Rescheduled),
+            "started" => Some(Self::Started),
+            "completed" => Some(Self::Completed),
+            "reopened" => Some(Self::Reopened),
+            "canceled" => Some(Self::Canceled),
+            "restored" => Some(Self::Restored),
+            "split" => Some(Self::Split),
+            "trashed" => Some(Self::Trashed),
+            _ => None,
+        }
+    }
+
+    /// Returns the stable command DTO token.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Created => "created",
+            Self::Edited => "edited",
+            Self::Rescheduled => "rescheduled",
+            Self::Started => "started",
+            Self::Completed => "completed",
+            Self::Reopened => "reopened",
+            Self::Canceled => "canceled",
+            Self::Restored => "restored",
+            Self::Split => "split",
+            Self::Trashed => "trashed",
         }
     }
 }
@@ -262,6 +316,30 @@ impl TaskDetailsDraft {
             description,
             estimated_minutes,
             priority,
+        })
+    }
+}
+
+/// Validated date and reason for one explicit task reschedule.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RescheduleDraft {
+    pub(crate) planned_date: LocalDate,
+    pub(crate) reason: String,
+}
+
+impl RescheduleDraft {
+    /// Creates a reschedule request with a concise, non-empty reason.
+    pub(crate) fn new(
+        planned_date: LocalDate,
+        reason: &str,
+    ) -> Result<Self, ScheduleValidationError> {
+        let reason = reason.trim().to_owned();
+        if reason.is_empty() || reason.chars().count() > 500 {
+            return Err(ScheduleValidationError::Text);
+        }
+        Ok(Self {
+            planned_date,
+            reason,
         })
     }
 }
@@ -365,6 +443,48 @@ pub(crate) struct Task {
     pub(crate) updated_at: i64,
 }
 
+/// Explicit task fields returned for one readable history snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TaskChangeSnapshot {
+    pub(crate) subject_id: Option<String>,
+    pub(crate) title: String,
+    pub(crate) description: Option<String>,
+    pub(crate) planned_date: LocalDate,
+    pub(crate) estimated_minutes: Option<u32>,
+    pub(crate) priority: TaskPriority,
+    pub(crate) status: TaskStatus,
+    pub(crate) manual_order: u32,
+    pub(crate) completed_at: Option<i64>,
+}
+
+impl From<&Task> for TaskChangeSnapshot {
+    fn from(task: &Task) -> Self {
+        Self {
+            subject_id: task.subject_id.clone(),
+            title: task.title.clone(),
+            description: task.description.clone(),
+            planned_date: task.planned_date.clone(),
+            estimated_minutes: task.estimated_minutes,
+            priority: task.priority,
+            status: task.status,
+            manual_order: task.manual_order,
+            completed_at: task.completed_at,
+        }
+    }
+}
+
+/// One immutable task change with typed snapshots instead of raw audit JSON.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TaskChange {
+    pub(crate) id: String,
+    pub(crate) task_id: String,
+    pub(crate) change_type: TaskChangeType,
+    pub(crate) before: Option<TaskChangeSnapshot>,
+    pub(crate) after: Option<TaskChangeSnapshot>,
+    pub(crate) reason: Option<String>,
+    pub(crate) created_at: i64,
+}
+
 impl Task {
     /// Updates editable details while preserving schedule date and lifecycle state.
     pub(crate) fn update_details(
@@ -390,6 +510,24 @@ impl Task {
         Ok(true)
     }
 
+    /// Changes only the planned date for an unfinished task.
+    pub(crate) fn reschedule(
+        &mut self,
+        request: &RescheduleDraft,
+        changed_at: i64,
+    ) -> Result<bool, ScheduleValidationError> {
+        validate_change_timestamp(changed_at, self.updated_at)?;
+        if !matches!(self.status, TaskStatus::Todo | TaskStatus::InProgress) {
+            return Err(ScheduleValidationError::Transition);
+        }
+        if self.planned_date == request.planned_date {
+            return Ok(false);
+        }
+        self.planned_date = request.planned_date.clone();
+        self.updated_at = changed_at;
+        Ok(true)
+    }
+
     /// Applies one allowed lifecycle transition without touching study records.
     pub(crate) fn transition(
         &mut self,
@@ -408,6 +546,12 @@ impl Task {
             (TaskStatus::Done, TaskTransition::Reopen) => {
                 self.status = TaskStatus::Todo;
                 self.completed_at = None;
+            }
+            (TaskStatus::Todo | TaskStatus::InProgress, TaskTransition::Cancel) => {
+                self.status = TaskStatus::Canceled;
+            }
+            (TaskStatus::Canceled, TaskTransition::Restore) => {
+                self.status = TaskStatus::Todo;
             }
             _ => return Err(ScheduleValidationError::Transition),
         }
@@ -505,8 +649,8 @@ const fn is_leap_year(year: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        LocalDate, ScheduleValidationError, Subject, SubjectColor, Task, TaskDetailsDraft,
-        TaskPriority, TaskStatus, TaskTransition,
+        LocalDate, RescheduleDraft, ScheduleValidationError, Subject, SubjectColor, Task,
+        TaskDetailsDraft, TaskPriority, TaskStatus, TaskTransition,
     };
 
     fn task(status: TaskStatus) -> Task {
@@ -622,5 +766,94 @@ mod tests {
             .expect_err("unfinished task cannot reopen");
 
         assert_eq!(error, ScheduleValidationError::Transition);
+    }
+
+    #[test]
+    fn task_cancel_moves_an_active_task_to_canceled() {
+        let mut task = task(TaskStatus::InProgress);
+
+        task.transition(TaskTransition::Cancel, 1_700_000_000_100)
+            .expect("active task should cancel");
+
+        assert_eq!(task.status, TaskStatus::Canceled);
+    }
+
+    #[test]
+    fn task_restore_moves_a_canceled_task_to_todo() {
+        let mut task = task(TaskStatus::Canceled);
+
+        task.transition(TaskTransition::Restore, 1_700_000_000_100)
+            .expect("canceled task should restore");
+
+        assert_eq!(task.status, TaskStatus::Todo);
+    }
+
+    #[test]
+    fn task_cancel_rejects_a_completed_task() {
+        let mut task = task(TaskStatus::Done);
+        task.completed_at = Some(1_700_000_000_000);
+
+        let error = task
+            .transition(TaskTransition::Cancel, 1_700_000_000_100)
+            .expect_err("completed task cannot cancel directly");
+
+        assert_eq!(error, ScheduleValidationError::Transition);
+    }
+
+    #[test]
+    fn task_restore_rejects_an_active_task() {
+        let mut task = task(TaskStatus::Todo);
+
+        let error = task
+            .transition(TaskTransition::Restore, 1_700_000_000_100)
+            .expect_err("active task cannot restore");
+
+        assert_eq!(error, ScheduleValidationError::Transition);
+    }
+
+    #[test]
+    fn task_reschedule_changes_only_the_planned_date() {
+        let mut task = task(TaskStatus::InProgress);
+        let original_status = task.status;
+        let request = RescheduleDraft::new(
+            LocalDate::parse("2026-07-20").expect("fixture date should parse"),
+            "需要先补齐图论基础",
+        )
+        .expect("reschedule should be valid");
+
+        let changed = task
+            .reschedule(&request, 1_700_000_000_100)
+            .expect("unfinished task should reschedule");
+
+        assert!(changed);
+        assert_eq!(task.planned_date.as_str(), "2026-07-20");
+        assert_eq!(task.status, original_status);
+    }
+
+    #[test]
+    fn task_reschedule_rejects_a_completed_task() {
+        let mut task = task(TaskStatus::Done);
+        task.completed_at = Some(1_700_000_000_000);
+        let request = RescheduleDraft::new(
+            LocalDate::parse("2026-07-20").expect("fixture date should parse"),
+            "重新安排",
+        )
+        .expect("reschedule should be valid");
+
+        let error = task
+            .reschedule(&request, 1_700_000_000_100)
+            .expect_err("completed task must reopen before rescheduling");
+
+        assert_eq!(error, ScheduleValidationError::Transition);
+    }
+
+    #[test]
+    fn reschedule_requires_a_non_empty_reason() {
+        let date = LocalDate::parse("2026-07-20").expect("fixture date should parse");
+
+        let error = RescheduleDraft::new(date, "  ")
+            .expect_err("an empty reschedule reason must be rejected");
+
+        assert_eq!(error, ScheduleValidationError::Text);
     }
 }

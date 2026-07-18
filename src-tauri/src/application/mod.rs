@@ -15,8 +15,8 @@ pub(crate) use resource::{
 };
 pub(crate) use runtime::{RuntimeStatus, get_runtime_status};
 pub(crate) use schedule::{
-    CreateSubjectInput, CreateTaskInput, ScheduleError, ScheduleRepository, ScheduleUseCases,
-    UpdateTaskDetailsInput,
+    CreateSubjectInput, CreateTaskInput, RescheduleTaskInput, ScheduleError, ScheduleRepository,
+    ScheduleUseCases, UpdateTaskDetailsInput,
 };
 pub(crate) use workspace::{
     PersistenceError, WorkspaceRepository, WorkspaceUseCases, current_utc_millis,

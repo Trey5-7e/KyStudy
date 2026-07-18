@@ -1,7 +1,7 @@
 use super::{PersistenceError, current_utc_millis};
 use crate::domain::{
-    DateRange, LocalDate, NewSubject, NewTask, ScheduleValidationError, Subject, SubjectColor,
-    Task, TaskDetailsDraft, TaskDraft, TaskPriority, TaskTransition,
+    DateRange, LocalDate, NewSubject, NewTask, RescheduleDraft, ScheduleValidationError, Subject,
+    SubjectColor, Task, TaskChange, TaskDetailsDraft, TaskDraft, TaskPriority, TaskTransition,
 };
 
 /// User-authored fields for one subject.
@@ -32,6 +32,13 @@ pub(crate) struct UpdateTaskDetailsInput {
     pub(crate) description: Option<String>,
     pub(crate) estimated_minutes: Option<u32>,
     pub(crate) priority: String,
+}
+
+/// User-authored date and explanation for one explicit task reschedule.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RescheduleTaskInput {
+    pub(crate) planned_date: String,
+    pub(crate) reason: String,
 }
 
 /// Stable failures from schedule use cases and persistence.
@@ -102,6 +109,14 @@ pub(crate) trait ScheduleRepository: Clone + Send + Sync + 'static {
         changed_at: i64,
     ) -> Result<Task, ScheduleError>;
 
+    /// Reschedules one unfinished task and appends history in one transaction.
+    fn reschedule_task(
+        &self,
+        task_id: &str,
+        request: &RescheduleDraft,
+        changed_at: i64,
+    ) -> Result<Task, ScheduleError>;
+
     /// Applies one state transition and appends history in one transaction.
     fn transition_task(
         &self,
@@ -109,6 +124,9 @@ pub(crate) trait ScheduleRepository: Clone + Send + Sync + 'static {
         transition: TaskTransition,
         changed_at: i64,
     ) -> Result<Task, ScheduleError>;
+
+    /// Lists immutable typed changes for one task, newest first.
+    fn list_task_changes(&self, task_id: &str) -> Result<Vec<TaskChange>, ScheduleError>;
 }
 
 /// Schedule use cases with a statically dispatched repository adapter.
@@ -207,6 +225,20 @@ impl<R: ScheduleRepository> ScheduleUseCases<R> {
             .update_task_details(task_id, details, current_utc_millis()?)
     }
 
+    /// Reschedules one unfinished task without accepting any other field changes.
+    pub(crate) fn reschedule_task(
+        &self,
+        task_id: &str,
+        input: &RescheduleTaskInput,
+    ) -> Result<Task, ScheduleError> {
+        if uuid::Uuid::parse_str(task_id).is_err() {
+            return Err(ScheduleValidationError::Identifier.into());
+        }
+        let request = RescheduleDraft::new(LocalDate::parse(&input.planned_date)?, &input.reason)?;
+        self.repository
+            .reschedule_task(task_id, &request, current_utc_millis()?)
+    }
+
     /// Applies one supported task transition using the current system timestamp.
     pub(crate) fn transition_task(
         &self,
@@ -219,6 +251,17 @@ impl<R: ScheduleRepository> ScheduleUseCases<R> {
         self.repository
             .transition_task(task_id, transition, current_utc_millis()?)
     }
+
+    /// Lists readable immutable history for one validated task identifier.
+    pub(crate) fn list_task_changes(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<TaskChange>, ScheduleError> {
+        if uuid::Uuid::parse_str(task_id).is_err() {
+            return Err(ScheduleValidationError::Identifier.into());
+        }
+        self.repository.list_task_changes(task_id)
+    }
 }
 
 #[cfg(test)]
@@ -226,11 +269,12 @@ mod tests {
     use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
     use super::{
-        CreateSubjectInput, CreateTaskInput, ScheduleError, ScheduleRepository, ScheduleUseCases,
-        UpdateTaskDetailsInput,
+        CreateSubjectInput, CreateTaskInput, RescheduleTaskInput, ScheduleError,
+        ScheduleRepository, ScheduleUseCases, UpdateTaskDetailsInput,
     };
     use crate::domain::{
-        DateRange, NewSubject, NewTask, Subject, Task, TaskDetailsDraft, TaskStatus, TaskTransition,
+        DateRange, NewSubject, NewTask, RescheduleDraft, Subject, Task, TaskChange,
+        TaskDetailsDraft, TaskStatus, TaskTransition,
     };
 
     #[derive(Debug, Clone, Default)]
@@ -326,6 +370,21 @@ mod tests {
             Ok(task.clone())
         }
 
+        fn reschedule_task(
+            &self,
+            task_id: &str,
+            request: &RescheduleDraft,
+            changed_at: i64,
+        ) -> Result<Task, ScheduleError> {
+            let mut tasks = self.tasks();
+            let task = tasks
+                .iter_mut()
+                .find(|task| task.id == task_id)
+                .ok_or(ScheduleError::TaskNotFound)?;
+            task.reschedule(request, changed_at)?;
+            Ok(task.clone())
+        }
+
         fn transition_task(
             &self,
             task_id: &str,
@@ -339,6 +398,10 @@ mod tests {
                 .ok_or(ScheduleError::TaskNotFound)?;
             task.transition(transition, changed_at)?;
             Ok(task.clone())
+        }
+
+        fn list_task_changes(&self, _task_id: &str) -> Result<Vec<TaskChange>, ScheduleError> {
+            Ok(Vec::new())
         }
     }
 
@@ -432,6 +495,34 @@ mod tests {
                     priority: "normal".to_owned(),
                 },
             )
+            .expect_err("malformed task id must be rejected");
+
+        assert_eq!(error.code(), "SCHEDULE_INPUT_INVALID");
+    }
+
+    #[test]
+    fn reschedule_task_rejects_an_empty_reason_before_persistence() {
+        let use_cases = ScheduleUseCases::new(MemoryScheduleRepository::default());
+
+        let error = use_cases
+            .reschedule_task(
+                "019f7328-4b66-7613-9729-e3570fc41525",
+                &RescheduleTaskInput {
+                    planned_date: "2026-07-20".to_owned(),
+                    reason: "  ".to_owned(),
+                },
+            )
+            .expect_err("empty reason must be rejected");
+
+        assert_eq!(error.code(), "SCHEDULE_INPUT_INVALID");
+    }
+
+    #[test]
+    fn list_task_changes_rejects_an_invalid_identifier() {
+        let use_cases = ScheduleUseCases::new(MemoryScheduleRepository::default());
+
+        let error = use_cases
+            .list_task_changes("not-a-task-id")
             .expect_err("malformed task id must be rejected");
 
         assert_eq!(error.code(), "SCHEDULE_INPUT_INVALID");

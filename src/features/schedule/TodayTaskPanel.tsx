@@ -8,9 +8,11 @@ import {
   listTasksForRange,
   localDateForTimezone,
   normalizeScheduleCommandError,
+  rescheduleTask,
   transitionTask,
   updateTaskDetails,
   type CreateSubjectInput,
+  type RescheduleTaskInput,
   type ScheduleCommandError,
   type StudySubject,
   type StudyTask,
@@ -35,6 +37,7 @@ type InitialSchedule =
       date: string;
       tasks: StudyTask[];
       subjects: StudySubject[];
+      timezone: string;
     };
 
 const STATUS_ORDER = {
@@ -63,6 +66,16 @@ function upsertTask(tasks: StudyTask[], changed: StudyTask): StudyTask[] {
     ...tasks.filter((task) => task.id !== changed.id),
     changed,
   ]);
+}
+
+function reconcileTask(
+  tasks: StudyTask[],
+  changed: StudyTask,
+  selectedDate: string,
+): StudyTask[] {
+  return changed.plannedDate === selectedDate
+    ? upsertTask(tasks, changed)
+    : tasks.filter((task) => task.id !== changed.id);
 }
 
 function sortSubjects(subjects: StudySubject[]): StudySubject[] {
@@ -123,13 +136,14 @@ async function loadInitialSchedule(): Promise<InitialSchedule> {
     listTasksForRange(date, date),
     listSubjects(),
   ]);
-  return { kind: "ready", date, tasks, subjects };
+  return { kind: "ready", date, tasks, subjects, timezone: workspace.timezone };
 }
 
 export function TodayTaskPanel() {
   const [selectedDate, setSelectedDate] = useState("");
   const [state, setState] = useState<TaskListState>({ kind: "loading" });
   const [subjects, setSubjects] = useState<StudySubject[]>([]);
+  const [workspaceTimezone, setWorkspaceTimezone] = useState("Asia/Shanghai");
   const [selectedTaskId, setSelectedTaskId] = useState<string>();
   const [title, setTitle] = useState("");
   const [subjectId, setSubjectId] = useState("");
@@ -137,6 +151,7 @@ export function TodayTaskPanel() {
   const [priority, setPriority] = useState<TaskPriority>("normal");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState<ScheduleCommandError>();
+  const [actionNotice, setActionNotice] = useState<string>();
   const requestSequence = useRef(0);
   const selectedDateRef = useRef("");
 
@@ -179,6 +194,7 @@ export function TodayTaskPanel() {
       selectedDateRef.current = result.date;
       setSelectedDate(result.date);
       setSubjects(sortSubjects(result.subjects));
+      setWorkspaceTimezone(result.timezone);
       setState({ kind: "ready", tasks: result.tasks });
     } catch (error: unknown) {
       if (requestSequence.current === requestId) {
@@ -206,6 +222,7 @@ export function TodayTaskPanel() {
         selectedDateRef.current = result.date;
         setSelectedDate(result.date);
         setSubjects(sortSubjects(result.subjects));
+        setWorkspaceTimezone(result.timezone);
         setState({ kind: "ready", tasks: result.tasks });
       },
       (error: unknown) => {
@@ -230,6 +247,7 @@ export function TodayTaskPanel() {
     setSelectedDate(date);
     setSelectedTaskId(undefined);
     setActionError(undefined);
+    setActionNotice(undefined);
     void loadDate(date);
   };
 
@@ -255,6 +273,7 @@ export function TodayTaskPanel() {
     }
     setIsSubmitting(true);
     setActionError(undefined);
+    setActionNotice(undefined);
     try {
       const task = await createTask({
         ...(subjectId === "" ? {} : { subjectId }),
@@ -287,9 +306,15 @@ export function TodayTaskPanel() {
   ) => {
     const changed = await transitionTask(taskId, transition);
     setState((current) =>
-      current.kind === "ready" &&
-      changed.plannedDate === selectedDateRef.current
-        ? { kind: "ready", tasks: upsertTask(current.tasks, changed) }
+      current.kind === "ready"
+        ? {
+            kind: "ready",
+            tasks: reconcileTask(
+              current.tasks,
+              changed,
+              selectedDateRef.current,
+            ),
+          }
         : current,
     );
     return changed;
@@ -300,6 +325,7 @@ export function TodayTaskPanel() {
     transition: TaskTransition,
   ) => {
     setActionError(undefined);
+    setActionNotice(undefined);
     try {
       await performTransition(taskId, transition);
     } catch (error: unknown) {
@@ -324,11 +350,43 @@ export function TodayTaskPanel() {
     }
     const changed = await updateTaskDetails(selectedTaskId, request);
     setState((current) =>
-      current.kind === "ready" &&
-      changed.plannedDate === selectedDateRef.current
-        ? { kind: "ready", tasks: upsertTask(current.tasks, changed) }
+      current.kind === "ready"
+        ? {
+            kind: "ready",
+            tasks: reconcileTask(
+              current.tasks,
+              changed,
+              selectedDateRef.current,
+            ),
+          }
         : current,
     );
+    return changed;
+  };
+
+  const handleRescheduleSelectedTask = async (request: RescheduleTaskInput) => {
+    if (selectedTaskId === undefined) {
+      throw new Error("TASK_NOT_SELECTED");
+    }
+    const changed = await rescheduleTask(selectedTaskId, request);
+    setState((current) =>
+      current.kind === "ready"
+        ? {
+            kind: "ready",
+            tasks: reconcileTask(
+              current.tasks,
+              changed,
+              selectedDateRef.current,
+            ),
+          }
+        : current,
+    );
+    if (changed.plannedDate !== selectedDateRef.current) {
+      setSelectedTaskId(undefined);
+      setActionNotice(
+        `任务已调整到 ${changed.plannedDate}，原日期已保留在历史中。`,
+      );
+    }
     return changed;
   };
 
@@ -342,10 +400,21 @@ export function TodayTaskPanel() {
     state.kind === "ready"
       ? state.tasks.filter((task) => task.status === "done").length
       : 0;
+  const activeTaskCount =
+    state.kind === "ready"
+      ? state.tasks.filter((task) => task.status !== "canceled").length
+      : 0;
+  const canceledCount =
+    state.kind === "ready"
+      ? state.tasks.filter((task) => task.status === "canceled").length
+      : 0;
   const plannedMinutes =
     state.kind === "ready"
       ? state.tasks.reduce(
-          (total, task) => total + (task.estimatedMinutes ?? 0),
+          (total, task) =>
+            task.status === "canceled"
+              ? total
+              : total + (task.estimatedMinutes ?? 0),
           0,
         )
       : 0;
@@ -356,6 +425,7 @@ export function TodayTaskPanel() {
     state.kind === "ready" && selectedTaskId !== undefined
       ? state.tasks.find((task) => task.id === selectedTaskId)
       : undefined;
+  const subjectById = new Map(subjects.map((subject) => [subject.id, subject]));
 
   return (
     <section className="today-card" aria-labelledby="today-title">
@@ -419,12 +489,16 @@ export function TodayTaskPanel() {
                 <div>
                   <dt>完成</dt>
                   <dd>
-                    {completedCount} / {state.tasks.length}
+                    {completedCount} / {activeTaskCount}
                   </dd>
                 </div>
                 <div>
                   <dt>计划时长</dt>
                   <dd>{plannedMinutes} 分钟</dd>
+                </div>
+                <div>
+                  <dt>已取消</dt>
+                  <dd>{canceledCount} 项</dd>
                 </div>
               </dl>
 
@@ -502,6 +576,12 @@ export function TodayTaskPanel() {
                 </div>
               )}
 
+              {actionNotice === undefined ? null : (
+                <p className="success-detail" role="status">
+                  {actionNotice}
+                </p>
+              )}
+
               {state.tasks.length === 0 ? (
                 <p className="empty-state">
                   这一天还没有任务，可以先添加一件最重要的事。
@@ -509,9 +589,10 @@ export function TodayTaskPanel() {
               ) : (
                 <ul className="task-list">
                   {state.tasks.map((task) => {
-                    const subject = subjects.find(
-                      (candidate) => candidate.id === task.subjectId,
-                    );
+                    const subject =
+                      task.subjectId === undefined
+                        ? undefined
+                        : subjectById.get(task.subjectId);
                     return (
                       <li
                         key={task.id}
@@ -522,7 +603,11 @@ export function TodayTaskPanel() {
                           className="task-check"
                           disabled={task.status === "canceled"}
                           aria-label={
-                            task.status === "done" ? "重新打开任务" : "完成任务"
+                            task.status === "canceled"
+                              ? "已取消任务，请在详情中恢复"
+                              : task.status === "done"
+                                ? "重新打开任务"
+                                : "完成任务"
                           }
                           onClick={() =>
                             void handleListTransition(
@@ -531,7 +616,11 @@ export function TodayTaskPanel() {
                             )
                           }
                         >
-                          {task.status === "done" ? "✓" : "○"}
+                          {task.status === "canceled"
+                            ? "×"
+                            : task.status === "done"
+                              ? "✓"
+                              : "○"}
                         </button>
                         <div className="task-copy">
                           <strong>{task.title}</strong>
@@ -567,9 +656,11 @@ export function TodayTaskPanel() {
                 key={`${selectedTask.id}-${selectedTask.updatedAt}`}
                 task={selectedTask}
                 subjects={subjects}
+                timezone={workspaceTimezone}
                 onClose={() => setSelectedTaskId(undefined)}
                 onSave={handleUpdateSelectedTask}
                 onTransition={handleSelectedTaskTransition}
+                onReschedule={handleRescheduleSelectedTask}
               />
             )}
           </div>

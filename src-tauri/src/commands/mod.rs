@@ -7,11 +7,11 @@ use uuid::Uuid;
 
 use crate::application::{
     BackupError, BackupReport, CreateSubjectInput, CreateTaskInput, ImportError, ImportProgress,
-    ResourceDocument, RestoreReport, RuntimeStatus, ScheduleError, UpdateTaskDetailsInput,
-    get_runtime_status as load_runtime_status,
+    RescheduleTaskInput, ResourceDocument, RestoreReport, RuntimeStatus, ScheduleError,
+    UpdateTaskDetailsInput, get_runtime_status as load_runtime_status,
 };
 use crate::bootstrap::AppState;
-use crate::domain::{Subject, Task, TaskTransition, Workspace};
+use crate::domain::{Subject, Task, TaskChange, TaskChangeSnapshot, TaskTransition, Workspace};
 
 #[tauri::command]
 pub(crate) fn get_runtime_status() -> RuntimeStatus {
@@ -111,6 +111,62 @@ impl From<Task> for TaskDto {
     }
 }
 
+/// Explicit task fields for one history state without raw JSON.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TaskChangeSnapshotDto {
+    subject_id: Option<String>,
+    title: String,
+    description: Option<String>,
+    planned_date: String,
+    estimated_minutes: Option<u32>,
+    priority: &'static str,
+    status: &'static str,
+    manual_order: u32,
+    completed_at: Option<i64>,
+}
+
+impl From<TaskChangeSnapshot> for TaskChangeSnapshotDto {
+    fn from(snapshot: TaskChangeSnapshot) -> Self {
+        Self {
+            subject_id: snapshot.subject_id,
+            title: snapshot.title,
+            description: snapshot.description,
+            planned_date: snapshot.planned_date.as_str().to_owned(),
+            estimated_minutes: snapshot.estimated_minutes,
+            priority: snapshot.priority.as_str(),
+            status: snapshot.status.as_str(),
+            manual_order: snapshot.manual_order,
+            completed_at: snapshot.completed_at,
+        }
+    }
+}
+
+/// One readable immutable task change without persistence representations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TaskChangeDto {
+    id: String,
+    change_type: &'static str,
+    before: Option<TaskChangeSnapshotDto>,
+    after: Option<TaskChangeSnapshotDto>,
+    reason: Option<String>,
+    created_at: i64,
+}
+
+impl From<TaskChange> for TaskChangeDto {
+    fn from(change: TaskChange) -> Self {
+        Self {
+            id: change.id,
+            change_type: change.change_type.as_str(),
+            before: change.before.map(TaskChangeSnapshotDto::from),
+            after: change.after.map(TaskChangeSnapshotDto::from),
+            reason: change.reason,
+            created_at: change.created_at,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct CreateSubjectRequestDto {
@@ -173,6 +229,22 @@ impl From<UpdateTaskDetailsRequestDto> for UpdateTaskDetailsInput {
             description: request.description,
             estimated_minutes: request.estimated_minutes,
             priority: request.priority,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RescheduleTaskRequestDto {
+    planned_date: String,
+    reason: String,
+}
+
+impl From<RescheduleTaskRequestDto> for RescheduleTaskInput {
+    fn from(request: RescheduleTaskRequestDto) -> Self {
+        Self {
+            planned_date: request.planned_date,
+            reason: request.reason,
         }
     }
 }
@@ -554,6 +626,22 @@ pub(crate) async fn update_task_details(
 }
 
 #[tauri::command]
+pub(crate) async fn reschedule_task(
+    task_id: String,
+    request: RescheduleTaskRequestDto,
+    state: State<'_, AppState>,
+) -> Result<TaskDto, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.reschedule_task(&task_id, &request.into())
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(TaskDto::from)
+    .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn transition_task(
     task_id: String,
     transition: String,
@@ -569,6 +657,19 @@ pub(crate) async fn transition_task(
         .await
         .map_err(|_| AppErrorDto::task_failed())?
         .map(TaskDto::from)
+        .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_task_changes(
+    task_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TaskChangeDto>, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_task_changes(&task_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|changes| changes.into_iter().map(TaskChangeDto::from).collect())
         .map_err(|error| AppErrorDto::from_schedule(&error))
 }
 
@@ -755,11 +856,14 @@ fn emit_import_event(app: &AppHandle, event: ImportEventDto) {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppErrorDto, BackupReportDto, ResourceDocumentDto, SubjectDto, TaskDto,
-        UpdateTaskDetailsRequestDto, get_runtime_status,
+        AppErrorDto, BackupReportDto, RescheduleTaskRequestDto, ResourceDocumentDto, SubjectDto,
+        TaskChangeDto, TaskDto, UpdateTaskDetailsRequestDto, get_runtime_status,
     };
     use crate::application::{BackupReport, PersistenceError, ResourceDocument, ScheduleError};
-    use crate::domain::{LocalDate, Subject, SubjectColor, Task, TaskPriority, TaskStatus};
+    use crate::domain::{
+        LocalDate, Subject, SubjectColor, Task, TaskChange, TaskChangeSnapshot, TaskChangeType,
+        TaskPriority, TaskStatus,
+    };
 
     #[test]
     fn subject_dto_exposes_only_safe_management_fields() {
@@ -792,6 +896,19 @@ mod tests {
         });
 
         let result = serde_json::from_value::<UpdateTaskDetailsRequestDto>(value);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reschedule_request_rejects_unrelated_task_fields() {
+        let value = serde_json::json!({
+            "plannedDate": "2026-07-20",
+            "reason": "先完成前置章节",
+            "title": "不允许顺便修改标题"
+        });
+
+        let result = serde_json::from_value::<RescheduleTaskRequestDto>(value);
 
         assert!(result.is_err());
     }
@@ -854,6 +971,42 @@ mod tests {
 
         assert!(value.get("beforeJson").is_none());
         assert!(value.get("afterJson").is_none());
+        assert!(value.get("databasePath").is_none());
+    }
+
+    #[test]
+    fn task_change_dto_exposes_typed_snapshots_without_raw_json() {
+        let task = Task {
+            id: "019f7328-4b66-7613-9729-e3570fc41525".to_owned(),
+            subject_id: None,
+            parent_task_id: None,
+            title: "线性代数强化".to_owned(),
+            description: None,
+            planned_date: LocalDate::parse("2026-07-20").expect("fixture date should parse"),
+            estimated_minutes: Some(90),
+            priority: TaskPriority::High,
+            status: TaskStatus::Todo,
+            manual_order: 0,
+            completed_at: None,
+            created_at: 1_700_000_000_000,
+            updated_at: 1_700_000_000_100,
+        };
+        let dto = TaskChangeDto::from(TaskChange {
+            id: "019f7328-4b66-7613-9729-e3570fc41526".to_owned(),
+            task_id: task.id.clone(),
+            change_type: TaskChangeType::Rescheduled,
+            before: Some(TaskChangeSnapshot::from(&task)),
+            after: Some(TaskChangeSnapshot::from(&task)),
+            reason: Some("调整计划".to_owned()),
+            created_at: 1_700_000_000_100,
+        });
+
+        let value = serde_json::to_value(dto).expect("task change DTO should serialize");
+
+        assert!(value.get("before").is_some());
+        assert!(value.get("beforeJson").is_none());
+        assert!(value.get("afterJson").is_none());
+        assert!(value.get("taskId").is_none());
         assert!(value.get("databasePath").is_none());
     }
 

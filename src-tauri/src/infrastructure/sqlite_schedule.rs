@@ -1,13 +1,14 @@
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::application::{ScheduleError, ScheduleRepository};
 use crate::domain::{
-    DateRange, LocalDate, NewSubject, NewTask, Subject, SubjectColor, Task, TaskDetailsDraft,
-    TaskPriority, TaskStatus, TaskTransition,
+    DateRange, LocalDate, NewSubject, NewTask, RescheduleDraft, Subject, SubjectColor, Task,
+    TaskChange, TaskChangeSnapshot, TaskChangeType, TaskDetailsDraft, TaskPriority, TaskStatus,
+    TaskTransition,
 };
 
 use super::sqlite_workspace::{SqliteWorkspaceRepository, database_error, migrate, open_database};
@@ -176,7 +177,14 @@ impl ScheduleRepository for SqliteScheduleRepository {
                 ],
             )
             .map_err(schedule_database_error)?;
-        append_change(&transaction, &created, None, "created", created.created_at)?;
+        append_change(
+            &transaction,
+            &created,
+            None,
+            TaskChangeType::Created,
+            None,
+            created.created_at,
+        )?;
         transaction.commit().map_err(schedule_database_error)?;
         Ok(created)
     }
@@ -251,7 +259,53 @@ impl ScheduleRepository for SqliteScheduleRepository {
                     ],
                 )
                 .map_err(schedule_database_error)?;
-            append_change(&transaction, &task, Some(&before), "edited", changed_at)?;
+            append_change(
+                &transaction,
+                &task,
+                Some(&before),
+                TaskChangeType::Edited,
+                None,
+                changed_at,
+            )?;
+        }
+        transaction.commit().map_err(schedule_database_error)?;
+        Ok(task)
+    }
+
+    fn reschedule_task(
+        &self,
+        task_id: &str,
+        request: &RescheduleDraft,
+        changed_at: i64,
+    ) -> Result<Task, ScheduleError> {
+        let (mut connection, workspace_id) = self.open_current()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(schedule_database_error)?;
+        let mut task = load_task(&transaction, &workspace_id, task_id)?;
+        let before = task.clone();
+        if task.reschedule(request, changed_at)? {
+            transaction
+                .execute(
+                    "UPDATE task
+                     SET planned_date = ?1, updated_at = ?2
+                     WHERE id = ?3 AND workspace_id = ?4",
+                    params![
+                        task.planned_date.as_str(),
+                        task.updated_at,
+                        task.id,
+                        workspace_id
+                    ],
+                )
+                .map_err(schedule_database_error)?;
+            append_change(
+                &transaction,
+                &task,
+                Some(&before),
+                TaskChangeType::Rescheduled,
+                Some(&request.reason),
+                changed_at,
+            )?;
         }
         transaction.commit().map_err(schedule_database_error)?;
         Ok(task)
@@ -285,13 +339,43 @@ impl ScheduleRepository for SqliteScheduleRepository {
             )
             .map_err(schedule_database_error)?;
         let change_type = match transition {
-            TaskTransition::Start => "started",
-            TaskTransition::Complete => "completed",
-            TaskTransition::Reopen => "reopened",
+            TaskTransition::Start => TaskChangeType::Started,
+            TaskTransition::Complete => TaskChangeType::Completed,
+            TaskTransition::Reopen => TaskChangeType::Reopened,
+            TaskTransition::Cancel => TaskChangeType::Canceled,
+            TaskTransition::Restore => TaskChangeType::Restored,
         };
-        append_change(&transaction, &task, Some(&before), change_type, changed_at)?;
+        append_change(
+            &transaction,
+            &task,
+            Some(&before),
+            change_type,
+            None,
+            changed_at,
+        )?;
         transaction.commit().map_err(schedule_database_error)?;
         Ok(task)
+    }
+
+    fn list_task_changes(&self, task_id: &str) -> Result<Vec<TaskChange>, ScheduleError> {
+        let (connection, workspace_id) = self.open_current()?;
+        load_task(&connection, &workspace_id, task_id)?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, task_id, change_type, before_json, after_json, reason, created_at
+                 FROM task_change
+                 WHERE task_id = ?1
+                 ORDER BY created_at DESC, id DESC",
+            )
+            .map_err(schedule_database_error)?;
+        let rows = statement
+            .query_map([task_id], raw_task_change)
+            .map_err(schedule_database_error)?;
+        rows.map(|row| {
+            row.map_err(schedule_database_error)
+                .and_then(task_change_from_raw)
+        })
+        .collect()
     }
 }
 
@@ -473,6 +557,140 @@ fn validate_subject(
     }
 }
 
+#[derive(Debug)]
+struct RawTaskChange {
+    id: String,
+    task_id: String,
+    change_type: String,
+    before_json: Option<String>,
+    after_json: Option<String>,
+    reason: Option<String>,
+    created_at: i64,
+}
+
+fn raw_task_change(row: &Row<'_>) -> rusqlite::Result<RawTaskChange> {
+    Ok(RawTaskChange {
+        id: row.get(0)?,
+        task_id: row.get(1)?,
+        change_type: row.get(2)?,
+        before_json: row.get(3)?,
+        after_json: row.get(4)?,
+        reason: row.get(5)?,
+        created_at: row.get(6)?,
+    })
+}
+
+fn task_change_from_raw(raw: RawTaskChange) -> Result<TaskChange, ScheduleError> {
+    if Uuid::parse_str(&raw.id).is_err()
+        || Uuid::parse_str(&raw.task_id).is_err()
+        || raw.created_at < 0
+    {
+        return Err(ScheduleError::InvalidStoredData);
+    }
+    let change_type =
+        TaskChangeType::parse(&raw.change_type).ok_or(ScheduleError::InvalidStoredData)?;
+    let before = parse_stored_snapshot(raw.before_json.as_deref())?;
+    let after = parse_stored_snapshot(raw.after_json.as_deref())?;
+    if before.is_none() && after.is_none() {
+        return Err(ScheduleError::InvalidStoredData);
+    }
+    let reason = raw
+        .reason
+        .map(|value| {
+            let normalized = value.trim();
+            if normalized.is_empty() || normalized.chars().count() > 500 || normalized != value {
+                Err(ScheduleError::InvalidStoredData)
+            } else {
+                Ok(value)
+            }
+        })
+        .transpose()?;
+    if matches!(change_type, TaskChangeType::Rescheduled) && reason.is_none() {
+        return Err(ScheduleError::InvalidStoredData);
+    }
+    Ok(TaskChange {
+        id: raw.id,
+        task_id: raw.task_id,
+        change_type,
+        before,
+        after,
+        reason,
+        created_at: raw.created_at,
+    })
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StoredTaskSnapshot {
+    subject_id: Option<String>,
+    title: String,
+    description: Option<String>,
+    planned_date: String,
+    estimated_minutes: Option<u32>,
+    priority: String,
+    status: String,
+    manual_order: u32,
+    completed_at: Option<i64>,
+}
+
+fn parse_stored_snapshot(value: Option<&str>) -> Result<Option<TaskChangeSnapshot>, ScheduleError> {
+    value
+        .map(|json| {
+            let raw: StoredTaskSnapshot =
+                serde_json::from_str(json).map_err(|_| ScheduleError::InvalidStoredData)?;
+            task_change_snapshot_from_stored(raw)
+        })
+        .transpose()
+}
+
+fn task_change_snapshot_from_stored(
+    raw: StoredTaskSnapshot,
+) -> Result<TaskChangeSnapshot, ScheduleError> {
+    let StoredTaskSnapshot {
+        subject_id,
+        title,
+        description,
+        planned_date,
+        estimated_minutes,
+        priority,
+        status,
+        manual_order,
+        completed_at,
+    } = raw;
+    let details = TaskDetailsDraft::new(
+        subject_id.clone(),
+        &title,
+        description.as_deref(),
+        estimated_minutes,
+        TaskPriority::parse(&priority).ok_or(ScheduleError::InvalidStoredData)?,
+    )
+    .map_err(|_| ScheduleError::InvalidStoredData)?;
+    if details.subject_id != subject_id
+        || details.title != title
+        || details.description != description
+    {
+        return Err(ScheduleError::InvalidStoredData);
+    }
+    let status = TaskStatus::parse(&status).ok_or(ScheduleError::InvalidStoredData)?;
+    if matches!(status, TaskStatus::Done) != completed_at.is_some()
+        || completed_at.is_some_and(|timestamp| timestamp < 0)
+    {
+        return Err(ScheduleError::InvalidStoredData);
+    }
+    Ok(TaskChangeSnapshot {
+        subject_id: details.subject_id,
+        title: details.title,
+        description: details.description,
+        planned_date: LocalDate::parse(&planned_date)
+            .map_err(|_| ScheduleError::InvalidStoredData)?,
+        estimated_minutes: details.estimated_minutes,
+        priority: details.priority,
+        status,
+        manual_order,
+        completed_at,
+    })
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct TaskSnapshot<'a> {
@@ -507,7 +725,8 @@ fn append_change(
     connection: &Connection,
     after: &Task,
     before: Option<&Task>,
-    change_type: &str,
+    change_type: TaskChangeType,
+    reason: Option<&str>,
     created_at: i64,
 ) -> Result<(), ScheduleError> {
     let before_json = before
@@ -521,13 +740,14 @@ fn append_change(
         .execute(
             "INSERT INTO task_change(
                 id, task_id, change_type, before_json, after_json, reason, created_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6)",
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 Uuid::now_v7().to_string(),
                 after.id,
-                change_type,
+                change_type.as_str(),
                 before_json,
                 after_json,
+                reason,
                 created_at
             ],
         )
@@ -547,8 +767,8 @@ mod tests {
     use super::SqliteScheduleRepository;
     use crate::application::{ScheduleError, ScheduleRepository, WorkspaceRepository};
     use crate::domain::{
-        DateRange, LocalDate, NewSubject, NewTask, NewWorkspace, SubjectColor, TaskDetailsDraft,
-        TaskDraft, TaskPriority, TaskStatus, TaskTransition,
+        DateRange, LocalDate, NewSubject, NewTask, NewWorkspace, RescheduleDraft, SubjectColor,
+        TaskChangeType, TaskDetailsDraft, TaskDraft, TaskPriority, TaskStatus, TaskTransition,
     };
     use crate::infrastructure::SqliteWorkspaceRepository;
 
@@ -851,5 +1071,152 @@ mod tests {
         assert!(subjects[0].archived_at.is_some());
         assert!(matches!(rejected, Err(ScheduleError::SubjectNotFound)));
         assert_eq!(preserved.subject_id, Some(created_subject.id));
+    }
+
+    #[test]
+    fn reschedule_task_updates_date_reason_and_typed_history_atomically() {
+        let fixture = initialized_fixture();
+        let created = fixture
+            .schedule
+            .create_task(&new_task(
+                "延期测试",
+                TaskPriority::Normal,
+                1_700_000_000_001,
+            ))
+            .expect("task should persist");
+        let request = RescheduleDraft::new(
+            LocalDate::parse("2026-07-20").expect("fixture date should parse"),
+            "先完成前置章节",
+        )
+        .expect("reschedule should be valid");
+
+        let updated = fixture
+            .schedule
+            .reschedule_task(&created.id, &request, 1_700_000_000_002)
+            .expect("task should reschedule");
+        let changes = fixture
+            .schedule
+            .list_task_changes(&created.id)
+            .expect("history should list");
+        let rescheduled = &changes[0];
+
+        assert_eq!(updated.planned_date.as_str(), "2026-07-20");
+        assert_eq!(rescheduled.change_type, TaskChangeType::Rescheduled);
+        assert_eq!(rescheduled.reason.as_deref(), Some("先完成前置章节"));
+        assert_eq!(
+            rescheduled
+                .before
+                .as_ref()
+                .expect("before snapshot should exist")
+                .planned_date
+                .as_str(),
+            "2026-07-18"
+        );
+        assert_eq!(
+            rescheduled
+                .after
+                .as_ref()
+                .expect("after snapshot should exist")
+                .planned_date
+                .as_str(),
+            "2026-07-20"
+        );
+    }
+
+    #[test]
+    fn reschedule_task_same_date_does_not_append_history() {
+        let fixture = initialized_fixture();
+        let created = fixture
+            .schedule
+            .create_task(&new_task(
+                "不变日期",
+                TaskPriority::Normal,
+                1_700_000_000_001,
+            ))
+            .expect("task should persist");
+        let request = RescheduleDraft::new(
+            LocalDate::parse("2026-07-18").expect("fixture date should parse"),
+            "日期未变化",
+        )
+        .expect("reschedule should be valid");
+
+        fixture
+            .schedule
+            .reschedule_task(&created.id, &request, 1_700_000_000_002)
+            .expect("same date should be a safe no-op");
+        let changes = fixture
+            .schedule
+            .list_task_changes(&created.id)
+            .expect("history should list");
+
+        assert_eq!(changes.len(), 1);
+    }
+
+    #[test]
+    fn reschedule_task_rejects_completed_task_without_history() {
+        let fixture = initialized_fixture();
+        let created = fixture
+            .schedule
+            .create_task(&new_task(
+                "已完成任务",
+                TaskPriority::Normal,
+                1_700_000_000_001,
+            ))
+            .expect("task should persist");
+        fixture
+            .schedule
+            .transition_task(&created.id, TaskTransition::Complete, 1_700_000_000_002)
+            .expect("task should complete");
+        let request = RescheduleDraft::new(
+            LocalDate::parse("2026-07-20").expect("fixture date should parse"),
+            "不应成功",
+        )
+        .expect("reschedule should be valid");
+
+        let error = fixture
+            .schedule
+            .reschedule_task(&created.id, &request, 1_700_000_000_003)
+            .expect_err("completed task must reopen first");
+        let changes = fixture
+            .schedule
+            .list_task_changes(&created.id)
+            .expect("history should list");
+
+        assert!(matches!(
+            error,
+            ScheduleError::Validation(crate::domain::ScheduleValidationError::Transition)
+        ));
+        assert_eq!(changes.len(), 2);
+    }
+
+    #[test]
+    fn cancel_and_restore_append_history_in_newest_first_order() {
+        let fixture = initialized_fixture();
+        let created = fixture
+            .schedule
+            .create_task(&new_task(
+                "取消恢复测试",
+                TaskPriority::Normal,
+                1_700_000_000_001,
+            ))
+            .expect("task should persist");
+        fixture
+            .schedule
+            .transition_task(&created.id, TaskTransition::Cancel, 1_700_000_000_002)
+            .expect("task should cancel");
+        let restored = fixture
+            .schedule
+            .transition_task(&created.id, TaskTransition::Restore, 1_700_000_000_003)
+            .expect("task should restore");
+
+        let changes = fixture
+            .schedule
+            .list_task_changes(&created.id)
+            .expect("history should list");
+
+        assert_eq!(restored.status, TaskStatus::Todo);
+        assert_eq!(changes[0].change_type, TaskChangeType::Restored);
+        assert_eq!(changes[1].change_type, TaskChangeType::Canceled);
+        assert_eq!(changes[2].change_type, TaskChangeType::Created);
     }
 }

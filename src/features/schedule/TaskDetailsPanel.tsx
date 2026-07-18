@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import {
   normalizeScheduleCommandError,
+  type RescheduleTaskInput,
   type ScheduleCommandError,
   type StudySubject,
   type StudyTask,
@@ -9,6 +10,8 @@ import {
   type TaskTransition,
   type UpdateTaskDetailsInput,
 } from "../../shared/tauri/scheduleClient";
+import { TaskHistoryPanel } from "./TaskHistoryPanel";
+import { TaskReschedulePanel } from "./TaskReschedulePanel";
 
 const STATUS_LABELS = {
   todo: "待开始",
@@ -20,17 +23,21 @@ const STATUS_LABELS = {
 interface TaskDetailsPanelProps {
   task: StudyTask;
   subjects: StudySubject[];
+  timezone: string;
   onClose: () => void;
   onSave: (request: UpdateTaskDetailsInput) => Promise<StudyTask>;
   onTransition: (transition: TaskTransition) => Promise<void>;
+  onReschedule: (request: RescheduleTaskInput) => Promise<StudyTask>;
 }
 
 export function TaskDetailsPanel({
   task,
   subjects,
+  timezone,
   onClose,
   onSave,
   onTransition,
+  onReschedule,
 }: TaskDetailsPanelProps) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
@@ -41,6 +48,8 @@ export function TaskDetailsPanel({
   const [priority, setPriority] = useState<TaskPriority>(task.priority);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingTransition, setPendingTransition] = useState<TaskTransition>();
+  const [hasPendingReschedule, setHasPendingReschedule] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [error, setError] = useState<ScheduleCommandError>();
   const hasUnsavedChanges =
@@ -49,6 +58,7 @@ export function TaskDetailsPanel({
     subjectId !== (task.subjectId ?? "") ||
     estimatedMinutes !== (task.estimatedMinutes?.toString() ?? "") ||
     priority !== task.priority;
+  const hasUnsavedWork = hasUnsavedChanges || hasPendingReschedule;
   const selectableSubjects = subjects.filter(
     (subject) =>
       subject.archivedAt === undefined || subject.id === task.subjectId,
@@ -103,11 +113,11 @@ export function TaskDetailsPanel({
   };
 
   const handleTransition = async (transition: TaskTransition) => {
-    if (hasUnsavedChanges) {
+    if (hasUnsavedWork) {
       setError({
         code: "UNSAVED_TASK_DETAILS",
-        message: "任务详情还有未保存的修改。",
-        action: "先保存修改，再执行状态操作。",
+        message: "任务详情或延期区域还有未保存的修改。",
+        action: "先保存或清除修改，再执行状态操作。",
       });
       return;
     }
@@ -115,6 +125,7 @@ export function TaskDetailsPanel({
     setError(undefined);
     try {
       await onTransition(transition);
+      setConfirmCancel(false);
       setPendingTransition(undefined);
     } catch (reason: unknown) {
       setError(normalizeScheduleCommandError(reason));
@@ -123,7 +134,7 @@ export function TaskDetailsPanel({
   };
 
   const requestClose = () => {
-    if (hasUnsavedChanges) {
+    if (hasUnsavedWork) {
       setConfirmClose(true);
       return;
     }
@@ -148,7 +159,7 @@ export function TaskDetailsPanel({
 
       {confirmClose ? (
         <div className="discard-warning" role="alert">
-          <p>尚有未保存修改，关闭后会丢失。</p>
+          <p>详情或延期区域尚有未保存修改，关闭后会丢失。</p>
           <div>
             <button type="button" className="danger-button" onClick={onClose}>
               放弃修改并关闭
@@ -301,7 +312,62 @@ export function TaskDetailsPanel({
             {pendingTransition === "reopen" ? "正在重新打开…" : "重新打开"}
           </button>
         ) : null}
+        {task.status === "canceled" ? (
+          <button
+            type="button"
+            disabled={pendingTransition !== undefined}
+            onClick={() => void handleTransition("restore")}
+          >
+            {pendingTransition === "restore" ? "正在恢复…" : "恢复任务"}
+          </button>
+        ) : null}
+        {task.status === "todo" || task.status === "in_progress" ? (
+          confirmCancel ? (
+            <div className="cancel-confirmation" role="alert">
+              <span>取消后仍可恢复，是否继续？</span>
+              <button
+                type="button"
+                className="danger-button"
+                disabled={pendingTransition !== undefined}
+                onClick={() => void handleTransition("cancel")}
+              >
+                {pendingTransition === "cancel" ? "正在取消…" : "确认取消"}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={pendingTransition !== undefined}
+                onClick={() => setConfirmCancel(false)}
+              >
+                返回
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="danger-button"
+              disabled={pendingTransition !== undefined}
+              onClick={() => setConfirmCancel(true)}
+            >
+              取消任务
+            </button>
+          )
+        ) : null}
       </div>
+
+      <TaskReschedulePanel
+        task={task}
+        hasUnsavedDetails={hasUnsavedChanges}
+        isTransitioning={pendingTransition !== undefined}
+        onDirtyChange={setHasPendingReschedule}
+        onReschedule={onReschedule}
+      />
+
+      <TaskHistoryPanel
+        taskId={task.id}
+        subjects={subjects}
+        timezone={timezone}
+      />
     </aside>
   );
 }
