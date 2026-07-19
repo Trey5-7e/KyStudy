@@ -5,12 +5,12 @@
 | 文档版本   | 0.1                                    |
 | 对应 PRD   | 0.1                                    |
 | 更新日期   | 2026-07-19                             |
-| 状态       | 概念模型；M1-M4 子集已落地至 schema v6 |
+| 状态       | 概念模型；M1-M5 子集已落地至 schema v7 |
 | 数据库方向 | SQLite，本地单工作区优先               |
 
 ## 1. 设计目标
 
-> 实现说明：schema v6 已在 v5 资料规划表之上落地 `knowledge_map`、`knowledge_node`、`knowledge_node_resource`、`knowledge_map_revision` 与 `map_import_draft`。完整 AI 规划版本、解析索引、通用画布布局、知识图谱、题目和错题模型仍按本文概念边界后续实现。
+> 实现说明：schema v7 已在 v6 知识结构表之上落地 `question`、`question_region`、`question_knowledge_node` 与 `question_attempt`。完整 AI 规划版本、解析索引、OCR、错题复习和派生题目模型仍按本文概念边界后续实现。
 
 数据模型需要同时支持日程、资料、思维导图、PDF 题目、错题复习和 AI 用量，又不能把这些功能堆进一个难以演进的通用表。
 
@@ -429,6 +429,8 @@ AI 草案任务在确认前不进入 `task`，保留在规划版本的候选任�
 
 ### 10.1 `workbook`
 
+schema v7 不单独创建 `workbook` 表：首版直接把 `resource_document.role = 'workbook'` 的 PDF 视为习题册，并复用 `resource_reading_state` 保存阅读进度。下表保留为后续目录分析扩展模型。
+
 | 字段              | 说明                  |
 | ----------------- | --------------------- |
 | `id`              | 习题册 ID             |
@@ -439,52 +441,55 @@ AI 草案任务在确认前不进入 `task`，保留在规划版本的候选任�
 
 ### 10.2 `question`
 
-| 字段              | 说明                             |
-| ----------------- | -------------------------------- |
-| `id`              | 题目 ID                          |
-| `workspace_id`    | 工作区                           |
-| `workbook_id`     | 来源习题册，可为空以支持图片错题 |
-| `title`           | 可选题号或用户标题               |
-| `recognized_text` | 可编辑识别文本，可为空           |
-| `question_type`   | 可选题型                         |
-| `difficulty`      | 用户或 AI 建议难度               |
-| `importance`      | 用户重要度                       |
-| `status`          | `active`、`archived`             |
-| `deleted_at`      | 回收站状态                       |
+| 字段                        | 说明           |
+| --------------------------- | -------------- |
+| `id`                        | 题目 ID        |
+| `workspace_id`              | 工作区         |
+| `document_id`               | 来源习题册 PDF |
+| `title`                     | 用户标题       |
+| `chapter`                   | 可选章节       |
+| `question_number`           | 可选题号       |
+| `difficulty`                | 1～5 用户难度  |
+| `analysis_markdown`         | 可选个人解析   |
+| `deleted_at`                | 回收站状态     |
+| `created_at` / `updated_at` | 创建和更新时间 |
 
 ### 10.3 `question_region`
 
 一道题可以由多个页面区域组成，例如题干跨页或答案位于另一页。
 
-| 字段                           | 说明                                        |
-| ------------------------------ | ------------------------------------------- |
-| `id`                           | 区域 ID                                     |
-| `question_id`                  | 题目                                        |
-| `page_id`                      | PDF 页面                                    |
-| `region_role`                  | `prompt`、`option`、`answer`、`explanation` |
-| `x` / `y` / `width` / `height` | 0 到 1 的归一化坐标                         |
-| `rotation`                     | 创建区域时的页面旋转                        |
-| `sort_order`                   | 多区域显示顺序                              |
+| 字段                           | 说明                |
+| ------------------------------ | ------------------- |
+| `id`                           | 区域 ID             |
+| `question_id`                  | 题目                |
+| `document_id`                  | PDF 资料            |
+| `page_number`                  | PDF 页码            |
+| `x` / `y` / `width` / `height` | 0 到 1 的归一化坐标 |
+| `coordinate_version`           | 当前固定为 `1`      |
+| `sort_order`                   | 多区域显示顺序      |
+| `created_at`                   | 创建时间            |
 
-数据库保存归一化坐标，避免缩放、DPI 和窗口大小改变后区域漂移。技术验证需要确认旋转页面的坐标往返规则。
+数据库保存基于 PDF 点的归一化坐标，缩放、旋转、DPR 和窗口大小不进入正式数据。M5 已用纯函数测试覆盖旋转 viewport 的坐标往返。
 
-### 10.4 `attempt`
+### 10.4 `question_attempt`
 
-作答记录原则上不可变。纠错使用 `voided_at` 和新的记录，而不是覆盖历史。
+schema v7 的作答记录采用追加写入，不提供编辑或删除入口。需要纠错时先追加新的真实记录；正式 `voided_at` 机制留到 M6 与复习历史一起设计。
 
-| 字段               | 说明                                         |
-| ------------------ | -------------------------------------------- |
-| `id`               | 作答 ID                                      |
-| `question_id`      | 题目                                         |
-| `attempted_at`     | 作答时间                                     |
-| `result`           | `correct`、`incorrect`、`partial`、`unknown` |
-| `duration_seconds` | 可选耗时                                     |
-| `answer_text`      | 用户答案或摘要                               |
-| `note_markdown`    | 本次笔记                                     |
-| `error_reason`     | 错误原因枚举，可为空                         |
-| `confidence`       | 用户主观把握，可选                           |
-| `source`           | `practice`、`review`、`manual_import`        |
-| `voided_at`        | 作废时间                                     |
+| 字段               | 说明                                |
+| ------------------ | ----------------------------------- |
+| `id`               | 作答 ID                             |
+| `question_id`      | 题目                                |
+| `attempted_at`     | 作答时间                            |
+| `result`           | `correct`、`incorrect`、`uncertain` |
+| `duration_seconds` | 可选耗时                            |
+| `answer_note`      | 本次答案或复盘                      |
+| `created_at`       | 创建时间                            |
+
+schema v7 的作答记录不可编辑或删除。错误原因、信心、来源和作废机制将在 M6 复习模型中一并设计，避免过早固化枚举。
+
+### 10.5 `question_knowledge_node`
+
+schema v7 使用 `(question_id, node_id)` 复合主键保存题目到知识节点的显式关联。知识节点删除时只移除关联，不删除题目和既有作答。
 
 ## 11. 错题与复习
 

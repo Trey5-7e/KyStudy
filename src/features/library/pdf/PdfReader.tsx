@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import type { PDFPageProxy } from "pdfjs-dist";
 
 import {
@@ -8,17 +8,48 @@ import {
 import { openPdf, type PdfSession } from "./pdfEngine";
 import { HttpRangeSource } from "./rangeSource";
 import { RenderCoordinator } from "./renderCoordinator";
+import {
+  normalizePdfSelection,
+  projectNormalizedRegion,
+  type PdfPageView,
+} from "./pdfRegions";
+
+export interface PdfRegionOverlay {
+  id: string;
+  pageNumber: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 interface PdfReaderProps {
   descriptor: ResourceReaderDescriptor;
   requestedPage?: number;
   onProgress(pageCount: number, lastPage: number): void;
+  regions?: PdfRegionOverlay[];
+  captureMode?: boolean;
+  onRegionCapture?(region: Omit<PdfRegionOverlay, "id">): void;
+}
+
+interface RenderedPage {
+  pageNumber: number;
+  pageView: PdfPageView;
+  viewport: ReturnType<PDFPageProxy["getViewport"]>;
+}
+
+interface PointerSelection {
+  start: readonly [number, number];
+  current: readonly [number, number];
 }
 
 export function PdfReader({
   descriptor,
   requestedPage,
   onProgress,
+  regions = [],
+  captureMode = false,
+  onRegionCapture,
 }: PdfReaderProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const coordinatorRef = useRef(new RenderCoordinator());
@@ -30,6 +61,8 @@ export function PdfReader({
   const [scale, setScale] = useState(1.1);
   const [rotation, setRotation] = useState(0);
   const [status, setStatus] = useState("正在按范围加载 PDF…");
+  const [renderedPage, setRenderedPage] = useState<RenderedPage>();
+  const [selection, setSelection] = useState<PointerSelection>();
 
   useEffect(() => {
     let disposed = false;
@@ -93,6 +126,14 @@ export function PdfReader({
       (loaded) => {
         page = loaded;
       },
+      (loadedPage, viewport) => {
+        setRenderedPage({
+          pageNumber,
+          pageView: toPdfPageView(loadedPage.view),
+          viewport,
+        });
+        setSelection(undefined);
+      },
     ).then(
       (rendered) => {
         if (!disposed && rendered) {
@@ -122,6 +163,53 @@ export function PdfReader({
     }
     setPageNumber(parsed);
   };
+
+  const pointerPosition = (
+    event: PointerEvent<HTMLDivElement>,
+  ): readonly [number, number] => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return [event.clientX - bounds.left, event.clientY - bounds.top];
+  };
+
+  const finishSelection = (event: PointerEvent<HTMLDivElement>) => {
+    if (
+      selection === undefined ||
+      renderedPage === undefined ||
+      onRegionCapture === undefined
+    ) {
+      setSelection(undefined);
+      return;
+    }
+    const current = pointerPosition(event);
+    const pixelWidth = Math.abs(current[0] - selection.start[0]);
+    const pixelHeight = Math.abs(current[1] - selection.start[1]);
+    if (pixelWidth < 6 || pixelHeight < 6) {
+      setStatus("框选范围太小，请拖出完整题目区域");
+      setSelection(undefined);
+      return;
+    }
+    const region = normalizePdfSelection(
+      renderedPage.pageNumber,
+      renderedPage.pageView,
+      renderedPage.viewport,
+      selection.start,
+      current,
+    );
+    onRegionCapture(region);
+    setSelection(undefined);
+    setStatus(`已框选第 ${renderedPage.pageNumber} 页区域，等待保存`);
+  };
+
+  const visibleRegions =
+    renderedPage === undefined
+      ? []
+      : regions.filter(
+          (region) => region.pageNumber === renderedPage.pageNumber,
+        );
+  const selectionStyle =
+    selection === undefined
+      ? undefined
+      : rectangleFromPoints(selection.start, selection.current);
 
   return (
     <div className="pdf-reader">
@@ -185,7 +273,54 @@ export function PdfReader({
         <span role="status">{status}</span>
       </div>
       <div className="pdf-canvas-shell">
-        <canvas ref={canvasRef} aria-label={`PDF 第 ${pageNumber} 页`} />
+        <div className="pdf-page-stage">
+          <canvas ref={canvasRef} aria-label={`PDF 第 ${pageNumber} 页`} />
+          <div
+            className={`pdf-region-layer${captureMode ? " pdf-region-capture" : ""}`}
+            aria-label={captureMode ? "拖动框选题目区域" : "已保存题目区域"}
+            onPointerDown={(event) => {
+              if (!captureMode || renderedPage === undefined) {
+                return;
+              }
+              event.currentTarget.setPointerCapture(event.pointerId);
+              const point = pointerPosition(event);
+              setSelection({ start: point, current: point });
+            }}
+            onPointerMove={(event) => {
+              if (selection !== undefined && captureMode) {
+                const point = pointerPosition(event);
+                setSelection((current) =>
+                  current === undefined
+                    ? undefined
+                    : { ...current, current: point },
+                );
+              }
+            }}
+            onPointerUp={finishSelection}
+            onPointerCancel={() => setSelection(undefined)}
+          >
+            {renderedPage === undefined
+              ? null
+              : visibleRegions.map((region) => {
+                  const rectangle = projectNormalizedRegion(
+                    renderedPage.pageView,
+                    renderedPage.viewport,
+                    region,
+                  );
+                  return (
+                    <span
+                      key={region.id}
+                      className="pdf-saved-region"
+                      title="已保存题目区域"
+                      style={rectangle}
+                    />
+                  );
+                })}
+            {selectionStyle === undefined ? null : (
+              <span className="pdf-pending-region" style={selectionStyle} />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -199,6 +334,10 @@ async function renderPage(
   canvas: HTMLCanvasElement,
   coordinator: RenderCoordinator,
   onPage: (page: PDFPageProxy) => void,
+  onViewport: (
+    page: PDFPageProxy,
+    viewport: ReturnType<PDFPageProxy["getViewport"]>,
+  ) => void,
 ): Promise<boolean> {
   const page = await session.document.getPage(pageNumber);
   onPage(page);
@@ -207,6 +346,7 @@ async function renderPage(
     rotation: page.rotate + rotation,
   });
   const outputScale = window.devicePixelRatio || 1;
+  onViewport(page, viewport);
   canvas.width = Math.floor(viewport.width * outputScale);
   canvas.height = Math.floor(viewport.height * outputScale);
   canvas.style.width = `${Math.floor(viewport.width)}px`;
@@ -219,4 +359,23 @@ async function renderPage(
         outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
     }),
   );
+}
+
+function rectangleFromPoints(
+  start: readonly [number, number],
+  end: readonly [number, number],
+) {
+  return {
+    left: Math.min(start[0], end[0]),
+    top: Math.min(start[1], end[1]),
+    width: Math.abs(end[0] - start[0]),
+    height: Math.abs(end[1] - start[1]),
+  };
+}
+
+function toPdfPageView(view: number[]): PdfPageView {
+  if (view.length < 4) {
+    throw new Error("PDF_PAGE_VIEW_INVALID");
+  }
+  return [view[0] ?? 0, view[1] ?? 0, view[2] ?? 0, view[3] ?? 0];
 }

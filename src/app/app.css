@@ -92,6 +92,7 @@ h2 {
 .planning-card,
 .personal-plan-card,
 .mindmap-card,
+.workbook-card,
 .library-card,
 .backup-card,
 .boundary-card {
@@ -133,6 +134,10 @@ h2 {
 }
 
 .mindmap-card {
+  margin-top: 1rem;
+}
+
+.workbook-card {
   margin-top: 1rem;
 }
 
@@ -1999,6 +2004,276 @@ button:disabled {
   margin: 0.3rem 0 0 0.7rem;
 }
 
+.pdf-page-stage {
+  position: relative;
+  width: max-content;
+  height: max-content;
+  line-height: 0;
+}
+
+.pdf-region-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  touch-action: none;
+}
+
+.pdf-region-capture {
+  cursor: crosshair;
+  pointer-events: auto;
+}
+
+.pdf-saved-region,
+.pdf-pending-region {
+  position: absolute;
+  border: 2px solid #d08a35;
+  background: rgb(208 138 53 / 16%);
+  pointer-events: none;
+}
+
+.pdf-pending-region {
+  border-color: #1e5b42;
+  background: rgb(30 91 66 / 18%);
+}
+
+.workbook-heading,
+.workbook-toolbar,
+.question-form-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.workbook-heading {
+  flex-wrap: wrap;
+}
+
+.workbook-heading > div {
+  max-width: 48rem;
+}
+
+.workbook-heading p:not(.section-label) {
+  margin-bottom: 0;
+  color: #52625a;
+  line-height: 1.65;
+}
+
+.workbook-card > .error-detail {
+  margin-top: 1rem;
+}
+
+.workbook-toolbar {
+  align-items: end;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-top: 1rem;
+  border-radius: 1rem;
+  padding: 0.9rem;
+  background: #f5efe4;
+}
+
+.workbook-toolbar label,
+.question-fields label,
+.question-attempts form label {
+  display: grid;
+  gap: 0.4rem;
+  color: #52625a;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.workbook-toolbar span {
+  align-self: center;
+  color: #245a43;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.workbook-reader {
+  margin-top: 1rem;
+  border: 1px solid rgb(30 91 66 / 16%);
+  border-radius: 1rem;
+  overflow: hidden;
+  background: #edf3ed;
+}
+
+.workbook-reader > h3 {
+  margin: 0;
+  padding: 1rem;
+}
+
+.question-create-form,
+.question-editor {
+  border-radius: 1rem;
+  padding: 1rem;
+  background: #f5efe4;
+}
+
+.question-create-form {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1rem;
+  border: 2px solid #d08a35;
+}
+
+.question-create-form h3,
+.question-editor h3,
+.question-editor h4 {
+  margin: 0;
+}
+
+.question-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.question-wide-field {
+  grid-column: 1 / -1;
+}
+
+.question-fields textarea,
+.question-attempts textarea {
+  resize: vertical;
+}
+
+.question-form-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.workbook-question-layout {
+  display: grid;
+  grid-template-columns: minmax(13rem, 0.32fr) minmax(0, 1fr);
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.workbook-question-list {
+  display: grid;
+  align-content: start;
+  gap: 0.55rem;
+}
+
+.workbook-question-list > button {
+  content-visibility: auto;
+  display: grid;
+  gap: 0.3rem;
+  border: 1px solid rgb(30 91 66 / 16%);
+  border-radius: 0.85rem;
+  padding: 0.75rem;
+  color: #17231d;
+  text-align: left;
+  background: #edf3ed;
+}
+
+.workbook-question-list > button span {
+  color: #657269;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.workbook-question-list > .workbook-question-active {
+  border-color: #d08a35;
+  box-shadow: inset 0 0 0 1px #d08a35;
+}
+
+.question-editor {
+  min-width: 0;
+}
+
+.question-editor > form {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.question-regions,
+.question-attempts {
+  margin-top: 1rem;
+  border-top: 1px solid rgb(30 91 66 / 14%);
+  padding-top: 1rem;
+}
+
+.question-regions ul,
+.question-attempts ol,
+.workbook-trash ul {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.question-regions li,
+.workbook-trash li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  border-radius: 0.75rem;
+  padding: 0.65rem;
+  background: rgb(255 255 255 / 64%);
+}
+
+.question-regions button,
+.workbook-trash button {
+  padding: 0.5rem 0.7rem;
+  font-size: 0.78rem;
+}
+
+.question-attempts form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 0.7rem;
+  margin-top: 0.75rem;
+}
+
+.question-attempts form button {
+  justify-self: start;
+}
+
+.question-attempts ol > li {
+  content-visibility: auto;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.3rem 0.8rem;
+  border-radius: 0.75rem;
+  padding: 0.7rem;
+  background: rgb(255 255 255 / 64%);
+}
+
+.question-attempts time,
+.question-attempts span {
+  color: #657269;
+  font-size: 0.76rem;
+}
+
+.question-attempts p {
+  grid-column: 1 / -1;
+  margin: 0.25rem 0 0;
+  color: #52625a;
+  font-size: 0.82rem;
+  white-space: pre-wrap;
+}
+
+.workbook-trash {
+  margin-top: 1rem;
+  border-top: 1px solid rgb(30 91 66 / 14%);
+  padding-top: 1rem;
+}
+
+.workbook-trash summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.workbook-trash > p {
+  color: #657269;
+}
+
 @media (max-width: 64rem) {
   .task-workspace-with-details {
     grid-template-columns: minmax(0, 1fr);
@@ -2034,6 +2309,14 @@ button:disabled {
 
   .mindmap-canvas {
     min-height: 34rem;
+  }
+
+  .workbook-question-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .workbook-question-list {
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   }
 }
 
@@ -2191,6 +2474,30 @@ button:disabled {
   .mindmap-tree-children {
     margin-left: 0.5rem;
     padding-left: 0.6rem;
+  }
+
+  .workbook-heading,
+  .workbook-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workbook-question-list,
+  .question-fields,
+  .question-attempts form {
+    grid-template-columns: 1fr;
+  }
+
+  .question-wide-field {
+    grid-column: auto;
+  }
+
+  .question-attempts ol > li {
+    grid-template-columns: 1fr;
+  }
+
+  .question-attempts p {
+    grid-column: auto;
   }
 }
 

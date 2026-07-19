@@ -4,6 +4,7 @@ mod backup;
 mod mindmap;
 mod mindmap_import;
 mod planning;
+mod question;
 mod resource;
 mod runtime;
 mod schedule;
@@ -20,6 +21,11 @@ pub(crate) use mindmap::{
 pub(crate) use planning::{
     AddPlanReferenceInput, PlanningError, PlanningRepository, PlanningUseCases, SavePlanInput,
     SavePlanStageInput,
+};
+pub(crate) use question::{
+    AddQuestionAttemptInput, AddQuestionRegionInput, CreateQuestionInput, QuestionError,
+    QuestionRegionInput, QuestionRepository, QuestionUseCases, UpdateQuestionInput,
+    ValidatedQuestionUpdate,
 };
 pub(crate) use resource::{
     ImportError, ImportProgress, ImportRequest, MindMapSource, ReadableResource, RecoveryReport,

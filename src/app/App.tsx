@@ -7,6 +7,7 @@ import {
 import { PersonalPlanPanel } from "../features/planning/PersonalPlanPanel";
 import { BackupPanel } from "../features/backup/BackupPanel";
 import { MindMapPanel } from "../features/mindmap/MindMapPanel";
+import { WorkbookPanel } from "../features/workbook/WorkbookPanel";
 import { TodayTaskPanel } from "../features/schedule/TodayTaskPanel";
 import { ScheduleOverviewPanel } from "../features/schedule/ScheduleOverviewPanel";
 import { WorkspacePanel } from "../features/workspace/WorkspacePanel";
@@ -80,10 +81,11 @@ export function App() {
   return (
     <main className="shell">
       <section className="hero" aria-labelledby="page-title">
-        <p className="eyebrow">KyStudy · M4 本地知识结构</p>
-        <h1 id="page-title">把知识结构、资料依据与复习状态连起来</h1>
+        <p className="eyebrow">KyStudy · M5 PDF 习题闭环</p>
+        <h1 id="page-title">从原始习题册直接留下题目与作答</h1>
         <p className="lead">
-          在日程、资料和个人规划之上，用可撤销的思维导图维护知识层级，并把每个节点关联回本地资料原页。
+          在本地 PDF
+          上框选题目区域，关联知识结构，并在同一道题下持续记录真实作答与复盘。
         </p>
       </section>
 
@@ -139,6 +141,8 @@ export function App() {
           setResourceOpenRequest({ documentId, page, nonce: Date.now() })
         }
       />
+
+      <WorkbookPanel />
 
       <ResourcePanel openRequest={resourceOpenRequest} />
 

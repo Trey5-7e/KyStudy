@@ -6,18 +6,20 @@ use tauri_plugin_dialog::{DialogExt, FilePath};
 use uuid::Uuid;
 
 use crate::application::{
-    AddNodeResourceInput, AddPlanReferenceInput, BackupError, BackupReport,
-    CreateKnowledgeMapInput, CreateStudySessionInput, CreateSubjectInput, CreateTaskInput,
-    ImportError, ImportProgress, KnowledgeError, MoveKnowledgeNodeInput, PlanningError,
+    AddNodeResourceInput, AddPlanReferenceInput, AddQuestionAttemptInput, AddQuestionRegionInput,
+    BackupError, BackupReport, CreateKnowledgeMapInput, CreateQuestionInput,
+    CreateStudySessionInput, CreateSubjectInput, CreateTaskInput, ImportError, ImportProgress,
+    KnowledgeError, MoveKnowledgeNodeInput, PlanningError, QuestionError, QuestionRegionInput,
     RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor, RestoreReport, RuntimeStatus,
     SavePlanInput, SavePlanStageInput, ScheduleError, SplitChildInput, SplitTaskInput,
-    UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput, UpdateTaskDetailsInput,
+    UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput, UpdateQuestionInput, UpdateTaskDetailsInput,
     get_runtime_status as load_runtime_status,
 };
 use crate::bootstrap::AppState;
 use crate::domain::{
     KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource, MindMapDraftNode,
-    MindMapImportDraft, PlanReference, PlanStage, StudyPlan, StudyPlanBundle, StudySession,
+    MindMapImportDraft, PlanReference, PlanStage, Question, QuestionAttempt, QuestionBundle,
+    QuestionKnowledgeLink, QuestionRegion, StudyPlan, StudyPlanBundle, StudySession,
     StudyStatistics, Subject, SubjectStatistics, Task, TaskChange, TaskChangeSnapshot, TaskSplit,
     TaskTransition, TrashedTask, Workspace,
 };
@@ -894,6 +896,252 @@ impl From<MindMapImportDraft> for MindMapImportDraftDto {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct QuestionRegionRequestDto {
+    page_number: u32,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+impl From<QuestionRegionRequestDto> for QuestionRegionInput {
+    fn from(request: QuestionRegionRequestDto) -> Self {
+        Self {
+            page_number: request.page_number,
+            x: request.x,
+            y: request.y,
+            width: request.width,
+            height: request.height,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct CreateQuestionRequestDto {
+    document_id: String,
+    title: String,
+    chapter: Option<String>,
+    question_number: Option<String>,
+    difficulty: u8,
+    analysis_markdown: Option<String>,
+    region: QuestionRegionRequestDto,
+    knowledge_node_ids: Vec<String>,
+}
+
+impl From<CreateQuestionRequestDto> for CreateQuestionInput {
+    fn from(request: CreateQuestionRequestDto) -> Self {
+        Self {
+            document_id: request.document_id,
+            title: request.title,
+            chapter: request.chapter,
+            question_number: request.question_number,
+            difficulty: request.difficulty,
+            analysis_markdown: request.analysis_markdown,
+            region: request.region.into(),
+            knowledge_node_ids: request.knowledge_node_ids,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UpdateQuestionRequestDto {
+    question_id: String,
+    title: String,
+    chapter: Option<String>,
+    question_number: Option<String>,
+    difficulty: u8,
+    analysis_markdown: Option<String>,
+    knowledge_node_ids: Vec<String>,
+}
+
+impl From<UpdateQuestionRequestDto> for UpdateQuestionInput {
+    fn from(request: UpdateQuestionRequestDto) -> Self {
+        Self {
+            question_id: request.question_id,
+            title: request.title,
+            chapter: request.chapter,
+            question_number: request.question_number,
+            difficulty: request.difficulty,
+            analysis_markdown: request.analysis_markdown,
+            knowledge_node_ids: request.knowledge_node_ids,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct AddQuestionRegionRequestDto {
+    question_id: String,
+    region: QuestionRegionRequestDto,
+}
+
+impl From<AddQuestionRegionRequestDto> for AddQuestionRegionInput {
+    fn from(request: AddQuestionRegionRequestDto) -> Self {
+        Self {
+            question_id: request.question_id,
+            region: request.region.into(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct AddQuestionAttemptRequestDto {
+    question_id: String,
+    result: String,
+    duration_seconds: Option<u32>,
+    answer_note: Option<String>,
+}
+
+impl From<AddQuestionAttemptRequestDto> for AddQuestionAttemptInput {
+    fn from(request: AddQuestionAttemptRequestDto) -> Self {
+        Self {
+            question_id: request.question_id,
+            result: request.result,
+            duration_seconds: request.duration_seconds,
+            answer_note: request.answer_note,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct QuestionDto {
+    id: String,
+    document_id: String,
+    document_title: String,
+    title: String,
+    chapter: Option<String>,
+    question_number: Option<String>,
+    difficulty: u8,
+    analysis_markdown: Option<String>,
+    deleted_at: Option<i64>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<Question> for QuestionDto {
+    fn from(question: Question) -> Self {
+        Self {
+            id: question.id,
+            document_id: question.document_id,
+            document_title: question.document_title,
+            title: question.title,
+            chapter: question.chapter,
+            question_number: question.number_label,
+            difficulty: question.difficulty,
+            analysis_markdown: question.analysis_markdown,
+            deleted_at: question.deleted_at,
+            created_at: question.created_at,
+            updated_at: question.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct QuestionRegionDto {
+    id: String,
+    question_id: String,
+    document_id: String,
+    page_number: u32,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    coordinate_version: u8,
+    sort_order: u32,
+    created_at: i64,
+}
+
+impl From<QuestionRegion> for QuestionRegionDto {
+    fn from(region: QuestionRegion) -> Self {
+        Self {
+            id: region.id,
+            question_id: region.question_id,
+            document_id: region.document_id,
+            page_number: region.page_number,
+            x: region.x,
+            y: region.y,
+            width: region.width,
+            height: region.height,
+            coordinate_version: region.coordinate_version,
+            sort_order: region.sort_order,
+            created_at: region.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct QuestionAttemptDto {
+    id: String,
+    question_id: String,
+    result: &'static str,
+    attempted_at: i64,
+    duration_seconds: Option<u32>,
+    answer_note: Option<String>,
+    created_at: i64,
+}
+
+impl From<QuestionAttempt> for QuestionAttemptDto {
+    fn from(attempt: QuestionAttempt) -> Self {
+        Self {
+            id: attempt.id,
+            question_id: attempt.question_id,
+            result: attempt.result.as_str(),
+            attempted_at: attempt.attempted_at,
+            duration_seconds: attempt.duration_seconds,
+            answer_note: attempt.answer_note,
+            created_at: attempt.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct QuestionKnowledgeLinkDto {
+    node_id: String,
+    node_title: String,
+    map_id: String,
+    map_title: String,
+}
+
+impl From<QuestionKnowledgeLink> for QuestionKnowledgeLinkDto {
+    fn from(link: QuestionKnowledgeLink) -> Self {
+        Self {
+            node_id: link.node_id,
+            node_title: link.node_title,
+            map_id: link.map_id,
+            map_title: link.map_title,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct QuestionBundleDto {
+    question: QuestionDto,
+    regions: Vec<QuestionRegionDto>,
+    attempts: Vec<QuestionAttemptDto>,
+    knowledge_links: Vec<QuestionKnowledgeLinkDto>,
+}
+
+impl From<QuestionBundle> for QuestionBundleDto {
+    fn from(bundle: QuestionBundle) -> Self {
+        Self {
+            question: bundle.question.into(),
+            regions: bundle.regions.into_iter().map(Into::into).collect(),
+            attempts: bundle.attempts.into_iter().map(Into::into).collect(),
+            knowledge_links: bundle.knowledge_links.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
 /// Imported resource metadata that deliberately excludes every local path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1201,6 +1449,42 @@ impl AppErrorDto {
             ),
             KnowledgeError::Source(error) => return Self::from_import(error),
             KnowledgeError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    fn from_question(error: &QuestionError) -> Self {
+        let (message, action) = match error {
+            QuestionError::WorkspaceNotInitialized => {
+                ("尚未创建本地工作区。", "先创建本地工作区，再管理习题。")
+            }
+            QuestionError::WorkbookNotFound => (
+                "找不到可用的习题册 PDF。",
+                "把 PDF 用途设为“习题册”，打开一次确认页数后重试。",
+            ),
+            QuestionError::QuestionNotFound => ("找不到这道题目。", "刷新题目列表后重新选择。"),
+            QuestionError::RegionNotFound => ("找不到这个题目区域。", "刷新题目后重新选择区域。"),
+            QuestionError::InvalidInput => (
+                "题目内容或作答记录格式无效。",
+                "检查标题、难度、耗时和文字长度后重试。",
+            ),
+            QuestionError::InvalidRegion => (
+                "题目框选区域或页码无效。",
+                "重新在当前 PDF 页面框选完整题目区域。",
+            ),
+            QuestionError::LastRegionProtected => (
+                "一道题必须至少保留一个来源区域。",
+                "可以重新框选区域，或删除整道题。",
+            ),
+            QuestionError::InvalidKnowledgeLink => {
+                ("关联的知识节点无效。", "刷新思维导图后重新选择知识节点。")
+            }
+            QuestionError::Persistence(error) => return Self::from_persistence(error),
         };
         Self {
             code: error.code(),
@@ -1958,6 +2242,121 @@ pub(crate) async fn reject_mindmap_import_draft(
 }
 
 #[tauri::command]
+pub(crate) async fn list_workbook_questions(
+    document_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<QuestionBundleDto>, AppErrorDto> {
+    let use_cases = state.questions.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_for_document(&document_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|questions| questions.into_iter().map(Into::into).collect())
+        .map_err(|error| AppErrorDto::from_question(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_trashed_questions(
+    state: State<'_, AppState>,
+) -> Result<Vec<QuestionBundleDto>, AppErrorDto> {
+    let use_cases = state.questions.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_trashed())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|questions| questions.into_iter().map(Into::into).collect())
+        .map_err(|error| AppErrorDto::from_question(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn create_question(
+    request: CreateQuestionRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBundleDto, AppErrorDto> {
+    let use_cases = state.questions.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.create_question(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn update_question(
+    request: UpdateQuestionRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBundleDto, AppErrorDto> {
+    let use_cases = state.questions.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.update_question(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn add_question_region(
+    request: AddQuestionRegionRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBundleDto, AppErrorDto> {
+    let use_cases = state.questions.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.add_region(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn delete_question_region(
+    region_id: String,
+    state: State<'_, AppState>,
+) -> Result<QuestionBundleDto, AppErrorDto> {
+    let use_cases = state.questions.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.delete_region(&region_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn add_question_attempt(
+    request: AddQuestionAttemptRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBundleDto, AppErrorDto> {
+    let use_cases = state.questions.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.add_attempt(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn trash_question(
+    question_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppErrorDto> {
+    let use_cases = state.questions.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.trash_question(&question_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map_err(|error| AppErrorDto::from_question(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn restore_question(
+    question_id: String,
+    state: State<'_, AppState>,
+) -> Result<QuestionBundleDto, AppErrorDto> {
+    let use_cases = state.questions.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.restore_question(&question_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn start_resource_import(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -2123,15 +2522,16 @@ fn emit_import_event(app: &AppHandle, event: ImportEventDto) {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppErrorDto, BackupReportDto, KnowledgeMapBundleDto, RescheduleTaskRequestDto,
-        ResourceDocumentDto, SubjectDto, TaskChangeDto, TaskDto, UpdateTaskDetailsRequestDto,
-        get_runtime_status,
+        AppErrorDto, BackupReportDto, KnowledgeMapBundleDto, QuestionBundleDto,
+        RescheduleTaskRequestDto, ResourceDocumentDto, SubjectDto, TaskChangeDto, TaskDto,
+        UpdateTaskDetailsRequestDto, get_runtime_status,
     };
     use crate::application::{BackupReport, PersistenceError, ResourceDocument, ScheduleError};
     use crate::domain::{
-        KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource, LocalDate,
-        MasteryState, Subject, SubjectColor, Task, TaskChange, TaskChangeSnapshot, TaskChangeType,
-        TaskPriority, TaskStatus,
+        AttemptResult, KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource,
+        LocalDate, MasteryState, Question, QuestionAttempt, QuestionBundle, QuestionRegion,
+        Subject, SubjectColor, Task, TaskChange, TaskChangeSnapshot, TaskChangeType, TaskPriority,
+        TaskStatus,
     };
 
     #[test]
@@ -2272,6 +2672,57 @@ mod tests {
         assert!(value.get("snapshotJson").is_none());
         assert!(value.get("databasePath").is_none());
         assert!(value["resources"][0].get("storageKey").is_none());
+    }
+
+    #[test]
+    fn question_dto_exposes_normalized_regions_without_canvas_or_paths() {
+        let question_id = "019f7328-4b66-7613-9729-e3570fc41525".to_owned();
+        let document_id = "019f7328-4b66-7613-9729-e3570fc41526".to_owned();
+        let dto = QuestionBundleDto::from(QuestionBundle {
+            question: Question {
+                id: question_id.clone(),
+                document_id: document_id.clone(),
+                document_title: "408 习题册".to_owned(),
+                title: "线性表综合题".to_owned(),
+                chapter: Some("数据结构".to_owned()),
+                number_label: Some("1".to_owned()),
+                difficulty: 4,
+                analysis_markdown: None,
+                deleted_at: None,
+                created_at: 1_700_000_000_000,
+                updated_at: 1_700_000_000_100,
+            },
+            regions: vec![QuestionRegion {
+                id: "019f7328-4b66-7613-9729-e3570fc41527".to_owned(),
+                question_id: question_id.clone(),
+                document_id,
+                page_number: 2,
+                x: 0.1,
+                y: 0.2,
+                width: 0.5,
+                height: 0.3,
+                coordinate_version: 1,
+                sort_order: 0,
+                created_at: 1_700_000_000_000,
+            }],
+            attempts: vec![QuestionAttempt {
+                id: "019f7328-4b66-7613-9729-e3570fc41528".to_owned(),
+                question_id,
+                result: AttemptResult::Incorrect,
+                attempted_at: 1_700_000_000_100,
+                duration_seconds: Some(180),
+                answer_note: Some("边界条件遗漏".to_owned()),
+                created_at: 1_700_000_000_100,
+            }],
+            knowledge_links: Vec::new(),
+        });
+
+        let value = serde_json::to_value(dto).expect("question DTO should serialize");
+
+        assert_eq!(value["regions"][0]["coordinateVersion"], 1);
+        assert!(value.get("databasePath").is_none());
+        assert!(value["regions"][0].get("canvasPixels").is_none());
+        assert!(value["regions"][0].get("storageKey").is_none());
     }
 
     #[test]

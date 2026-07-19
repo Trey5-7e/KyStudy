@@ -6,12 +6,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crate::application::{
-    BackupUseCases, KnowledgeUseCases, PlanningUseCases, ResourceUseCases, ScheduleUseCases,
-    WorkspaceUseCases,
+    BackupUseCases, KnowledgeUseCases, PlanningUseCases, QuestionUseCases, ResourceUseCases,
+    ScheduleUseCases, WorkspaceUseCases,
 };
 use crate::infrastructure::{
     SqliteBackupStore, SqliteBlobStore, SqliteKnowledgeRepository, SqlitePlanningRepository,
-    SqliteScheduleRepository, SqliteWorkspaceRepository,
+    SqliteQuestionRepository, SqliteScheduleRepository, SqliteWorkspaceRepository,
 };
 
 /// Tracks cancel flags without sharing `SQLite` connections across threads.
@@ -69,6 +69,7 @@ pub(crate) struct AppState {
     pub(crate) schedule: ScheduleUseCases<SqliteScheduleRepository>,
     pub(crate) planning: PlanningUseCases<SqlitePlanningRepository>,
     pub(crate) knowledge: KnowledgeUseCases<SqliteKnowledgeRepository, SqliteBlobStore>,
+    pub(crate) questions: QuestionUseCases<SqliteQuestionRepository>,
     pub(crate) backups: BackupUseCases<SqliteBackupStore>,
     pub(crate) imports: ImportCoordinator,
     pub(crate) operations: WorkspaceOperationGate,
@@ -82,6 +83,7 @@ impl AppState {
         let schedule_repository = SqliteScheduleRepository::new(application_data_directory);
         let planning_repository = SqlitePlanningRepository::new(application_data_directory);
         let knowledge_repository = SqliteKnowledgeRepository::new(application_data_directory);
+        let question_repository = SqliteQuestionRepository::new(application_data_directory);
         let backup_store = SqliteBackupStore::new(application_data_directory);
         Self {
             workspace: WorkspaceUseCases::new(workspace_repository),
@@ -92,6 +94,7 @@ impl AppState {
                 knowledge_repository,
                 ResourceUseCases::new(blob_store),
             ),
+            questions: QuestionUseCases::new(question_repository),
             backups: BackupUseCases::new(backup_store),
             imports: ImportCoordinator::default(),
             operations: WorkspaceOperationGate::default(),

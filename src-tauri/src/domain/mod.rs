@@ -2,6 +2,7 @@
 
 mod mindmap;
 mod planning;
+mod question;
 mod schedule;
 mod workspace;
 
@@ -10,6 +11,9 @@ pub(crate) use mindmap::{
     MindMapDraftNode, MindMapImportDraft,
 };
 pub(crate) use planning::{PlanReference, PlanStage, PlanStatus, StudyPlan, StudyPlanBundle};
+pub(crate) use question::{
+    AttemptResult, Question, QuestionAttempt, QuestionBundle, QuestionKnowledgeLink, QuestionRegion,
+};
 pub(crate) use schedule::{
     DateRange, LocalDate, NewStudySession, NewSubject, NewTask, RescheduleDraft,
     ScheduleValidationError, SplitChildDraft, SplitTaskDraft, StudySession, StudyStatistics,

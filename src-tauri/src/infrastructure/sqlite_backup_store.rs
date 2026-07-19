@@ -507,22 +507,24 @@ mod tests {
         read_manifest,
     };
     use crate::application::{
-        BackupRepository, ImportRequest, KnowledgeRepository, ResourceRepository,
-        ScheduleRepository, WorkspaceRepository,
+        BackupRepository, CreateQuestionInput, ImportRequest, KnowledgeRepository,
+        QuestionRegionInput, QuestionUseCases, ResourceRepository, ScheduleRepository,
+        WorkspaceRepository,
     };
     use crate::domain::{
         KnowledgeMap, KnowledgeNode, LATEST_SCHEMA_VERSION, LocalDate, MasteryState,
         NewStudySession, NewSubject, NewTask, NewWorkspace, SubjectColor, TaskDraft, TaskPriority,
     };
     use crate::infrastructure::{
-        SqliteBlobStore, SqliteKnowledgeRepository, SqliteScheduleRepository,
-        SqliteWorkspaceRepository,
+        SqliteBlobStore, SqliteKnowledgeRepository, SqliteQuestionRepository,
+        SqliteScheduleRepository, SqliteWorkspaceRepository,
     };
 
     struct Fixture {
         application_data: TempDir,
         workspace: SqliteWorkspaceRepository,
         backup: SqliteBackupStore,
+        document_id: String,
         document_sha256: String,
     }
 
@@ -551,6 +553,7 @@ mod tests {
             backup: SqliteBackupStore::new(application_data.path()),
             application_data,
             workspace,
+            document_id: document.id,
             document_sha256: document.sha256,
         }
     }
@@ -778,6 +781,69 @@ mod tests {
     }
 
     #[test]
+    fn complete_backup_restores_questions_regions_and_attempts() {
+        let fixture = initialized_fixture();
+        let resources = SqliteBlobStore::new(fixture.application_data.path());
+        resources
+            .update_role(&fixture.document_id, "workbook")
+            .expect("fixture should become a workbook");
+        let questions = QuestionUseCases::new(SqliteQuestionRepository::new(
+            fixture.application_data.path(),
+        ));
+        let created = questions
+            .create_question(CreateQuestionInput {
+                document_id: fixture.document_id.clone(),
+                title: "数据结构题目".to_owned(),
+                chapter: None,
+                question_number: Some("1".to_owned()),
+                difficulty: 3,
+                analysis_markdown: Some("边界条件".to_owned()),
+                region: QuestionRegionInput {
+                    page_number: 1,
+                    x: 0.1,
+                    y: 0.2,
+                    width: 0.4,
+                    height: 0.2,
+                },
+                knowledge_node_ids: Vec::new(),
+            })
+            .expect("question should persist");
+        questions
+            .add_attempt(crate::application::AddQuestionAttemptInput {
+                question_id: created.question.id,
+                result: "incorrect".to_owned(),
+                duration_seconds: Some(180),
+                answer_note: Some("漏写条件".to_owned()),
+            })
+            .expect("attempt should persist");
+        let output = tempdir().expect("output directory should exist");
+        let backup = create_backup(&fixture, &output);
+        let destination = output.path().join("restored-question-data");
+
+        fixture
+            .backup
+            .restore_backup(&backup, &destination)
+            .expect("question data should restore");
+        let connection = Connection::open(destination.join("kystudy.sqlite3"))
+            .expect("restored database should open");
+        let counts: (i64, i64, i64) = (
+            connection
+                .query_row("SELECT COUNT(*) FROM question", [], |row| row.get(0))
+                .expect("questions should count"),
+            connection
+                .query_row("SELECT COUNT(*) FROM question_region", [], |row| row.get(0))
+                .expect("regions should count"),
+            connection
+                .query_row("SELECT COUNT(*) FROM question_attempt", [], |row| {
+                    row.get(0)
+                })
+                .expect("attempts should count"),
+        );
+
+        assert_eq!(counts, (1, 1, 1));
+    }
+
+    #[test]
     fn complete_backup_restores_subject_task_history_and_study_session() {
         let fixture = initialized_fixture();
         let schedule = SqliteScheduleRepository::new(fixture.application_data.path());
@@ -867,7 +933,11 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE map_import_draft;
+                "DROP TABLE question_knowledge_node;
+                 DROP TABLE question_attempt;
+                 DROP TABLE question_region;
+                 DROP TABLE question;
+                 DROP TABLE map_import_draft;
                  DROP TABLE knowledge_node_resource;
                  DROP TABLE knowledge_map_revision;
                  DROP TABLE knowledge_node;
@@ -879,7 +949,7 @@ mod tests {
                  ALTER TABLE resource_document DROP COLUMN page_count;
                  ALTER TABLE resource_document DROP COLUMN role;
                  DROP TABLE study_session;
-                 DELETE FROM schema_migration WHERE version IN (4, 5, 6);
+                 DELETE FROM schema_migration WHERE version IN (4, 5, 6, 7);
                  PRAGMA user_version = 3;",
             )
             .expect("fixture should represent a v3 backup");
@@ -929,7 +999,11 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE map_import_draft;
+                "DROP TABLE question_knowledge_node;
+                 DROP TABLE question_attempt;
+                 DROP TABLE question_region;
+                 DROP TABLE question;
+                 DROP TABLE map_import_draft;
                  DROP TABLE knowledge_node_resource;
                  DROP TABLE knowledge_map_revision;
                  DROP TABLE knowledge_node;
@@ -944,7 +1018,7 @@ mod tests {
                  DROP TABLE task_change;
                  DROP TABLE task;
                  DROP TABLE subject;
-                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6);
+                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6, 7);
                  PRAGMA user_version = 2;",
             )
             .expect("fixture should represent a v2 backup");
