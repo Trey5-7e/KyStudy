@@ -773,7 +773,7 @@ mod tests {
     }
 
     #[test]
-    fn restore_migrates_a_verified_v3_backup_copy_to_v4() {
+    fn restore_migrates_a_verified_v3_backup_copy_to_latest() {
         let fixture = initialized_fixture();
         let output = tempdir().expect("output directory should exist");
         let backup = create_backup(&fixture, &output);
@@ -781,8 +781,14 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE study_session;
-                 DELETE FROM schema_migration WHERE version = 4;
+                "DROP TABLE plan_reference;
+                 DROP TABLE plan_stage;
+                 DROP TABLE study_plan;
+                 DROP TABLE resource_reading_state;
+                 ALTER TABLE resource_document DROP COLUMN page_count;
+                 ALTER TABLE resource_document DROP COLUMN role;
+                 DROP TABLE study_session;
+                 DELETE FROM schema_migration WHERE version IN (4, 5);
                  PRAGMA user_version = 3;",
             )
             .expect("fixture should represent a v3 backup");
@@ -819,7 +825,7 @@ mod tests {
                 .expect("study session table should be readable"),
         );
 
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
         assert_eq!(study_session_table, 1);
     }
 
@@ -832,11 +838,17 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE study_session;
+                "DROP TABLE plan_reference;
+                 DROP TABLE plan_stage;
+                 DROP TABLE study_plan;
+                 DROP TABLE resource_reading_state;
+                 ALTER TABLE resource_document DROP COLUMN page_count;
+                 ALTER TABLE resource_document DROP COLUMN role;
+                 DROP TABLE study_session;
                  DROP TABLE task_change;
                  DROP TABLE task;
                  DROP TABLE subject;
-                 DELETE FROM schema_migration WHERE version IN (3, 4);
+                 DELETE FROM schema_migration WHERE version IN (3, 4, 5);
                  PRAGMA user_version = 2;",
             )
             .expect("fixture should represent a v2 backup");
@@ -865,8 +877,8 @@ mod tests {
         let restored_manifest =
             read_manifest(&destination).expect("restored manifest should be readable");
 
-        assert_eq!(version, 4);
-        assert_eq!(restored_manifest.schema_version, 4);
+        assert_eq!(version, 5);
+        assert_eq!(restored_manifest.schema_version, 5);
     }
 
     #[test]

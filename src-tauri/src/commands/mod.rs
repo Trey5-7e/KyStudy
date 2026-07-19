@@ -6,15 +6,17 @@ use tauri_plugin_dialog::{DialogExt, FilePath};
 use uuid::Uuid;
 
 use crate::application::{
-    BackupError, BackupReport, CreateStudySessionInput, CreateSubjectInput, CreateTaskInput,
-    ImportError, ImportProgress, RescheduleTaskInput, ResourceDocument, RestoreReport,
-    RuntimeStatus, ScheduleError, SplitChildInput, SplitTaskInput, UpdateTaskDetailsInput,
+    AddPlanReferenceInput, BackupError, BackupReport, CreateStudySessionInput, CreateSubjectInput,
+    CreateTaskInput, ImportError, ImportProgress, PlanningError, RescheduleTaskInput,
+    ResourceDocument, ResourceReaderDescriptor, RestoreReport, RuntimeStatus, SavePlanInput,
+    SavePlanStageInput, ScheduleError, SplitChildInput, SplitTaskInput, UpdateTaskDetailsInput,
     get_runtime_status as load_runtime_status,
 };
 use crate::bootstrap::AppState;
 use crate::domain::{
-    StudySession, StudyStatistics, Subject, SubjectStatistics, Task, TaskChange,
-    TaskChangeSnapshot, TaskSplit, TaskTransition, TrashedTask, Workspace,
+    PlanReference, PlanStage, StudyPlan, StudyPlanBundle, StudySession, StudyStatistics, Subject,
+    SubjectStatistics, Task, TaskChange, TaskChangeSnapshot, TaskSplit, TaskTransition,
+    TrashedTask, Workspace,
 };
 
 #[tauri::command]
@@ -435,6 +437,186 @@ impl From<CreateStudySessionRequestDto> for CreateStudySessionInput {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SavePlanRequestDto {
+    id: Option<String>,
+    title: String,
+    target_exam: Option<String>,
+    exam_date: Option<String>,
+    overview: Option<String>,
+}
+
+impl From<SavePlanRequestDto> for SavePlanInput {
+    fn from(request: SavePlanRequestDto) -> Self {
+        Self {
+            id: request.id,
+            title: request.title,
+            target_exam: request.target_exam,
+            exam_date: request.exam_date,
+            overview: request.overview,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SavePlanStageRequestDto {
+    id: Option<String>,
+    plan_id: String,
+    title: String,
+    start_date: String,
+    end_date: String,
+    focus: Option<String>,
+    sort_order: u32,
+}
+
+impl From<SavePlanStageRequestDto> for SavePlanStageInput {
+    fn from(request: SavePlanStageRequestDto) -> Self {
+        Self {
+            id: request.id,
+            plan_id: request.plan_id,
+            title: request.title,
+            start_date: request.start_date,
+            end_date: request.end_date,
+            focus: request.focus,
+            sort_order: request.sort_order,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct AddPlanReferenceRequestDto {
+    plan_id: String,
+    document_id: String,
+    page_start: u32,
+    page_end: u32,
+    note: Option<String>,
+}
+
+impl From<AddPlanReferenceRequestDto> for AddPlanReferenceInput {
+    fn from(request: AddPlanReferenceRequestDto) -> Self {
+        Self {
+            plan_id: request.plan_id,
+            document_id: request.document_id,
+            page_start: request.page_start,
+            page_end: request.page_end,
+            note: request.note,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StudyPlanDto {
+    id: String,
+    title: String,
+    target_exam: Option<String>,
+    exam_date: Option<String>,
+    overview: Option<String>,
+    status: &'static str,
+    revision: u32,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<StudyPlan> for StudyPlanDto {
+    fn from(plan: StudyPlan) -> Self {
+        Self {
+            id: plan.id,
+            title: plan.title,
+            target_exam: plan.target_exam,
+            exam_date: plan.exam_date,
+            overview: plan.overview,
+            status: plan.status.as_str(),
+            revision: plan.revision,
+            created_at: plan.created_at,
+            updated_at: plan.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlanStageDto {
+    id: String,
+    plan_id: String,
+    title: String,
+    start_date: String,
+    end_date: String,
+    focus: Option<String>,
+    sort_order: u32,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<PlanStage> for PlanStageDto {
+    fn from(stage: PlanStage) -> Self {
+        Self {
+            id: stage.id,
+            plan_id: stage.plan_id,
+            title: stage.title,
+            start_date: stage.start_date,
+            end_date: stage.end_date,
+            focus: stage.focus,
+            sort_order: stage.sort_order,
+            created_at: stage.created_at,
+            updated_at: stage.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlanReferenceDto {
+    id: String,
+    plan_id: String,
+    document_id: String,
+    document_title: String,
+    page_start: u32,
+    page_end: u32,
+    note: Option<String>,
+    created_at: i64,
+}
+
+impl From<PlanReference> for PlanReferenceDto {
+    fn from(reference: PlanReference) -> Self {
+        Self {
+            id: reference.id,
+            plan_id: reference.plan_id,
+            document_id: reference.document_id,
+            document_title: reference.document_title,
+            page_start: reference.page_start,
+            page_end: reference.page_end,
+            note: reference.note,
+            created_at: reference.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StudyPlanBundleDto {
+    plan: StudyPlanDto,
+    stages: Vec<PlanStageDto>,
+    references: Vec<PlanReferenceDto>,
+}
+
+impl From<StudyPlanBundle> for StudyPlanBundleDto {
+    fn from(bundle: StudyPlanBundle) -> Self {
+        Self {
+            plan: StudyPlanDto::from(bundle.plan),
+            stages: bundle.stages.into_iter().map(PlanStageDto::from).collect(),
+            references: bundle
+                .references
+                .into_iter()
+                .map(PlanReferenceDto::from)
+                .collect(),
+        }
+    }
+}
+
 /// Imported resource metadata that deliberately excludes every local path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -446,6 +628,10 @@ pub(crate) struct ResourceDocumentDto {
     size_bytes: u64,
     sha256: String,
     reused_existing_blob: bool,
+    role: String,
+    page_count: Option<u32>,
+    last_page: Option<u32>,
+    last_opened_at: Option<i64>,
     created_at: i64,
 }
 
@@ -459,7 +645,38 @@ impl From<ResourceDocument> for ResourceDocumentDto {
             size_bytes: document.size_bytes,
             sha256: document.sha256,
             reused_existing_blob: document.reused_existing_blob,
+            role: document.role,
+            page_count: document.page_count,
+            last_page: document.last_page,
+            last_opened_at: document.last_opened_at,
             created_at: document.created_at,
+        }
+    }
+}
+
+/// Safe metadata needed by the PDF or image reader.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ResourceReaderDescriptorDto {
+    document_id: String,
+    title: String,
+    kind: String,
+    mime_type: String,
+    size_bytes: u64,
+    page_count: Option<u32>,
+    last_page: Option<u32>,
+}
+
+impl From<ResourceReaderDescriptor> for ResourceReaderDescriptorDto {
+    fn from(descriptor: ResourceReaderDescriptor) -> Self {
+        Self {
+            document_id: descriptor.document_id,
+            title: descriptor.title,
+            kind: descriptor.kind,
+            mime_type: descriptor.mime_type,
+            size_bytes: descriptor.size_bytes,
+            page_count: descriptor.page_count,
+            last_page: descriptor.last_page,
         }
     }
 }
@@ -604,11 +821,51 @@ impl AppErrorDto {
                 "资料完整性校验未通过。",
                 "不要手动覆盖工作区文件；请保留数据并查看诊断信息。",
             ),
+            ImportError::DocumentNotFound => (
+                "找不到这份本地资料。",
+                "刷新资料列表；如果问题持续存在，请检查工作区完整性。",
+            ),
+            ImportError::UnsupportedReaderKind => (
+                "这种资料暂时不能在阅读器中打开。",
+                "当前可直接阅读 PDF 和常见图片，其他格式将在后续支持。",
+            ),
+            ImportError::InvalidMetadata => (
+                "资料的分类或阅读进度无效。",
+                "检查页码、总页数或资料用途后重试。",
+            ),
             ImportError::File { .. } => (
                 "无法读取来源文件或写入本地资料库。",
                 "检查文件占用、磁盘空间和目录权限后重试。",
             ),
             ImportError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    fn from_planning(error: &PlanningError) -> Self {
+        let (message, action) = match error {
+            PlanningError::WorkspaceNotInitialized => {
+                ("尚未创建本地工作区。", "先创建本地工作区，再建立个人计划。")
+            }
+            PlanningError::InvalidInput => (
+                "个人计划内容不完整或格式无效。",
+                "检查标题、日期范围和文字长度后重试。",
+            ),
+            PlanningError::PlanNotFound => ("找不到这份个人计划。", "刷新计划列表后重新选择。"),
+            PlanningError::StageNotFound => ("找不到这个计划阶段。", "刷新计划后重新编辑阶段。"),
+            PlanningError::ReferenceNotFound => {
+                ("找不到这条资料引用。", "刷新计划后重新选择引用。")
+            }
+            PlanningError::InvalidReference => (
+                "资料引用的 PDF 或页码范围无效。",
+                "选择已导入的 PDF，并检查起止页码。",
+            ),
+            PlanningError::Persistence(error) => return Self::from_persistence(error),
         };
         Self {
             code: error.code(),
@@ -988,6 +1245,139 @@ pub(crate) async fn list_resources(
 }
 
 #[tauri::command]
+pub(crate) async fn get_resource_reader_descriptor(
+    document_id: String,
+    state: State<'_, AppState>,
+) -> Result<ResourceReaderDescriptorDto, AppErrorDto> {
+    let use_cases = state.resources.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.reader_descriptor(&document_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(ResourceReaderDescriptorDto::from)
+        .map_err(|error| AppErrorDto::from_import(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn update_resource_role(
+    document_id: String,
+    role: String,
+    state: State<'_, AppState>,
+) -> Result<ResourceDocumentDto, AppErrorDto> {
+    let use_cases = state.resources.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.update_role(&document_id, &role))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(ResourceDocumentDto::from)
+        .map_err(|error| AppErrorDto::from_import(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn save_resource_reading_progress(
+    document_id: String,
+    page_count: u32,
+    last_page: u32,
+    state: State<'_, AppState>,
+) -> Result<ResourceReaderDescriptorDto, AppErrorDto> {
+    let use_cases = state.resources.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.save_reading_progress(&document_id, page_count, last_page)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(ResourceReaderDescriptorDto::from)
+    .map_err(|error| AppErrorDto::from_import(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_study_plans(
+    state: State<'_, AppState>,
+) -> Result<Vec<StudyPlanBundleDto>, AppErrorDto> {
+    let use_cases = state.planning.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|plans| plans.into_iter().map(StudyPlanBundleDto::from).collect())
+        .map_err(|error| AppErrorDto::from_planning(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn save_study_plan(
+    request: SavePlanRequestDto,
+    state: State<'_, AppState>,
+) -> Result<StudyPlanBundleDto, AppErrorDto> {
+    let use_cases = state.planning.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.save_plan(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(StudyPlanBundleDto::from)
+        .map_err(|error| AppErrorDto::from_planning(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn set_study_plan_status(
+    plan_id: String,
+    status: String,
+    state: State<'_, AppState>,
+) -> Result<StudyPlanBundleDto, AppErrorDto> {
+    let use_cases = state.planning.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.set_status(&plan_id, &status))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(StudyPlanBundleDto::from)
+        .map_err(|error| AppErrorDto::from_planning(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn save_plan_stage(
+    request: SavePlanStageRequestDto,
+    state: State<'_, AppState>,
+) -> Result<PlanStageDto, AppErrorDto> {
+    let use_cases = state.planning.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.save_stage(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(PlanStageDto::from)
+        .map_err(|error| AppErrorDto::from_planning(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn delete_plan_stage(
+    stage_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppErrorDto> {
+    let use_cases = state.planning.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.delete_stage(&stage_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map_err(|error| AppErrorDto::from_planning(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn add_plan_reference(
+    request: AddPlanReferenceRequestDto,
+    state: State<'_, AppState>,
+) -> Result<PlanReferenceDto, AppErrorDto> {
+    let use_cases = state.planning.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.add_reference(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(PlanReferenceDto::from)
+        .map_err(|error| AppErrorDto::from_planning(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn delete_plan_reference(
+    reference_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppErrorDto> {
+    let use_cases = state.planning.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.delete_reference(&reference_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map_err(|error| AppErrorDto::from_planning(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn start_resource_import(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -1236,6 +1626,10 @@ mod tests {
             size_bytes: 128,
             sha256: "AB".repeat(32),
             reused_existing_blob: false,
+            role: "planning".to_owned(),
+            page_count: Some(6),
+            last_page: Some(2),
+            last_opened_at: Some(1_700_000_000_100),
             created_at: 1_700_000_000_000,
         });
 

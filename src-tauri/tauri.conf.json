@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self'"
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost kystudy-pdf: http://kystudy-pdf.localhost; script-src 'self'; worker-src 'self' blob:; img-src 'self' data: blob: kystudy-image: http://kystudy-image.localhost; style-src 'self'"
     }
   },
   "bundle": {

@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 
-import { ResourcePanel } from "../features/library/ResourcePanel";
+import {
+  ResourcePanel,
+  type ResourceOpenRequest,
+} from "../features/library/ResourcePanel";
+import { PersonalPlanPanel } from "../features/planning/PersonalPlanPanel";
 import { BackupPanel } from "../features/backup/BackupPanel";
 import { TodayTaskPanel } from "../features/schedule/TodayTaskPanel";
 import { ScheduleOverviewPanel } from "../features/schedule/ScheduleOverviewPanel";
@@ -19,13 +23,16 @@ type RuntimeState =
 const CURRENT_BOUNDARIES = [
   "前端只通过类型化 Command DTO 与本地核心通信",
   "SQLite 由 Rust Repository 管理，不向 WebView 暴露路径或 SQL",
-  "PDF、OCR、导图和 AI 依赖在对应里程碑中按需引入",
+  "PDF 只经 document ID 和受控 Range 协议读取，不暴露路径或整本 Base64",
+  "AI、OCR 和全文检索尚未接入，当前计划完全由用户确认和维护",
 ] as const;
 
 export function App() {
   const [runtimeState, setRuntimeState] = useState<RuntimeState>({
     kind: "loading",
   });
+  const [resourceOpenRequest, setResourceOpenRequest] =
+    useState<ResourceOpenRequest>();
 
   const retryRuntimeStatus = async () => {
     setRuntimeState({ kind: "loading" });
@@ -71,10 +78,10 @@ export function App() {
   return (
     <main className="shell">
       <section className="hero" aria-labelledby="page-title">
-        <p className="eyebrow">KyStudy · M2 日程闭环</p>
+        <p className="eyebrow">KyStudy · M3 资料与规划闭环</p>
         <h1 id="page-title">把备考资料、执行与复习留在自己手中</h1>
         <p className="lead">
-          本地基础、今日任务、科目与详情已经通过验收。现在可以明确延期、取消或恢复任务，并从只读历史中看见计划如何变化。
+          在已经稳定的日程基础上，把规划资料直接打开、定位到原页，并用手动草案记录真正适合自己的阶段安排。
         </p>
       </section>
 
@@ -119,7 +126,13 @@ export function App() {
 
       <ScheduleOverviewPanel />
 
-      <ResourcePanel />
+      <PersonalPlanPanel
+        onOpenReference={(documentId, page) =>
+          setResourceOpenRequest({ documentId, page, nonce: Date.now() })
+        }
+      />
+
+      <ResourcePanel openRequest={resourceOpenRequest} />
 
       <BackupPanel />
 

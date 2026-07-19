@@ -1,8 +1,10 @@
 //! Pure domain values and invariants.
 
+mod planning;
 mod schedule;
 mod workspace;
 
+pub(crate) use planning::{PlanReference, PlanStage, PlanStatus, StudyPlan, StudyPlanBundle};
 pub(crate) use schedule::{
     DateRange, LocalDate, NewStudySession, NewSubject, NewTask, RescheduleDraft,
     ScheduleValidationError, SplitChildDraft, SplitTaskDraft, StudySession, StudyStatistics,

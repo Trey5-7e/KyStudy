@@ -10,8 +10,8 @@ use tempfile::{Builder, NamedTempFile, TempPath};
 use uuid::Uuid;
 
 use crate::application::{
-    ImportError, ImportProgress, ImportRequest, RecoveryReport, ResourceDocument,
-    ResourceRepository, current_utc_millis,
+    ImportError, ImportProgress, ImportRequest, ReadableResource, RecoveryReport, ResourceDocument,
+    ResourceReaderDescriptor, ResourceRepository, current_utc_millis,
 };
 
 use super::sqlite_workspace::{SqliteWorkspaceRepository, migrate, open_database};
@@ -232,9 +232,11 @@ impl ResourceRepository for SqliteBlobStore {
         let mut statement = connection
             .prepare(
                 "SELECT d.id, d.title, d.kind, d.mime_type, b.size_bytes,
-                        b.sha256, d.created_at
+                        b.sha256, d.role, d.page_count, s.last_page,
+                        s.last_opened_at, d.created_at
                  FROM resource_document d
                  JOIN blob b ON b.id = d.blob_id
+                 LEFT JOIN resource_reading_state s ON s.document_id = d.id
                  ORDER BY d.created_at DESC, d.id DESC",
             )
             .map_err(super::sqlite_workspace::database_error)?;
@@ -247,13 +249,28 @@ impl ResourceRepository for SqliteBlobStore {
                     row.get::<_, String>(3)?,
                     row.get::<_, i64>(4)?,
                     row.get::<_, String>(5)?,
-                    row.get::<_, i64>(6)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, Option<i64>>(7)?,
+                    row.get::<_, Option<i64>>(8)?,
+                    row.get::<_, Option<i64>>(9)?,
+                    row.get::<_, i64>(10)?,
                 ))
             })
             .map_err(super::sqlite_workspace::database_error)?;
         rows.map(|row| {
-            let (id, title, kind, mime_type, size, sha256, created_at) =
-                row.map_err(super::sqlite_workspace::database_error)?;
+            let (
+                id,
+                title,
+                kind,
+                mime_type,
+                size,
+                sha256,
+                role,
+                page_count,
+                last_page,
+                last_opened_at,
+                created_at,
+            ) = row.map_err(super::sqlite_workspace::database_error)?;
             Ok(ResourceDocument {
                 id,
                 title,
@@ -262,11 +279,224 @@ impl ResourceRepository for SqliteBlobStore {
                 size_bytes: u64::try_from(size).map_err(|_| ImportError::IntegrityMismatch)?,
                 sha256,
                 reused_existing_blob: false,
+                role,
+                page_count: optional_u32(page_count)?,
+                last_page: optional_u32(last_page)?,
+                last_opened_at,
                 created_at,
             })
         })
         .collect()
     }
+
+    fn reader_descriptor(
+        &self,
+        document_id: &str,
+    ) -> Result<ResourceReaderDescriptor, ImportError> {
+        let connection = self.open()?;
+        load_reader_descriptor(&connection, document_id)
+    }
+
+    fn open_readable(&self, document_id: &str) -> Result<ReadableResource, ImportError> {
+        let connection = self.open()?;
+        let registered = connection
+            .query_row(
+                "SELECT d.kind, d.mime_type, b.size_bytes, b.sha256, b.storage_key
+                 FROM resource_document d
+                 JOIN blob b ON b.id = d.blob_id
+                 WHERE d.id = ?1 AND b.integrity_state = 'ok'",
+                params![document_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(super::sqlite_workspace::database_error)?
+            .ok_or(ImportError::DocumentNotFound)?;
+        if registered.0 != "pdf" && registered.0 != "image" {
+            return Err(ImportError::UnsupportedReaderKind);
+        }
+        validate_storage_key(&registered.3, &registered.4)?;
+        let path = blob_path(&self.workspace_directory, &registered.3)?;
+        let file = File::open(path)?;
+        let size_bytes = u64::try_from(registered.2).map_err(|_| ImportError::IntegrityMismatch)?;
+        if file.metadata()?.len() != size_bytes {
+            return Err(ImportError::IntegrityMismatch);
+        }
+        Ok(ReadableResource {
+            file,
+            mime_type: registered.1,
+            size_bytes,
+        })
+    }
+
+    fn update_role(&self, document_id: &str, role: &str) -> Result<ResourceDocument, ImportError> {
+        if !matches!(role, "planning" | "reference" | "workbook" | "other") {
+            return Err(ImportError::InvalidMetadata);
+        }
+        let connection = self.open()?;
+        let changed = connection
+            .execute(
+                "UPDATE resource_document
+                 SET role = ?2, updated_at = ?3, revision = revision + 1
+                 WHERE id = ?1",
+                params![document_id, role, current_utc_millis()?],
+            )
+            .map_err(super::sqlite_workspace::database_error)?;
+        if changed == 0 {
+            return Err(ImportError::DocumentNotFound);
+        }
+        load_resource_document(&connection, document_id)
+    }
+
+    fn save_reading_progress(
+        &self,
+        document_id: &str,
+        page_count: u32,
+        last_page: u32,
+    ) -> Result<ResourceReaderDescriptor, ImportError> {
+        if page_count == 0 || last_page == 0 || last_page > page_count {
+            return Err(ImportError::InvalidMetadata);
+        }
+        let mut connection = self.open()?;
+        let descriptor = load_reader_descriptor(&connection, document_id)?;
+        if descriptor.kind != "pdf" {
+            return Err(ImportError::UnsupportedReaderKind);
+        }
+        let workspace_id = load_workspace_id(&connection)?;
+        let now = current_utc_millis()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(super::sqlite_workspace::database_error)?;
+        transaction
+            .execute(
+                "UPDATE resource_document
+                 SET page_count = ?2, updated_at = ?3
+                 WHERE id = ?1",
+                params![document_id, i64::from(page_count), now],
+            )
+            .map_err(super::sqlite_workspace::database_error)?;
+        transaction
+            .execute(
+                "INSERT INTO resource_reading_state(
+                    document_id, workspace_id, last_page, last_opened_at, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?4)
+                 ON CONFLICT(document_id) DO UPDATE SET
+                    last_page = excluded.last_page,
+                    last_opened_at = excluded.last_opened_at,
+                    updated_at = excluded.updated_at",
+                params![document_id, workspace_id, i64::from(last_page), now],
+            )
+            .map_err(super::sqlite_workspace::database_error)?;
+        transaction
+            .commit()
+            .map_err(super::sqlite_workspace::database_error)?;
+        load_reader_descriptor(&connection, document_id)
+    }
+}
+
+fn load_reader_descriptor(
+    connection: &Connection,
+    document_id: &str,
+) -> Result<ResourceReaderDescriptor, ImportError> {
+    let row = connection
+        .query_row(
+            "SELECT d.id, d.title, d.kind, d.mime_type, b.size_bytes,
+                    d.page_count, s.last_page
+             FROM resource_document d
+             JOIN blob b ON b.id = d.blob_id
+             LEFT JOIN resource_reading_state s ON s.document_id = d.id
+             WHERE d.id = ?1 AND b.integrity_state = 'ok'",
+            params![document_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, i64>(4)?,
+                    row.get::<_, Option<i64>>(5)?,
+                    row.get::<_, Option<i64>>(6)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(super::sqlite_workspace::database_error)?
+        .ok_or(ImportError::DocumentNotFound)?;
+    if row.2 != "pdf" && row.2 != "image" {
+        return Err(ImportError::UnsupportedReaderKind);
+    }
+    Ok(ResourceReaderDescriptor {
+        document_id: row.0,
+        title: row.1,
+        kind: row.2,
+        mime_type: row.3,
+        size_bytes: u64::try_from(row.4).map_err(|_| ImportError::IntegrityMismatch)?,
+        page_count: optional_u32(row.5)?,
+        last_page: optional_u32(row.6)?,
+    })
+}
+
+fn load_resource_document(
+    connection: &Connection,
+    document_id: &str,
+) -> Result<ResourceDocument, ImportError> {
+    connection
+        .query_row(
+            "SELECT d.id, d.title, d.kind, d.mime_type, b.size_bytes, b.sha256,
+                    d.role, d.page_count, s.last_page, s.last_opened_at, d.created_at
+             FROM resource_document d
+             JOIN blob b ON b.id = d.blob_id
+             LEFT JOIN resource_reading_state s ON s.document_id = d.id
+             WHERE d.id = ?1",
+            params![document_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, i64>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, Option<i64>>(7)?,
+                    row.get::<_, Option<i64>>(8)?,
+                    row.get::<_, Option<i64>>(9)?,
+                    row.get::<_, i64>(10)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(super::sqlite_workspace::database_error)?
+        .ok_or(ImportError::DocumentNotFound)
+        .and_then(|row| {
+            Ok(ResourceDocument {
+                id: row.0,
+                title: row.1,
+                kind: row.2,
+                mime_type: row.3,
+                size_bytes: u64::try_from(row.4).map_err(|_| ImportError::IntegrityMismatch)?,
+                sha256: row.5,
+                reused_existing_blob: false,
+                role: row.6,
+                page_count: optional_u32(row.7)?,
+                last_page: optional_u32(row.8)?,
+                last_opened_at: row.9,
+                created_at: row.10,
+            })
+        })
+}
+
+fn optional_u32(value: Option<i64>) -> Result<Option<u32>, ImportError> {
+    value
+        .map(|number| u32::try_from(number).map_err(|_| ImportError::IntegrityMismatch))
+        .transpose()
 }
 
 fn insert_running_job(
@@ -550,6 +780,10 @@ fn commit_job(
         size_bytes: job.expected_size,
         sha256: sha256.to_owned(),
         reused_existing_blob: reused,
+        role: "other".to_owned(),
+        page_count: None,
+        last_page: None,
+        last_opened_at: None,
         created_at: job.created_at,
     })
 }

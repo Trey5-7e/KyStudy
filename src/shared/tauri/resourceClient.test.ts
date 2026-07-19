@@ -4,6 +4,7 @@ import {
   normalizeResourceCommandError,
   parseImportEvent,
   parseResourceDocument,
+  parseResourceReaderDescriptor,
 } from "./resourceClient";
 
 const VALID_RESOURCE = {
@@ -14,6 +15,10 @@ const VALID_RESOURCE = {
   sizeBytes: 2048,
   sha256: "AB".repeat(32),
   reusedExistingBlob: false,
+  role: "planning",
+  pageCount: 6,
+  lastPage: 2,
+  lastOpenedAt: 1_700_000_000_100,
   createdAt: 1_700_000_000_000,
 };
 
@@ -62,6 +67,24 @@ describe("parseImportEvent", () => {
     });
 
     expect(event.copiedBytes).toBe(5);
+  });
+});
+
+describe("parseResourceReaderDescriptor", () => {
+  it("normalizes nullable reading progress without exposing a path", () => {
+    const descriptor = parseResourceReaderDescriptor({
+      documentId: VALID_RESOURCE.id,
+      title: VALID_RESOURCE.title,
+      kind: "pdf",
+      mimeType: "application/pdf",
+      sizeBytes: VALID_RESOURCE.sizeBytes,
+      pageCount: null,
+      lastPage: null,
+      path: "C:\\private\\source.pdf",
+    });
+
+    expect(descriptor.pageCount).toBeUndefined();
+    expect("path" in descriptor).toBe(false);
   });
 });
 

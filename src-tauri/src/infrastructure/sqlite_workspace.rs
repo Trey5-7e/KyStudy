@@ -41,7 +41,18 @@ const MIGRATION_004: Migration = Migration {
     name: "study_session",
     sql: include_str!("../../migrations/0004_study_session.sql"),
 };
-const MIGRATIONS: &[Migration] = &[MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004];
+const MIGRATION_005: Migration = Migration {
+    version: 5,
+    name: "resource_reading_and_planning",
+    sql: include_str!("../../migrations/0005_resource_planning.sql"),
+};
+const MIGRATIONS: &[Migration] = &[
+    MIGRATION_001,
+    MIGRATION_002,
+    MIGRATION_003,
+    MIGRATION_004,
+    MIGRATION_005,
+];
 
 /// `rusqlite` adapter for the single local workspace used in M1.
 #[derive(Debug, Clone)]
@@ -414,8 +425,9 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        APPLICATION_ID, MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004, Migration,
-        SqliteWorkspaceRepository, apply_migrations, configure_connection, migration_checksum,
+        APPLICATION_ID, MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004, MIGRATION_005,
+        Migration, SqliteWorkspaceRepository, apply_migrations, configure_connection,
+        migration_checksum,
     };
     use crate::application::{PersistenceError, WorkspaceRepository};
     use crate::domain::NewWorkspace;
@@ -429,7 +441,7 @@ mod tests {
             .initialize_default(&NewWorkspace::default_at(1_700_000_000_000))
             .expect("workspace should initialize");
 
-        assert_eq!(workspace.schema_version, 4);
+        assert_eq!(workspace.schema_version, 5);
     }
 
     #[test]
@@ -479,7 +491,7 @@ mod tests {
             .pragma_update(None, "application_id", APPLICATION_ID)
             .expect("application ID should be set");
         connection
-            .pragma_update(None, "user_version", 5)
+            .pragma_update(None, "user_version", 6)
             .expect("future schema should be set");
 
         let error = repository
@@ -596,6 +608,7 @@ mod tests {
         assert!(!MIGRATION_002.sql.contains("CREATE TABLE task"));
         assert!(MIGRATION_003.sql.contains("CREATE TABLE task"));
         assert!(MIGRATION_004.sql.contains("CREATE TABLE study_session"));
+        assert!(MIGRATION_005.sql.contains("CREATE TABLE study_plan"));
     }
 
     #[test]
@@ -619,11 +632,11 @@ mod tests {
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .expect("schema version should be readable");
 
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
     }
 
     #[test]
-    fn find_default_upgrades_an_existing_v3_database_to_v4() {
+    fn find_default_upgrades_an_existing_v3_database_to_latest() {
         let directory = tempdir().expect("temporary directory should exist");
         let repository = SqliteWorkspaceRepository::new(directory.path());
         std::fs::create_dir_all(repository.workspace_directory())
@@ -657,7 +670,7 @@ mod tests {
                 .expect("study session table should be readable"),
         );
 
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
         assert_eq!(session_table_count, 1);
     }
 }

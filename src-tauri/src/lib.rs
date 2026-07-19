@@ -12,6 +12,24 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .register_uri_scheme_protocol("kystudy-pdf", |context, request| {
+            context
+                .app_handle()
+                .try_state::<bootstrap::AppState>()
+                .map_or_else(
+                    || tauri::http::Response::new(b"RESOURCE_UNAVAILABLE".to_vec()),
+                    |state| infrastructure::respond_pdf(&state.resources, &request),
+                )
+        })
+        .register_uri_scheme_protocol("kystudy-image", |context, request| {
+            context
+                .app_handle()
+                .try_state::<bootstrap::AppState>()
+                .map_or_else(
+                    || tauri::http::Response::new(b"RESOURCE_UNAVAILABLE".to_vec()),
+                    |state| infrastructure::respond_image(&state.resources, &request),
+                )
+        })
         .setup(|app| {
             let application_data_directory = app.path().app_data_dir()?;
             let state = bootstrap::AppState::new(&application_data_directory);
@@ -43,6 +61,16 @@ pub fn run() {
             commands::list_study_sessions,
             commands::get_study_statistics,
             commands::list_resources,
+            commands::get_resource_reader_descriptor,
+            commands::update_resource_role,
+            commands::save_resource_reading_progress,
+            commands::list_study_plans,
+            commands::save_study_plan,
+            commands::set_study_plan_status,
+            commands::save_plan_stage,
+            commands::delete_plan_stage,
+            commands::add_plan_reference,
+            commands::delete_plan_reference,
             commands::start_resource_import,
             commands::cancel_resource_import,
             commands::create_workspace_backup,

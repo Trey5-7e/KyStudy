@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
@@ -15,7 +16,31 @@ pub(crate) struct ResourceDocument {
     pub(crate) size_bytes: u64,
     pub(crate) sha256: String,
     pub(crate) reused_existing_blob: bool,
+    pub(crate) role: String,
+    pub(crate) page_count: Option<u32>,
+    pub(crate) last_page: Option<u32>,
+    pub(crate) last_opened_at: Option<i64>,
     pub(crate) created_at: i64,
+}
+
+/// Metadata required to open one registered local resource without exposing its path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ResourceReaderDescriptor {
+    pub(crate) document_id: String,
+    pub(crate) title: String,
+    pub(crate) kind: String,
+    pub(crate) mime_type: String,
+    pub(crate) size_bytes: u64,
+    pub(crate) page_count: Option<u32>,
+    pub(crate) last_page: Option<u32>,
+}
+
+/// Backend-authorized file used only by the custom protocol boundary.
+#[derive(Debug)]
+pub(crate) struct ReadableResource {
+    pub(crate) file: File,
+    pub(crate) mime_type: String,
+    pub(crate) size_bytes: u64,
 }
 
 /// Progress emitted after each bounded streaming chunk is written.
@@ -74,6 +99,15 @@ pub(crate) enum ImportError {
     /// Existing or staged bytes do not match trusted metadata.
     #[error("file integrity verification failed")]
     IntegrityMismatch,
+    /// The requested document identifier is not registered in this workspace.
+    #[error("resource document was not found")]
+    DocumentNotFound,
+    /// The registered resource cannot be opened by the requested reader.
+    #[error("resource kind is not supported by this reader")]
+    UnsupportedReaderKind,
+    /// A role, page count, reading position, or reference page was invalid.
+    #[error("resource metadata is invalid")]
+    InvalidMetadata,
     /// A managed filesystem operation failed.
     #[error("managed file operation failed")]
     File {
@@ -98,6 +132,9 @@ impl ImportError {
             Self::Canceled => "IMPORT_CANCELED",
             Self::InvalidManagedPath => "MANAGED_PATH_INVALID",
             Self::IntegrityMismatch => "FILE_INTEGRITY_MISMATCH",
+            Self::DocumentNotFound => "RESOURCE_NOT_FOUND",
+            Self::UnsupportedReaderKind => "RESOURCE_READER_UNSUPPORTED",
+            Self::InvalidMetadata => "RESOURCE_METADATA_INVALID",
             Self::File { .. } => "FILE_OPERATION_FAILED",
             Self::Persistence(error) => error.code(),
         }
@@ -126,6 +163,24 @@ pub(crate) trait ResourceRepository: Clone + Send + Sync + 'static {
 
     /// Lists formal resources without exposing managed locations.
     fn list_resources(&self) -> Result<Vec<ResourceDocument>, ImportError>;
+
+    /// Loads reader metadata for one PDF or image document.
+    fn reader_descriptor(&self, document_id: &str)
+    -> Result<ResourceReaderDescriptor, ImportError>;
+
+    /// Opens one registered PDF or image for a custom protocol response.
+    fn open_readable(&self, document_id: &str) -> Result<ReadableResource, ImportError>;
+
+    /// Saves a user-selected semantic role for one resource.
+    fn update_role(&self, document_id: &str, role: &str) -> Result<ResourceDocument, ImportError>;
+
+    /// Saves the verified PDF page count and the current page.
+    fn save_reading_progress(
+        &self,
+        document_id: &str,
+        page_count: u32,
+        last_page: u32,
+    ) -> Result<ResourceReaderDescriptor, ImportError>;
 }
 
 /// Resource use cases with a statically dispatched storage adapter.
@@ -172,6 +227,39 @@ impl<R: ResourceRepository> ResourceUseCases<R> {
     /// Lists formal resources without re-running startup recovery.
     pub(crate) fn list(&self) -> Result<Vec<ResourceDocument>, ImportError> {
         self.repository.list_resources()
+    }
+
+    /// Loads safe metadata before opening a registered PDF or image.
+    pub(crate) fn reader_descriptor(
+        &self,
+        document_id: &str,
+    ) -> Result<ResourceReaderDescriptor, ImportError> {
+        self.repository.reader_descriptor(document_id)
+    }
+
+    /// Opens registered bytes for a controlled custom-protocol response.
+    pub(crate) fn open_readable(&self, document_id: &str) -> Result<ReadableResource, ImportError> {
+        self.repository.open_readable(document_id)
+    }
+
+    /// Updates the user-selected resource role.
+    pub(crate) fn update_role(
+        &self,
+        document_id: &str,
+        role: &str,
+    ) -> Result<ResourceDocument, ImportError> {
+        self.repository.update_role(document_id, role)
+    }
+
+    /// Persists PDF page metadata after a successful reader render.
+    pub(crate) fn save_reading_progress(
+        &self,
+        document_id: &str,
+        page_count: u32,
+        last_page: u32,
+    ) -> Result<ResourceReaderDescriptor, ImportError> {
+        self.repository
+            .save_reading_progress(document_id, page_count, last_page)
     }
 }
 

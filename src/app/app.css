@@ -90,6 +90,7 @@ h2 {
 .workspace-card,
 .today-card,
 .planning-card,
+.personal-plan-card,
 .library-card,
 .backup-card,
 .boundary-card {
@@ -123,6 +124,10 @@ h2 {
 }
 
 .planning-card {
+  margin-top: 1rem;
+}
+
+.personal-plan-card {
   margin-top: 1rem;
 }
 
@@ -1134,6 +1139,262 @@ button:disabled {
   background: #f5efe4;
 }
 
+.resource-actions,
+.resource-actions label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.resource-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.resource-actions label {
+  color: #52625a;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.resource-actions select {
+  min-height: 2.4rem;
+}
+
+.resource-reader {
+  margin-top: 1.5rem;
+  border: 1px solid rgb(30 91 66 / 16%);
+  border-radius: 1.2rem;
+  overflow: hidden;
+  background: #edf3ed;
+}
+
+.resource-reader-heading,
+.reader-toolbar,
+.personal-plan-heading,
+.plan-form-actions,
+.plan-item-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.resource-reader-heading {
+  padding: 1rem;
+}
+
+.resource-reader-heading h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.reader-toolbar {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  border-top: 1px solid rgb(30 91 66 / 12%);
+  border-bottom: 1px solid rgb(30 91 66 / 12%);
+  padding: 0.75rem;
+  background: #f5efe4;
+}
+
+.reader-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #52625a;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.reader-toolbar input {
+  width: 5rem;
+  min-height: 2.4rem;
+}
+
+.reader-toolbar [role="status"] {
+  margin-left: auto;
+  color: #52625a;
+  font-size: 0.86rem;
+}
+
+.pdf-canvas-shell,
+.image-reader {
+  display: grid;
+  min-height: 36rem;
+  overflow: auto;
+  padding: 1.5rem;
+  place-items: start center;
+  background: #d8ded8;
+}
+
+.pdf-canvas-shell canvas {
+  display: block;
+  max-width: none;
+  background: #fff;
+  box-shadow: 0 0.7rem 2rem rgb(23 35 29 / 20%);
+}
+
+.image-reader img {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  background: #fff;
+  box-shadow: 0 0.7rem 2rem rgb(23 35 29 / 20%);
+}
+
+.personal-plan-heading {
+  align-items: flex-start;
+}
+
+.personal-plan-heading p {
+  max-width: 46rem;
+  margin-bottom: 0;
+  color: #52625a;
+  line-height: 1.65;
+}
+
+.personal-plan-layout {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.3fr) minmax(0, 1fr);
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.plan-list {
+  display: grid;
+  align-content: start;
+  gap: 0.6rem;
+}
+
+.plan-list > button {
+  display: grid;
+  gap: 0.3rem;
+  border: 1px solid rgb(30 91 66 / 16%);
+  padding: 0.8rem;
+  text-align: left;
+  background: #edf3ed;
+}
+
+.plan-list > button span {
+  color: #657269;
+  font-size: 0.78rem;
+}
+
+.plan-list > .plan-list-active {
+  border-color: #d08a35;
+  box-shadow: inset 0 0 0 1px #d08a35;
+}
+
+.plan-editor {
+  min-width: 0;
+  border-radius: 1rem;
+  padding: 1rem;
+  background: #f5efe4;
+}
+
+.plan-form-grid,
+.stage-form,
+.reference-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.plan-form-grid label,
+.stage-form label,
+.reference-form label {
+  display: grid;
+  gap: 0.4rem;
+  color: #52625a;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.plan-overview-field,
+.stage-focus-field,
+.reference-note-field {
+  grid-column: 1 / -1;
+}
+
+.plan-form-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: 0.8rem;
+}
+
+.plan-subsection {
+  margin-top: 1.25rem;
+  border-top: 1px solid rgb(30 91 66 / 14%);
+  padding-top: 1rem;
+}
+
+.plan-subsection h3 {
+  margin: 0 0 0.8rem;
+}
+
+.plan-stage-list,
+.plan-reference-list {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-stage-list li,
+.plan-reference-list li {
+  content-visibility: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border-radius: 0.85rem;
+  padding: 0.8rem;
+  background: rgb(255 255 255 / 64%);
+}
+
+.plan-stage-list li > div:first-child,
+.reference-open-button {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.plan-stage-list span,
+.reference-open-button span {
+  color: #716859;
+  font-size: 0.8rem;
+}
+
+.plan-stage-list p,
+.plan-reference-list p {
+  margin: 0.35rem 0 0;
+  color: #52625a;
+  font-size: 0.84rem;
+  white-space: pre-wrap;
+}
+
+.plan-item-actions {
+  flex: 0 0 auto;
+}
+
+.reference-open-button {
+  flex: 1 1 auto;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  background: transparent;
+}
+
+.reference-form {
+  grid-template-columns: minmax(12rem, 1fr) repeat(2, minmax(6rem, 0.3fr));
+  align-items: end;
+}
+
+.reference-form button {
+  justify-self: start;
+}
+
 .resource-list li div {
   display: grid;
   gap: 0.3rem;
@@ -1240,6 +1501,14 @@ button:disabled {
   .task-workspace-with-details {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .personal-plan-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .plan-list {
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  }
 }
 
 @media (max-width: 42rem) {
@@ -1257,6 +1526,7 @@ button:disabled {
 
   .progress-copy,
   .resource-list li,
+  .resource-actions,
   .quick-task-form,
   .subject-heading,
   .subject-list li,
@@ -1288,6 +1558,37 @@ button:disabled {
 
   .task-details-row {
     grid-template-columns: 1fr;
+  }
+
+  .personal-plan-heading,
+  .resource-reader-heading,
+  .plan-stage-list li,
+  .plan-reference-list li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .plan-form-grid,
+  .stage-form,
+  .reference-form {
+    grid-template-columns: 1fr;
+  }
+
+  .plan-overview-field,
+  .stage-focus-field,
+  .reference-note-field {
+    grid-column: auto;
+  }
+
+  .reader-toolbar [role="status"] {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .pdf-canvas-shell,
+  .image-reader {
+    min-height: 24rem;
+    padding: 0.75rem;
   }
 
   .split-child-row,
