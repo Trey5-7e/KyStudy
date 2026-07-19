@@ -1,7 +1,9 @@
 use super::{PersistenceError, current_utc_millis};
 use crate::domain::{
-    DateRange, LocalDate, NewSubject, NewTask, RescheduleDraft, ScheduleValidationError, Subject,
-    SubjectColor, Task, TaskChange, TaskDetailsDraft, TaskDraft, TaskPriority, TaskTransition,
+    DateRange, LocalDate, NewStudySession, NewSubject, NewTask, RescheduleDraft,
+    ScheduleValidationError, SplitChildDraft, SplitTaskDraft, StudySession, StudyStatistics,
+    Subject, SubjectColor, Task, TaskChange, TaskDetailsDraft, TaskDraft, TaskPriority, TaskSplit,
+    TaskTransition, TrashedTask,
 };
 
 /// User-authored fields for one subject.
@@ -39,6 +41,31 @@ pub(crate) struct UpdateTaskDetailsInput {
 pub(crate) struct RescheduleTaskInput {
     pub(crate) planned_date: String,
     pub(crate) reason: String,
+}
+
+/// Child-specific values supplied by the task split form.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SplitChildInput {
+    pub(crate) title: String,
+    pub(crate) description: Option<String>,
+    pub(crate) estimated_minutes: Option<u32>,
+}
+
+/// User-authored children for one explicit task split.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SplitTaskInput {
+    pub(crate) children: Vec<SplitChildInput>,
+}
+
+/// User-authored values for one actual study record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CreateStudySessionInput {
+    pub(crate) task_id: Option<String>,
+    pub(crate) subject_id: Option<String>,
+    pub(crate) session_date: String,
+    pub(crate) duration_minutes: u32,
+    pub(crate) completion_percent: u32,
+    pub(crate) reflection: Option<String>,
 }
 
 /// Stable failures from schedule use cases and persistence.
@@ -127,6 +154,38 @@ pub(crate) trait ScheduleRepository: Clone + Send + Sync + 'static {
 
     /// Lists immutable typed changes for one task, newest first.
     fn list_task_changes(&self, task_id: &str) -> Result<Vec<TaskChange>, ScheduleError>;
+
+    /// Splits one unfinished task into children and records every change atomically.
+    fn split_task(&self, task_id: &str, split: &SplitTaskDraft)
+    -> Result<TaskSplit, ScheduleError>;
+
+    /// Moves one task into the recycle bin while preserving its history.
+    fn trash_task(&self, task_id: &str, deleted_at: i64) -> Result<TrashedTask, ScheduleError>;
+
+    /// Lists soft-deleted tasks, newest deletion first.
+    fn list_trashed_tasks(&self) -> Result<Vec<TrashedTask>, ScheduleError>;
+
+    /// Restores one soft-deleted task without changing its lifecycle state.
+    fn restore_trashed_task(&self, task_id: &str, restored_at: i64) -> Result<Task, ScheduleError>;
+
+    /// Lists unfinished tasks whose plan date precedes the supplied local date.
+    fn list_overdue_tasks(&self, today: &LocalDate) -> Result<Vec<Task>, ScheduleError>;
+
+    /// Persists one actual study record independently of task estimates.
+    fn create_study_session(
+        &self,
+        session: &NewStudySession,
+    ) -> Result<StudySession, ScheduleError>;
+
+    /// Lists actual study records in an inclusive local-date range.
+    fn list_study_sessions(&self, range: &DateRange) -> Result<Vec<StudySession>, ScheduleError>;
+
+    /// Calculates the agreed basic statistics for an explicit range and as-of date.
+    fn study_statistics(
+        &self,
+        range: &DateRange,
+        today: &LocalDate,
+    ) -> Result<StudyStatistics, ScheduleError>;
 }
 
 /// Schedule use cases with a statically dispatched repository adapter.
@@ -262,6 +321,97 @@ impl<R: ScheduleRepository> ScheduleUseCases<R> {
         }
         self.repository.list_task_changes(task_id)
     }
+
+    /// Splits an unfinished task into two or more validated children.
+    pub(crate) fn split_task(
+        &self,
+        task_id: &str,
+        input: SplitTaskInput,
+    ) -> Result<TaskSplit, ScheduleError> {
+        validate_identifier(task_id)?;
+        let children = input
+            .children
+            .into_iter()
+            .map(|child| {
+                SplitChildDraft::new(
+                    &child.title,
+                    child.description.as_deref(),
+                    child.estimated_minutes,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let split = SplitTaskDraft::new(children, current_utc_millis()?)?;
+        self.repository.split_task(task_id, &split)
+    }
+
+    /// Soft-deletes one task into the recycle bin.
+    pub(crate) fn trash_task(&self, task_id: &str) -> Result<TrashedTask, ScheduleError> {
+        validate_identifier(task_id)?;
+        self.repository.trash_task(task_id, current_utc_millis()?)
+    }
+
+    /// Lists tasks currently held in the recycle bin.
+    pub(crate) fn list_trashed_tasks(&self) -> Result<Vec<TrashedTask>, ScheduleError> {
+        self.repository.list_trashed_tasks()
+    }
+
+    /// Restores a task from the recycle bin without changing canceled/done state.
+    pub(crate) fn restore_trashed_task(&self, task_id: &str) -> Result<Task, ScheduleError> {
+        validate_identifier(task_id)?;
+        self.repository
+            .restore_trashed_task(task_id, current_utc_millis()?)
+    }
+
+    /// Lists overdue unfinished tasks using an explicit local date.
+    pub(crate) fn list_overdue_tasks(&self, today: &str) -> Result<Vec<Task>, ScheduleError> {
+        self.repository
+            .list_overdue_tasks(&LocalDate::parse(today)?)
+    }
+
+    /// Creates one validated manual actual-study record.
+    pub(crate) fn create_study_session(
+        &self,
+        input: CreateStudySessionInput,
+    ) -> Result<StudySession, ScheduleError> {
+        let session = NewStudySession::new(
+            input.task_id,
+            input.subject_id,
+            LocalDate::parse(&input.session_date)?,
+            input.duration_minutes,
+            input.completion_percent,
+            input.reflection.as_deref(),
+            current_utc_millis()?,
+        )?;
+        self.repository.create_study_session(&session)
+    }
+
+    /// Lists actual study records for one validated inclusive range.
+    pub(crate) fn list_study_sessions(
+        &self,
+        start: &str,
+        end: &str,
+    ) -> Result<Vec<StudySession>, ScheduleError> {
+        let range = DateRange::new(LocalDate::parse(start)?, LocalDate::parse(end)?)?;
+        self.repository.list_study_sessions(&range)
+    }
+
+    /// Calculates statistics for a validated range with an explicit as-of date.
+    pub(crate) fn study_statistics(
+        &self,
+        start: &str,
+        end: &str,
+        today: &str,
+    ) -> Result<StudyStatistics, ScheduleError> {
+        let range = DateRange::new(LocalDate::parse(start)?, LocalDate::parse(end)?)?;
+        self.repository
+            .study_statistics(&range, &LocalDate::parse(today)?)
+    }
+}
+
+fn validate_identifier(identifier: &str) -> Result<(), ScheduleValidationError> {
+    uuid::Uuid::parse_str(identifier)
+        .map(|_| ())
+        .map_err(|_| ScheduleValidationError::Identifier)
 }
 
 #[cfg(test)]
@@ -273,14 +423,16 @@ mod tests {
         ScheduleRepository, ScheduleUseCases, UpdateTaskDetailsInput,
     };
     use crate::domain::{
-        DateRange, NewSubject, NewTask, RescheduleDraft, Subject, Task, TaskChange,
-        TaskDetailsDraft, TaskStatus, TaskTransition,
+        DateRange, LocalDate, NewStudySession, NewSubject, NewTask, RescheduleDraft, StudySession,
+        StudyStatistics, Subject, Task, TaskChange, TaskDetailsDraft, TaskSplit, TaskStatus,
+        TaskTransition, TrashedTask,
     };
 
     #[derive(Debug, Clone, Default)]
     struct MemoryScheduleRepository {
         subjects: Arc<Mutex<Vec<Subject>>>,
         tasks: Arc<Mutex<Vec<Task>>>,
+        sessions: Arc<Mutex<Vec<StudySession>>>,
     }
 
     impl MemoryScheduleRepository {
@@ -290,6 +442,10 @@ mod tests {
 
         fn subjects(&self) -> MutexGuard<'_, Vec<Subject>> {
             self.subjects.lock().unwrap_or_else(PoisonError::into_inner)
+        }
+
+        fn sessions(&self) -> MutexGuard<'_, Vec<StudySession>> {
+            self.sessions.lock().unwrap_or_else(PoisonError::into_inner)
         }
     }
 
@@ -402,6 +558,96 @@ mod tests {
 
         fn list_task_changes(&self, _task_id: &str) -> Result<Vec<TaskChange>, ScheduleError> {
             Ok(Vec::new())
+        }
+
+        fn split_task(
+            &self,
+            _task_id: &str,
+            _split: &crate::domain::SplitTaskDraft,
+        ) -> Result<TaskSplit, ScheduleError> {
+            Err(ScheduleError::TaskNotFound)
+        }
+
+        fn trash_task(
+            &self,
+            _task_id: &str,
+            _deleted_at: i64,
+        ) -> Result<TrashedTask, ScheduleError> {
+            Err(ScheduleError::TaskNotFound)
+        }
+
+        fn list_trashed_tasks(&self) -> Result<Vec<TrashedTask>, ScheduleError> {
+            Ok(Vec::new())
+        }
+
+        fn restore_trashed_task(
+            &self,
+            _task_id: &str,
+            _restored_at: i64,
+        ) -> Result<Task, ScheduleError> {
+            Err(ScheduleError::TaskNotFound)
+        }
+
+        fn list_overdue_tasks(&self, today: &LocalDate) -> Result<Vec<Task>, ScheduleError> {
+            Ok(self
+                .tasks()
+                .iter()
+                .filter(|task| {
+                    task.planned_date < *today
+                        && matches!(task.status, TaskStatus::Todo | TaskStatus::InProgress)
+                })
+                .cloned()
+                .collect())
+        }
+
+        fn create_study_session(
+            &self,
+            session: &NewStudySession,
+        ) -> Result<StudySession, ScheduleError> {
+            let created = StudySession {
+                id: session.id.clone(),
+                task_id: session.task_id.clone(),
+                subject_id: session.subject_id.clone(),
+                session_date: session.session_date.clone(),
+                duration_minutes: session.duration_minutes,
+                completion_percent: session.completion_percent,
+                reflection: session.reflection.clone(),
+                created_at: session.created_at,
+                updated_at: session.created_at,
+            };
+            self.sessions().push(created.clone());
+            Ok(created)
+        }
+
+        fn list_study_sessions(
+            &self,
+            range: &DateRange,
+        ) -> Result<Vec<StudySession>, ScheduleError> {
+            Ok(self
+                .sessions()
+                .iter()
+                .filter(|session| {
+                    session.session_date >= range.start && session.session_date <= range.end
+                })
+                .cloned()
+                .collect())
+        }
+
+        fn study_statistics(
+            &self,
+            _range: &DateRange,
+            _today: &LocalDate,
+        ) -> Result<StudyStatistics, ScheduleError> {
+            Ok(StudyStatistics {
+                task_count: 0,
+                completed_task_count: 0,
+                completion_rate_percent: None,
+                planned_minutes: 0,
+                actual_minutes: 0,
+                minute_difference: 0,
+                overdue_task_count: 0,
+                subjects: Vec::new(),
+            })
         }
     }
 

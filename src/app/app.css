@@ -89,6 +89,7 @@ h2 {
 .status-card,
 .workspace-card,
 .today-card,
+.planning-card,
 .library-card,
 .backup-card,
 .boundary-card {
@@ -118,6 +119,10 @@ h2 {
 }
 
 .today-card {
+  margin-top: 1rem;
+}
+
+.planning-card {
   margin-top: 1rem;
 }
 
@@ -639,6 +644,356 @@ textarea:focus-visible {
   margin-bottom: 0.65rem;
 }
 
+.task-split,
+.task-trash-actions {
+  margin-top: 1rem;
+  border-top: 1px solid rgb(30 91 66 / 12%);
+  padding-top: 1rem;
+}
+
+.task-split-heading,
+.split-actions,
+.trash-heading,
+.session-heading,
+.session-list-heading,
+.week-toolbar,
+.week-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.task-split-heading {
+  align-items: flex-start;
+}
+
+.task-split h4,
+.session-panel h3,
+.trash-panel h3,
+.statistics-panel h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.task-split-heading p,
+.trash-heading p,
+.session-heading p,
+.planning-heading p,
+.planning-note {
+  margin: 0.45rem 0 0;
+  color: #716859;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.task-split form {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 0.85rem;
+}
+
+.split-child-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, 0.4fr) auto;
+  align-items: end;
+  gap: 0.65rem;
+  border-radius: 0.85rem;
+  padding: 0.7rem;
+  background: rgb(255 255 255 / 64%);
+}
+
+.split-child-row label,
+.week-toolbar label,
+.session-heading label,
+.session-form label,
+.statistics-range label {
+  display: grid;
+  gap: 0.4rem;
+  color: #52625a;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.split-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.planning-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.planning-heading h2 {
+  margin-bottom: 0;
+}
+
+.planning-heading p {
+  max-width: 46rem;
+}
+
+.planning-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1.25rem;
+  border-bottom: 1px solid rgb(30 91 66 / 12%);
+  padding-bottom: 1rem;
+}
+
+.planning-tab-active {
+  box-shadow: 0 0.4rem 1rem rgb(30 91 66 / 16%);
+}
+
+.planning-view {
+  margin-top: 1.25rem;
+}
+
+.week-toolbar {
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.week-navigation {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(8.5rem, 1fr));
+  gap: 0.65rem;
+  margin-top: 1rem;
+  overflow-x: auto;
+  padding-bottom: 0.4rem;
+}
+
+.week-day {
+  min-height: 11rem;
+  border: 1px solid rgb(30 91 66 / 12%);
+  border-radius: 1rem;
+  padding: 0.75rem;
+  background: rgb(255 255 255 / 64%);
+}
+
+.week-day-today {
+  border-color: #d08a35;
+  box-shadow: inset 0 0 0 1px #d08a35;
+}
+
+.week-day header,
+.week-task {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.week-day header span,
+.week-day > p,
+.week-task span {
+  color: #716859;
+  font-size: 0.74rem;
+}
+
+.week-day > p {
+  margin-top: 0.8rem;
+}
+
+.week-day ul,
+.overdue-panel ul,
+.session-list,
+.trash-list,
+.subject-statistics-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.week-task {
+  content-visibility: auto;
+  border-radius: 0.65rem;
+  padding: 0.55rem;
+  background: #edf3ed;
+}
+
+.week-task strong {
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.week-task-done strong {
+  color: #657269;
+  text-decoration: line-through;
+}
+
+.week-task-canceled {
+  opacity: 0.65;
+}
+
+.overdue-panel {
+  margin-top: 1rem;
+  border-radius: 1rem;
+  padding: 0.9rem;
+  color: #773b32;
+  background: #f9e8e2;
+}
+
+.overdue-panel summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.overdue-panel > p {
+  margin: 0.75rem 0 0;
+}
+
+.overdue-panel li,
+.trash-list li,
+.subject-statistics-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-radius: 0.75rem;
+  padding: 0.7rem;
+  background: rgb(255 255 255 / 64%);
+}
+
+.overdue-panel li > div,
+.trash-list li > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.overdue-panel li span,
+.trash-list li span,
+.subject-statistics-list span {
+  color: #716859;
+  font-size: 0.8rem;
+}
+
+.planning-note {
+  border-radius: 0.85rem;
+  padding: 0.75rem;
+  background: #f5efe4;
+}
+
+.session-heading,
+.trash-heading {
+  align-items: flex-start;
+}
+
+.session-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  border-radius: 1rem;
+  padding: 1rem;
+  background: #f5efe4;
+}
+
+.session-reflection {
+  grid-column: 1 / -1;
+}
+
+.session-form textarea {
+  resize: vertical;
+}
+
+.session-form .error-detail,
+.task-split .error-detail {
+  margin-top: 0.75rem;
+}
+
+.session-list-heading {
+  margin-top: 1.25rem;
+}
+
+.session-list > li {
+  content-visibility: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem 1rem;
+  border-radius: 0.9rem;
+  padding: 0.85rem;
+  background: #edf3ed;
+}
+
+.session-list > li > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.session-list span,
+.session-list p {
+  color: #52625a;
+  font-size: 0.82rem;
+}
+
+.session-list p {
+  grid-column: 1 / -1;
+  margin: 0.25rem 0 0;
+  white-space: pre-wrap;
+}
+
+.session-measure {
+  text-align: right;
+}
+
+.trash-list > li {
+  content-visibility: auto;
+}
+
+.statistics-range {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.statistics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(8rem, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+}
+
+.statistics-grid div {
+  border-radius: 1rem;
+  padding: 1rem;
+  background: #edf3ed;
+}
+
+.statistics-grid dt {
+  color: #657269;
+  font-size: 0.8rem;
+}
+
+.statistics-grid dd {
+  margin: 0.35rem 0 0;
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.statistics-panel h3 {
+  margin-top: 1.25rem;
+}
+
+.subject-statistics-list li {
+  content-visibility: auto;
+  justify-content: flex-start;
+}
+
+.subject-statistics-list li > span:nth-last-child(2) {
+  margin-left: auto;
+}
+
 .library-card {
   margin-top: 1rem;
 }
@@ -933,6 +1288,42 @@ button:disabled {
 
   .task-details-row {
     grid-template-columns: 1fr;
+  }
+
+  .split-child-row,
+  .session-form,
+  .statistics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .session-reflection {
+    grid-column: auto;
+  }
+
+  .task-split-heading,
+  .session-heading,
+  .trash-heading,
+  .overdue-panel li,
+  .trash-list li,
+  .subject-statistics-list li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .subject-statistics-list li > span:nth-last-child(2) {
+    margin-left: 0;
+  }
+
+  .session-list > li {
+    grid-template-columns: 1fr;
+  }
+
+  .session-list p {
+    grid-column: auto;
+  }
+
+  .session-measure {
+    text-align: left;
   }
 
   .task-details-row label:last-child {

@@ -6,12 +6,16 @@ use tauri_plugin_dialog::{DialogExt, FilePath};
 use uuid::Uuid;
 
 use crate::application::{
-    BackupError, BackupReport, CreateSubjectInput, CreateTaskInput, ImportError, ImportProgress,
-    RescheduleTaskInput, ResourceDocument, RestoreReport, RuntimeStatus, ScheduleError,
-    UpdateTaskDetailsInput, get_runtime_status as load_runtime_status,
+    BackupError, BackupReport, CreateStudySessionInput, CreateSubjectInput, CreateTaskInput,
+    ImportError, ImportProgress, RescheduleTaskInput, ResourceDocument, RestoreReport,
+    RuntimeStatus, ScheduleError, SplitChildInput, SplitTaskInput, UpdateTaskDetailsInput,
+    get_runtime_status as load_runtime_status,
 };
 use crate::bootstrap::AppState;
-use crate::domain::{Subject, Task, TaskChange, TaskChangeSnapshot, TaskTransition, Workspace};
+use crate::domain::{
+    StudySession, StudyStatistics, Subject, SubjectStatistics, Task, TaskChange,
+    TaskChangeSnapshot, TaskSplit, TaskTransition, TrashedTask, Workspace,
+};
 
 #[tauri::command]
 pub(crate) fn get_runtime_status() -> RuntimeStatus {
@@ -107,6 +111,128 @@ impl From<Task> for TaskDto {
             completed_at: task.completed_at,
             created_at: task.created_at,
             updated_at: task.updated_at,
+        }
+    }
+}
+
+/// One soft-deleted task with only the timestamp needed by the recycle-bin UI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TrashedTaskDto {
+    #[serde(flatten)]
+    task: TaskDto,
+    deleted_at: i64,
+}
+
+impl From<TrashedTask> for TrashedTaskDto {
+    fn from(trashed: TrashedTask) -> Self {
+        Self {
+            task: TaskDto::from(trashed.task),
+            deleted_at: trashed.deleted_at,
+        }
+    }
+}
+
+/// Parent and children returned after an atomic task split.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TaskSplitDto {
+    parent: TaskDto,
+    children: Vec<TaskDto>,
+}
+
+impl From<TaskSplit> for TaskSplitDto {
+    fn from(split: TaskSplit) -> Self {
+        Self {
+            parent: TaskDto::from(split.parent),
+            children: split.children.into_iter().map(TaskDto::from).collect(),
+        }
+    }
+}
+
+/// One actual study record returned without workspace or deletion internals.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StudySessionDto {
+    id: String,
+    task_id: Option<String>,
+    subject_id: Option<String>,
+    session_date: String,
+    duration_minutes: u32,
+    completion_percent: u32,
+    reflection: Option<String>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<StudySession> for StudySessionDto {
+    fn from(session: StudySession) -> Self {
+        Self {
+            id: session.id,
+            task_id: session.task_id,
+            subject_id: session.subject_id,
+            session_date: session.session_date.as_str().to_owned(),
+            duration_minutes: session.duration_minutes,
+            completion_percent: session.completion_percent,
+            reflection: session.reflection,
+            created_at: session.created_at,
+            updated_at: session.updated_at,
+        }
+    }
+}
+
+/// Per-subject aggregate safe for the statistics view.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SubjectStatisticsDto {
+    subject_id: Option<String>,
+    subject_name: String,
+    color_key: &'static str,
+    task_count: u32,
+    actual_minutes: u32,
+}
+
+impl From<SubjectStatistics> for SubjectStatisticsDto {
+    fn from(statistics: SubjectStatistics) -> Self {
+        Self {
+            subject_id: statistics.subject_id,
+            subject_name: statistics.subject_name,
+            color_key: statistics.color.as_str(),
+            task_count: statistics.task_count,
+            actual_minutes: statistics.actual_minutes,
+        }
+    }
+}
+
+/// Basic schedule and execution statistics for one explicit range.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StudyStatisticsDto {
+    task_count: u32,
+    completed_task_count: u32,
+    completion_rate_percent: Option<u32>,
+    planned_minutes: u32,
+    actual_minutes: u32,
+    minute_difference: i64,
+    overdue_task_count: u32,
+    subjects: Vec<SubjectStatisticsDto>,
+}
+
+impl From<StudyStatistics> for StudyStatisticsDto {
+    fn from(statistics: StudyStatistics) -> Self {
+        Self {
+            task_count: statistics.task_count,
+            completed_task_count: statistics.completed_task_count,
+            completion_rate_percent: statistics.completion_rate_percent,
+            planned_minutes: statistics.planned_minutes,
+            actual_minutes: statistics.actual_minutes,
+            minute_difference: statistics.minute_difference,
+            overdue_task_count: statistics.overdue_task_count,
+            subjects: statistics
+                .subjects
+                .into_iter()
+                .map(SubjectStatisticsDto::from)
+                .collect(),
         }
     }
 }
@@ -245,6 +371,66 @@ impl From<RescheduleTaskRequestDto> for RescheduleTaskInput {
         Self {
             planned_date: request.planned_date,
             reason: request.reason,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SplitChildRequestDto {
+    title: String,
+    description: Option<String>,
+    estimated_minutes: Option<u32>,
+}
+
+impl From<SplitChildRequestDto> for SplitChildInput {
+    fn from(request: SplitChildRequestDto) -> Self {
+        Self {
+            title: request.title,
+            description: request.description,
+            estimated_minutes: request.estimated_minutes,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SplitTaskRequestDto {
+    children: Vec<SplitChildRequestDto>,
+}
+
+impl From<SplitTaskRequestDto> for SplitTaskInput {
+    fn from(request: SplitTaskRequestDto) -> Self {
+        Self {
+            children: request
+                .children
+                .into_iter()
+                .map(SplitChildInput::from)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct CreateStudySessionRequestDto {
+    task_id: Option<String>,
+    subject_id: Option<String>,
+    session_date: String,
+    duration_minutes: u32,
+    completion_percent: u32,
+    reflection: Option<String>,
+}
+
+impl From<CreateStudySessionRequestDto> for CreateStudySessionInput {
+    fn from(request: CreateStudySessionRequestDto) -> Self {
+        Self {
+            task_id: request.task_id,
+            subject_id: request.subject_id,
+            session_date: request.session_date,
+            duration_minutes: request.duration_minutes,
+            completion_percent: request.completion_percent,
+            reflection: request.reflection,
         }
     }
 }
@@ -671,6 +857,117 @@ pub(crate) async fn list_task_changes(
         .map_err(|_| AppErrorDto::task_failed())?
         .map(|changes| changes.into_iter().map(TaskChangeDto::from).collect())
         .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn split_task(
+    task_id: String,
+    request: SplitTaskRequestDto,
+    state: State<'_, AppState>,
+) -> Result<TaskSplitDto, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.split_task(&task_id, request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(TaskSplitDto::from)
+        .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn trash_task(
+    task_id: String,
+    state: State<'_, AppState>,
+) -> Result<TrashedTaskDto, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.trash_task(&task_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(TrashedTaskDto::from)
+        .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_trashed_tasks(
+    state: State<'_, AppState>,
+) -> Result<Vec<TrashedTaskDto>, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_trashed_tasks())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|tasks| tasks.into_iter().map(TrashedTaskDto::from).collect())
+        .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn restore_trashed_task(
+    task_id: String,
+    state: State<'_, AppState>,
+) -> Result<TaskDto, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.restore_trashed_task(&task_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(TaskDto::from)
+        .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_overdue_tasks(
+    today: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TaskDto>, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_overdue_tasks(&today))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|tasks| tasks.into_iter().map(TaskDto::from).collect())
+        .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn create_study_session(
+    request: CreateStudySessionRequestDto,
+    state: State<'_, AppState>,
+) -> Result<StudySessionDto, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.create_study_session(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(StudySessionDto::from)
+        .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_study_sessions(
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<StudySessionDto>, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.list_study_sessions(&start_date, &end_date)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(|sessions| sessions.into_iter().map(StudySessionDto::from).collect())
+    .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn get_study_statistics(
+    start_date: String,
+    end_date: String,
+    today: String,
+    state: State<'_, AppState>,
+) -> Result<StudyStatisticsDto, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.study_statistics(&start_date, &end_date, &today)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(StudyStatisticsDto::from)
+    .map_err(|error| AppErrorDto::from_schedule(&error))
 }
 
 #[tauri::command]

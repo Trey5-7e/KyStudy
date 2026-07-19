@@ -15,6 +15,12 @@ pub(crate) enum ScheduleValidationError {
     /// Estimated minutes are outside the supported daily range.
     #[error("estimated minutes are invalid")]
     EstimatedMinutes,
+    /// Actual study duration is outside the supported daily range.
+    #[error("study duration is invalid")]
+    DurationMinutes,
+    /// A reported completion percentage is outside zero through one hundred.
+    #[error("study completion percentage is invalid")]
+    CompletionPercent,
     /// A timestamp cannot represent a persisted event.
     #[error("schedule timestamp is invalid")]
     Timestamp,
@@ -24,6 +30,12 @@ pub(crate) enum ScheduleValidationError {
     /// A task transition is not valid from the current state.
     #[error("task transition is invalid")]
     Transition,
+    /// A task split does not contain a safe number of valid children.
+    #[error("task split is invalid")]
+    Split,
+    /// A study record references inconsistent task and subject data.
+    #[error("study association is invalid")]
+    Association,
 }
 
 /// One validated local calendar date with lexical chronological ordering.
@@ -327,6 +339,58 @@ pub(crate) struct RescheduleDraft {
     pub(crate) reason: String,
 }
 
+/// One validated child requested by an explicit task split.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SplitChildDraft {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) description: Option<String>,
+    pub(crate) estimated_minutes: Option<u32>,
+}
+
+impl SplitChildDraft {
+    /// Validates child-specific fields while leaving inherited fields to the parent task.
+    pub(crate) fn new(
+        title: &str,
+        description: Option<&str>,
+        estimated_minutes: Option<u32>,
+    ) -> Result<Self, ScheduleValidationError> {
+        let title = normalize_task_title(title)?;
+        let description = normalize_task_description(description)?;
+        validate_estimated_minutes(estimated_minutes)?;
+        Ok(Self {
+            id: Uuid::now_v7().to_string(),
+            title,
+            description,
+            estimated_minutes,
+        })
+    }
+}
+
+/// Validated children and timestamp for one atomic task split.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SplitTaskDraft {
+    pub(crate) children: Vec<SplitChildDraft>,
+    pub(crate) created_at: i64,
+}
+
+impl SplitTaskDraft {
+    /// Requires between two and twenty child tasks.
+    pub(crate) fn new(
+        children: Vec<SplitChildDraft>,
+        created_at: i64,
+    ) -> Result<Self, ScheduleValidationError> {
+        if !(2..=20).contains(&children.len()) {
+            return Err(ScheduleValidationError::Split);
+        }
+        validate_timestamp(created_at)?;
+        Ok(Self {
+            children,
+            created_at,
+        })
+    }
+}
+
 impl RescheduleDraft {
     /// Creates a reschedule request with a concise, non-empty reason.
     pub(crate) fn new(
@@ -441,6 +505,104 @@ pub(crate) struct Task {
     pub(crate) completed_at: Option<i64>,
     pub(crate) created_at: i64,
     pub(crate) updated_at: i64,
+}
+
+/// Parent and children returned after one successful atomic split.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TaskSplit {
+    pub(crate) parent: Task,
+    pub(crate) children: Vec<Task>,
+}
+
+/// A soft-deleted task returned by the controlled recycle-bin use case.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TrashedTask {
+    pub(crate) task: Task,
+    pub(crate) deleted_at: i64,
+}
+
+/// One manually recorded actual study session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct NewStudySession {
+    pub(crate) id: String,
+    pub(crate) task_id: Option<String>,
+    pub(crate) subject_id: Option<String>,
+    pub(crate) session_date: LocalDate,
+    pub(crate) duration_minutes: u32,
+    pub(crate) completion_percent: u32,
+    pub(crate) reflection: Option<String>,
+    pub(crate) created_at: i64,
+}
+
+impl NewStudySession {
+    /// Validates one manual record without modifying any task estimate.
+    pub(crate) fn new(
+        task_id: Option<String>,
+        subject_id: Option<String>,
+        session_date: LocalDate,
+        duration_minutes: u32,
+        completion_percent: u32,
+        reflection: Option<&str>,
+        created_at: i64,
+    ) -> Result<Self, ScheduleValidationError> {
+        let task_id = normalize_optional_id(task_id)?;
+        let subject_id = normalize_optional_id(subject_id)?;
+        if !(1..=1_440).contains(&duration_minutes) {
+            return Err(ScheduleValidationError::DurationMinutes);
+        }
+        if completion_percent > 100 {
+            return Err(ScheduleValidationError::CompletionPercent);
+        }
+        let reflection = normalize_task_description(reflection)?;
+        validate_timestamp(created_at)?;
+        Ok(Self {
+            id: Uuid::now_v7().to_string(),
+            task_id,
+            subject_id,
+            session_date,
+            duration_minutes,
+            completion_percent,
+            reflection,
+            created_at,
+        })
+    }
+}
+
+/// Actual study data returned without persistence internals.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StudySession {
+    pub(crate) id: String,
+    pub(crate) task_id: Option<String>,
+    pub(crate) subject_id: Option<String>,
+    pub(crate) session_date: LocalDate,
+    pub(crate) duration_minutes: u32,
+    pub(crate) completion_percent: u32,
+    pub(crate) reflection: Option<String>,
+    pub(crate) created_at: i64,
+    pub(crate) updated_at: i64,
+}
+
+/// Per-subject values used by the basic planning statistics view.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SubjectStatistics {
+    pub(crate) subject_id: Option<String>,
+    pub(crate) subject_name: String,
+    pub(crate) color: SubjectColor,
+    pub(crate) task_count: u32,
+    pub(crate) actual_minutes: u32,
+}
+
+/// Stable aggregate values for one explicit local-date range.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StudyStatistics {
+    pub(crate) task_count: u32,
+    pub(crate) completed_task_count: u32,
+    pub(crate) completion_rate_percent: Option<u32>,
+    pub(crate) planned_minutes: u32,
+    pub(crate) actual_minutes: u32,
+    pub(crate) minute_difference: i64,
+    pub(crate) overdue_task_count: u32,
+    pub(crate) subjects: Vec<SubjectStatistics>,
 }
 
 /// Explicit task fields returned for one readable history snapshot.
@@ -563,7 +725,13 @@ impl Task {
 fn normalize_subject_id(
     subject_id: Option<String>,
 ) -> Result<Option<String>, ScheduleValidationError> {
-    subject_id
+    normalize_optional_id(subject_id)
+}
+
+fn normalize_optional_id(
+    identifier: Option<String>,
+) -> Result<Option<String>, ScheduleValidationError> {
+    identifier
         .map(|value| {
             Uuid::parse_str(&value)
                 .map(|identifier| identifier.to_string())

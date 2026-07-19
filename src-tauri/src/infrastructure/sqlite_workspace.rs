@@ -36,7 +36,12 @@ const MIGRATION_003: Migration = Migration {
     name: "schedule_foundation",
     sql: include_str!("../../migrations/0003_schedule_foundation.sql"),
 };
-const MIGRATIONS: &[Migration] = &[MIGRATION_001, MIGRATION_002, MIGRATION_003];
+const MIGRATION_004: Migration = Migration {
+    version: 4,
+    name: "study_session",
+    sql: include_str!("../../migrations/0004_study_session.sql"),
+};
+const MIGRATIONS: &[Migration] = &[MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004];
 
 /// `rusqlite` adapter for the single local workspace used in M1.
 #[derive(Debug, Clone)]
@@ -409,7 +414,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        APPLICATION_ID, MIGRATION_001, MIGRATION_002, MIGRATION_003, Migration,
+        APPLICATION_ID, MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004, Migration,
         SqliteWorkspaceRepository, apply_migrations, configure_connection, migration_checksum,
     };
     use crate::application::{PersistenceError, WorkspaceRepository};
@@ -424,7 +429,7 @@ mod tests {
             .initialize_default(&NewWorkspace::default_at(1_700_000_000_000))
             .expect("workspace should initialize");
 
-        assert_eq!(workspace.schema_version, 3);
+        assert_eq!(workspace.schema_version, 4);
     }
 
     #[test]
@@ -474,7 +479,7 @@ mod tests {
             .pragma_update(None, "application_id", APPLICATION_ID)
             .expect("application ID should be set");
         connection
-            .pragma_update(None, "user_version", 4)
+            .pragma_update(None, "user_version", 5)
             .expect("future schema should be set");
 
         let error = repository
@@ -590,10 +595,11 @@ mod tests {
     fn migration_sql_does_not_include_business_feature_tables() {
         assert!(!MIGRATION_002.sql.contains("CREATE TABLE task"));
         assert!(MIGRATION_003.sql.contains("CREATE TABLE task"));
+        assert!(MIGRATION_004.sql.contains("CREATE TABLE study_session"));
     }
 
     #[test]
-    fn find_default_upgrades_an_existing_v1_database_to_v3() {
+    fn find_default_upgrades_an_existing_v1_database_to_latest() {
         let directory = tempdir().expect("temporary directory should exist");
         let repository = SqliteWorkspaceRepository::new(directory.path());
         std::fs::create_dir_all(repository.workspace_directory())
@@ -613,6 +619,45 @@ mod tests {
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .expect("schema version should be readable");
 
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
+    }
+
+    #[test]
+    fn find_default_upgrades_an_existing_v3_database_to_v4() {
+        let directory = tempdir().expect("temporary directory should exist");
+        let repository = SqliteWorkspaceRepository::new(directory.path());
+        std::fs::create_dir_all(repository.workspace_directory())
+            .expect("workspace directory should exist");
+        let mut connection =
+            Connection::open(repository.database_path()).expect("workspace database should open");
+        configure_connection(&connection).expect("connection should configure");
+        apply_migrations(
+            &mut connection,
+            &[MIGRATION_001, MIGRATION_002, MIGRATION_003],
+        )
+        .expect("v3 migrations should apply");
+        drop(connection);
+
+        repository
+            .find_default()
+            .expect("opening should apply study-session migration");
+        let connection =
+            Connection::open(repository.database_path()).expect("upgraded database should reopen");
+        let (version, session_table_count): (u32, i64) = (
+            connection
+                .pragma_query_value(None, "user_version", |row| row.get(0))
+                .expect("schema version should be readable"),
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_schema
+                     WHERE type = 'table' AND name = 'study_session'",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("study session table should be readable"),
+        );
+
+        assert_eq!(version, 4);
+        assert_eq!(session_table_count, 1);
     }
 }

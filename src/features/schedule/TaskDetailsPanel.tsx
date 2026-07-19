@@ -4,14 +4,17 @@ import {
   normalizeScheduleCommandError,
   type RescheduleTaskInput,
   type ScheduleCommandError,
+  type SplitTaskInput,
   type StudySubject,
   type StudyTask,
+  type TaskSplitResult,
   type TaskPriority,
   type TaskTransition,
   type UpdateTaskDetailsInput,
 } from "../../shared/tauri/scheduleClient";
 import { TaskHistoryPanel } from "./TaskHistoryPanel";
 import { TaskReschedulePanel } from "./TaskReschedulePanel";
+import { TaskSplitPanel } from "./TaskSplitPanel";
 
 const STATUS_LABELS = {
   todo: "待开始",
@@ -28,6 +31,8 @@ interface TaskDetailsPanelProps {
   onSave: (request: UpdateTaskDetailsInput) => Promise<StudyTask>;
   onTransition: (transition: TaskTransition) => Promise<void>;
   onReschedule: (request: RescheduleTaskInput) => Promise<StudyTask>;
+  onSplit: (request: SplitTaskInput) => Promise<TaskSplitResult>;
+  onTrash: () => Promise<void>;
 }
 
 export function TaskDetailsPanel({
@@ -38,6 +43,8 @@ export function TaskDetailsPanel({
   onSave,
   onTransition,
   onReschedule,
+  onSplit,
+  onTrash,
 }: TaskDetailsPanelProps) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
@@ -50,6 +57,7 @@ export function TaskDetailsPanel({
   const [pendingTransition, setPendingTransition] = useState<TaskTransition>();
   const [hasPendingReschedule, setHasPendingReschedule] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmTrash, setConfirmTrash] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [error, setError] = useState<ScheduleCommandError>();
   const hasUnsavedChanges =
@@ -139,6 +147,26 @@ export function TaskDetailsPanel({
       return;
     }
     onClose();
+  };
+
+  const handleTrash = async () => {
+    if (hasUnsavedWork) {
+      setError({
+        code: "UNSAVED_TASK_DETAILS",
+        message: "任务详情或延期区域还有未保存的修改。",
+        action: "先保存或清除修改，再移入回收站。",
+      });
+      return;
+    }
+    setPendingTransition("cancel");
+    setError(undefined);
+    try {
+      await onTrash();
+    } catch (reason: unknown) {
+      setError(normalizeScheduleCommandError(reason));
+      setPendingTransition(undefined);
+      setConfirmTrash(false);
+    }
   };
 
   return (
@@ -353,6 +381,45 @@ export function TaskDetailsPanel({
             </button>
           )
         ) : null}
+      </div>
+
+      <TaskSplitPanel
+        task={task}
+        disabled={hasUnsavedWork || pendingTransition !== undefined}
+        onSplit={onSplit}
+      />
+
+      <div className="task-trash-actions">
+        {confirmTrash ? (
+          <div className="cancel-confirmation" role="alert">
+            <span>任务会进入回收站，历史与学习记录不会被删除。</span>
+            <button
+              type="button"
+              className="danger-button"
+              disabled={pendingTransition !== undefined}
+              onClick={() => void handleTrash()}
+            >
+              {pendingTransition !== undefined ? "正在移动…" : "确认移入回收站"}
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={pendingTransition !== undefined}
+              onClick={() => setConfirmTrash(false)}
+            >
+              返回
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="danger-button"
+            disabled={pendingTransition !== undefined}
+            onClick={() => setConfirmTrash(true)}
+          >
+            移入回收站
+          </button>
+        )}
       </div>
 
       <TaskReschedulePanel

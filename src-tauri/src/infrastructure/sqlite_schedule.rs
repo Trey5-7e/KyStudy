@@ -6,9 +6,10 @@ use uuid::Uuid;
 
 use crate::application::{ScheduleError, ScheduleRepository};
 use crate::domain::{
-    DateRange, LocalDate, NewSubject, NewTask, RescheduleDraft, Subject, SubjectColor, Task,
-    TaskChange, TaskChangeSnapshot, TaskChangeType, TaskDetailsDraft, TaskPriority, TaskStatus,
-    TaskTransition,
+    DateRange, LocalDate, NewStudySession, NewSubject, NewTask, RescheduleDraft, SplitTaskDraft,
+    StudySession, StudyStatistics, Subject, SubjectColor, SubjectStatistics, Task, TaskChange,
+    TaskChangeSnapshot, TaskChangeType, TaskDetailsDraft, TaskPriority, TaskSplit, TaskStatus,
+    TaskTransition, TrashedTask,
 };
 
 use super::sqlite_workspace::{SqliteWorkspaceRepository, database_error, migrate, open_database};
@@ -377,6 +378,266 @@ impl ScheduleRepository for SqliteScheduleRepository {
         })
         .collect()
     }
+
+    fn split_task(
+        &self,
+        task_id: &str,
+        split: &SplitTaskDraft,
+    ) -> Result<TaskSplit, ScheduleError> {
+        let (mut connection, workspace_id) = self.open_current()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(schedule_database_error)?;
+        let mut parent = load_task(&transaction, &workspace_id, task_id)?;
+        let before = parent.clone();
+        parent.transition(TaskTransition::Cancel, split.created_at)?;
+        transaction
+            .execute(
+                "UPDATE task
+                 SET status = ?1, completed_at = NULL, updated_at = ?2
+                 WHERE id = ?3 AND workspace_id = ?4 AND deleted_at IS NULL",
+                params![
+                    parent.status.as_str(),
+                    parent.updated_at,
+                    parent.id,
+                    workspace_id
+                ],
+            )
+            .map_err(schedule_database_error)?;
+
+        let mut children = Vec::with_capacity(split.children.len());
+        for (index, child) in split.children.iter().enumerate() {
+            let order_offset =
+                u32::try_from(index + 1).map_err(|_| ScheduleError::InvalidStoredData)?;
+            let manual_order = parent
+                .manual_order
+                .checked_add(order_offset)
+                .ok_or(ScheduleError::InvalidStoredData)?;
+            let created = Task {
+                id: child.id.clone(),
+                subject_id: parent.subject_id.clone(),
+                parent_task_id: Some(parent.id.clone()),
+                title: child.title.clone(),
+                description: child.description.clone(),
+                planned_date: parent.planned_date.clone(),
+                estimated_minutes: child.estimated_minutes,
+                priority: parent.priority,
+                status: TaskStatus::Todo,
+                manual_order,
+                completed_at: None,
+                created_at: split.created_at,
+                updated_at: split.created_at,
+            };
+            insert_task(&transaction, &workspace_id, &created)?;
+            append_change(
+                &transaction,
+                &created,
+                None,
+                TaskChangeType::Created,
+                None,
+                split.created_at,
+            )?;
+            children.push(created);
+        }
+        append_change(
+            &transaction,
+            &parent,
+            Some(&before),
+            TaskChangeType::Split,
+            None,
+            split.created_at,
+        )?;
+        transaction.commit().map_err(schedule_database_error)?;
+        Ok(TaskSplit { parent, children })
+    }
+
+    fn trash_task(&self, task_id: &str, deleted_at: i64) -> Result<TrashedTask, ScheduleError> {
+        let (mut connection, workspace_id) = self.open_current()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(schedule_database_error)?;
+        let mut task = load_task(&transaction, &workspace_id, task_id)?;
+        if deleted_at < task.updated_at {
+            return Err(crate::domain::ScheduleValidationError::Timestamp.into());
+        }
+        let before = task.clone();
+        task.updated_at = deleted_at;
+        transaction
+            .execute(
+                "UPDATE task SET deleted_at = ?1, updated_at = ?1
+                 WHERE id = ?2 AND workspace_id = ?3 AND deleted_at IS NULL",
+                params![deleted_at, task.id, workspace_id],
+            )
+            .map_err(schedule_database_error)?;
+        append_change(
+            &transaction,
+            &task,
+            Some(&before),
+            TaskChangeType::Trashed,
+            None,
+            deleted_at,
+        )?;
+        transaction.commit().map_err(schedule_database_error)?;
+        Ok(TrashedTask { task, deleted_at })
+    }
+
+    fn list_trashed_tasks(&self) -> Result<Vec<TrashedTask>, ScheduleError> {
+        let (connection, workspace_id) = self.open_current()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, subject_id, parent_task_id, title, description, planned_date,
+                        estimated_minutes, priority, status, manual_order, completed_at,
+                        created_at, updated_at, deleted_at
+                 FROM task
+                 WHERE workspace_id = ?1 AND deleted_at IS NOT NULL
+                 ORDER BY deleted_at DESC, id DESC",
+            )
+            .map_err(schedule_database_error)?;
+        let rows = statement
+            .query_map([workspace_id], raw_trashed_task)
+            .map_err(schedule_database_error)?;
+        rows.map(|row| {
+            let (raw, deleted_at) = row.map_err(schedule_database_error)?;
+            Ok(TrashedTask {
+                task: task_from_raw(raw)?,
+                deleted_at,
+            })
+        })
+        .collect()
+    }
+
+    fn restore_trashed_task(&self, task_id: &str, restored_at: i64) -> Result<Task, ScheduleError> {
+        let (mut connection, workspace_id) = self.open_current()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(schedule_database_error)?;
+        let (raw, deleted_at) = transaction
+            .query_row(
+                "SELECT id, subject_id, parent_task_id, title, description, planned_date,
+                        estimated_minutes, priority, status, manual_order, completed_at,
+                        created_at, updated_at, deleted_at
+                 FROM task
+                 WHERE id = ?1 AND workspace_id = ?2 AND deleted_at IS NOT NULL",
+                params![task_id, workspace_id],
+                raw_trashed_task,
+            )
+            .optional()
+            .map_err(schedule_database_error)?
+            .ok_or(ScheduleError::TaskNotFound)?;
+        let mut task = task_from_raw(raw)?;
+        if restored_at < task.updated_at || restored_at < deleted_at {
+            return Err(crate::domain::ScheduleValidationError::Timestamp.into());
+        }
+        let before = task.clone();
+        task.updated_at = restored_at;
+        transaction
+            .execute(
+                "UPDATE task SET deleted_at = NULL, updated_at = ?1
+                 WHERE id = ?2 AND workspace_id = ?3 AND deleted_at IS NOT NULL",
+                params![restored_at, task.id, workspace_id],
+            )
+            .map_err(schedule_database_error)?;
+        append_change(
+            &transaction,
+            &task,
+            Some(&before),
+            TaskChangeType::Restored,
+            Some("从回收站恢复"),
+            restored_at,
+        )?;
+        transaction.commit().map_err(schedule_database_error)?;
+        Ok(task)
+    }
+
+    fn list_overdue_tasks(&self, today: &LocalDate) -> Result<Vec<Task>, ScheduleError> {
+        let (connection, workspace_id) = self.open_current()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, subject_id, parent_task_id, title, description, planned_date,
+                        estimated_minutes, priority, status, manual_order, completed_at,
+                        created_at, updated_at
+                 FROM task
+                 WHERE workspace_id = ?1
+                   AND planned_date < ?2
+                   AND status IN ('todo', 'in_progress')
+                   AND deleted_at IS NULL
+                 ORDER BY planned_date, CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
+                          manual_order, created_at, id",
+            )
+            .map_err(schedule_database_error)?;
+        let rows = statement
+            .query_map(params![workspace_id, today.as_str()], raw_task)
+            .map_err(schedule_database_error)?;
+        rows.map(|row| row.map_err(schedule_database_error).and_then(task_from_raw))
+            .collect()
+    }
+
+    fn create_study_session(
+        &self,
+        session: &NewStudySession,
+    ) -> Result<StudySession, ScheduleError> {
+        let (mut connection, workspace_id) = self.open_current()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(schedule_database_error)?;
+        validate_study_associations(&transaction, &workspace_id, session)?;
+        transaction
+            .execute(
+                "INSERT INTO study_session(
+                    id, workspace_id, task_id, subject_id, session_date, duration_minutes,
+                    completion_percent, reflection, created_at, updated_at, deleted_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, NULL)",
+                params![
+                    session.id,
+                    workspace_id,
+                    session.task_id,
+                    session.subject_id,
+                    session.session_date.as_str(),
+                    session.duration_minutes,
+                    session.completion_percent,
+                    session.reflection,
+                    session.created_at
+                ],
+            )
+            .map_err(schedule_database_error)?;
+        transaction.commit().map_err(schedule_database_error)?;
+        Ok(study_session_from_new(session))
+    }
+
+    fn list_study_sessions(&self, range: &DateRange) -> Result<Vec<StudySession>, ScheduleError> {
+        let (connection, workspace_id) = self.open_current()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, task_id, subject_id, session_date, duration_minutes,
+                        completion_percent, reflection, created_at, updated_at
+                 FROM study_session
+                 WHERE workspace_id = ?1
+                   AND session_date BETWEEN ?2 AND ?3
+                   AND deleted_at IS NULL
+                 ORDER BY session_date DESC, created_at DESC, id DESC",
+            )
+            .map_err(schedule_database_error)?;
+        let rows = statement
+            .query_map(
+                params![workspace_id, range.start.as_str(), range.end.as_str()],
+                raw_study_session,
+            )
+            .map_err(schedule_database_error)?;
+        rows.map(|row| {
+            row.map_err(schedule_database_error)
+                .and_then(study_session_from_raw)
+        })
+        .collect()
+    }
+
+    fn study_statistics(
+        &self,
+        range: &DateRange,
+        today: &LocalDate,
+    ) -> Result<StudyStatistics, ScheduleError> {
+        let (connection, workspace_id) = self.open_current()?;
+        calculate_statistics(&connection, &workspace_id, range, today)
+    }
 }
 
 #[derive(Debug)]
@@ -450,6 +711,10 @@ fn raw_task(row: &Row<'_>) -> rusqlite::Result<RawTask> {
     })
 }
 
+fn raw_trashed_task(row: &Row<'_>) -> rusqlite::Result<(RawTask, i64)> {
+    Ok((raw_task(row)?, row.get(13)?))
+}
+
 fn task_from_raw(raw: RawTask) -> Result<Task, ScheduleError> {
     let estimated_minutes = raw
         .estimated_minutes
@@ -497,6 +762,303 @@ fn task_from_new(task: &NewTask) -> Task {
         created_at: task.created_at,
         updated_at: task.created_at,
     }
+}
+
+fn insert_task(
+    connection: &Connection,
+    workspace_id: &str,
+    task: &Task,
+) -> Result<(), ScheduleError> {
+    connection
+        .execute(
+            "INSERT INTO task(
+                id, workspace_id, subject_id, parent_task_id, title, description,
+                planned_date, estimated_minutes, priority, status, manual_order,
+                source_type, completed_at, deleted_at, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+                       'manual', ?12, NULL, ?13, ?14)",
+            params![
+                task.id,
+                workspace_id,
+                task.subject_id,
+                task.parent_task_id,
+                task.title,
+                task.description,
+                task.planned_date.as_str(),
+                task.estimated_minutes,
+                task.priority.as_str(),
+                task.status.as_str(),
+                task.manual_order,
+                task.completed_at,
+                task.created_at,
+                task.updated_at
+            ],
+        )
+        .map_err(schedule_database_error)?;
+    Ok(())
+}
+
+#[derive(Debug)]
+struct RawStudySession {
+    id: String,
+    task_id: Option<String>,
+    subject_id: Option<String>,
+    session_date: String,
+    duration_minutes: i64,
+    completion_percent: i64,
+    reflection: Option<String>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+fn raw_study_session(row: &Row<'_>) -> rusqlite::Result<RawStudySession> {
+    Ok(RawStudySession {
+        id: row.get(0)?,
+        task_id: row.get(1)?,
+        subject_id: row.get(2)?,
+        session_date: row.get(3)?,
+        duration_minutes: row.get(4)?,
+        completion_percent: row.get(5)?,
+        reflection: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+    })
+}
+
+fn study_session_from_raw(raw: RawStudySession) -> Result<StudySession, ScheduleError> {
+    let duration_minutes =
+        u32::try_from(raw.duration_minutes).map_err(|_| ScheduleError::InvalidStoredData)?;
+    let completion_percent =
+        u32::try_from(raw.completion_percent).map_err(|_| ScheduleError::InvalidStoredData)?;
+    if Uuid::parse_str(&raw.id).is_err()
+        || !(1..=1_440).contains(&duration_minutes)
+        || completion_percent > 100
+        || raw.created_at < 0
+        || raw.updated_at < raw.created_at
+        || raw
+            .reflection
+            .as_ref()
+            .is_some_and(|reflection| reflection.chars().count() > 2_000)
+    {
+        return Err(ScheduleError::InvalidStoredData);
+    }
+    Ok(StudySession {
+        id: raw.id,
+        task_id: raw.task_id,
+        subject_id: raw.subject_id,
+        session_date: LocalDate::parse(&raw.session_date)
+            .map_err(|_| ScheduleError::InvalidStoredData)?,
+        duration_minutes,
+        completion_percent,
+        reflection: raw.reflection,
+        created_at: raw.created_at,
+        updated_at: raw.updated_at,
+    })
+}
+
+fn study_session_from_new(session: &NewStudySession) -> StudySession {
+    StudySession {
+        id: session.id.clone(),
+        task_id: session.task_id.clone(),
+        subject_id: session.subject_id.clone(),
+        session_date: session.session_date.clone(),
+        duration_minutes: session.duration_minutes,
+        completion_percent: session.completion_percent,
+        reflection: session.reflection.clone(),
+        created_at: session.created_at,
+        updated_at: session.created_at,
+    }
+}
+
+fn validate_study_associations(
+    connection: &Connection,
+    workspace_id: &str,
+    session: &NewStudySession,
+) -> Result<(), ScheduleError> {
+    if let Some(task_id) = session.task_id.as_deref() {
+        let task_subject = connection
+            .query_row(
+                "SELECT subject_id FROM task
+                 WHERE id = ?1 AND workspace_id = ?2 AND deleted_at IS NULL",
+                params![task_id, workspace_id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .map_err(schedule_database_error)?
+            .ok_or(ScheduleError::TaskNotFound)?;
+        if task_subject != session.subject_id {
+            return Err(crate::domain::ScheduleValidationError::Association.into());
+        }
+        return Ok(());
+    }
+    validate_subject(connection, workspace_id, session.subject_id.as_deref())
+}
+
+fn calculate_statistics(
+    connection: &Connection,
+    workspace_id: &str,
+    range: &DateRange,
+    today: &LocalDate,
+) -> Result<StudyStatistics, ScheduleError> {
+    let (task_count, completed_task_count, planned_minutes) = connection
+        .query_row(
+            "SELECT COUNT(*),
+                    COALESCE(SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(estimated_minutes), 0)
+             FROM task
+             WHERE workspace_id = ?1
+               AND planned_date BETWEEN ?2 AND ?3
+               AND status <> 'canceled'
+               AND deleted_at IS NULL",
+            params![workspace_id, range.start.as_str(), range.end.as_str()],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )
+        .map_err(schedule_database_error)?;
+    let actual_minutes = connection
+        .query_row(
+            "SELECT COALESCE(SUM(duration_minutes), 0)
+             FROM study_session
+             WHERE workspace_id = ?1
+               AND session_date BETWEEN ?2 AND ?3
+               AND deleted_at IS NULL",
+            params![workspace_id, range.start.as_str(), range.end.as_str()],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(schedule_database_error)?;
+    let overdue_task_count = connection
+        .query_row(
+            "SELECT COUNT(*) FROM task
+             WHERE workspace_id = ?1
+               AND planned_date < ?2
+               AND status IN ('todo', 'in_progress')
+               AND deleted_at IS NULL",
+            params![workspace_id, today.as_str()],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(schedule_database_error)?;
+
+    let task_count = checked_u32(task_count)?;
+    let completed_task_count = checked_u32(completed_task_count)?;
+    let planned_minutes = checked_u32(planned_minutes)?;
+    let actual_minutes = checked_u32(actual_minutes)?;
+    let overdue_task_count = checked_u32(overdue_task_count)?;
+    let completion_rate_percent = (task_count > 0).then(|| {
+        (completed_task_count
+            .saturating_mul(100)
+            .saturating_add(task_count / 2))
+            / task_count
+    });
+    let minute_difference = i64::from(actual_minutes) - i64::from(planned_minutes);
+    let subjects = load_subject_statistics(connection, workspace_id, range)?;
+
+    Ok(StudyStatistics {
+        task_count,
+        completed_task_count,
+        completion_rate_percent,
+        planned_minutes,
+        actual_minutes,
+        minute_difference,
+        overdue_task_count,
+        subjects,
+    })
+}
+
+fn load_subject_statistics(
+    connection: &Connection,
+    workspace_id: &str,
+    range: &DateRange,
+) -> Result<Vec<SubjectStatistics>, ScheduleError> {
+    let mut statement = connection
+        .prepare(
+            "WITH task_totals AS (
+                SELECT subject_id, COUNT(*) AS task_count
+                FROM task
+                WHERE workspace_id = ?1
+                  AND planned_date BETWEEN ?2 AND ?3
+                  AND status <> 'canceled'
+                  AND deleted_at IS NULL
+                GROUP BY subject_id
+             ), session_totals AS (
+                SELECT subject_id, COALESCE(SUM(duration_minutes), 0) AS actual_minutes
+                FROM study_session
+                WHERE workspace_id = ?1
+                  AND session_date BETWEEN ?2 AND ?3
+                  AND deleted_at IS NULL
+                GROUP BY subject_id
+             )
+             SELECT subject.id, subject.name, subject.color_key,
+                    COALESCE(task_totals.task_count, 0),
+                    COALESCE(session_totals.actual_minutes, 0)
+             FROM subject
+             LEFT JOIN task_totals ON task_totals.subject_id = subject.id
+             LEFT JOIN session_totals ON session_totals.subject_id = subject.id
+             WHERE subject.workspace_id = ?1
+               AND (COALESCE(task_totals.task_count, 0) > 0
+                    OR COALESCE(session_totals.actual_minutes, 0) > 0)
+             ORDER BY subject.sort_order, subject.created_at, subject.id",
+        )
+        .map_err(schedule_database_error)?;
+    let rows = statement
+        .query_map(
+            params![workspace_id, range.start.as_str(), range.end.as_str()],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, i64>(4)?,
+                ))
+            },
+        )
+        .map_err(schedule_database_error)?;
+    let mut subjects = rows
+        .map(|row| {
+            let (subject_id, subject_name, color_key, task_count, actual_minutes) =
+                row.map_err(schedule_database_error)?;
+            Ok(SubjectStatistics {
+                subject_id: Some(subject_id),
+                subject_name,
+                color: SubjectColor::parse(&color_key).ok_or(ScheduleError::InvalidStoredData)?,
+                task_count: checked_u32(task_count)?,
+                actual_minutes: checked_u32(actual_minutes)?,
+            })
+        })
+        .collect::<Result<Vec<_>, ScheduleError>>()?;
+    let (unclassified_tasks, unclassified_minutes) = connection
+        .query_row(
+            "SELECT
+                (SELECT COUNT(*) FROM task
+                 WHERE workspace_id = ?1 AND subject_id IS NULL
+                   AND planned_date BETWEEN ?2 AND ?3
+                   AND status <> 'canceled' AND deleted_at IS NULL),
+                (SELECT COALESCE(SUM(duration_minutes), 0) FROM study_session
+                 WHERE workspace_id = ?1 AND subject_id IS NULL
+                   AND session_date BETWEEN ?2 AND ?3 AND deleted_at IS NULL)",
+            params![workspace_id, range.start.as_str(), range.end.as_str()],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+        )
+        .map_err(schedule_database_error)?;
+    if unclassified_tasks > 0 || unclassified_minutes > 0 {
+        subjects.push(SubjectStatistics {
+            subject_id: None,
+            subject_name: "未分类".to_owned(),
+            color: SubjectColor::Slate,
+            task_count: checked_u32(unclassified_tasks)?,
+            actual_minutes: checked_u32(unclassified_minutes)?,
+        });
+    }
+    Ok(subjects)
+}
+
+fn checked_u32(value: i64) -> Result<u32, ScheduleError> {
+    u32::try_from(value).map_err(|_| ScheduleError::InvalidStoredData)
 }
 
 fn load_task(
@@ -767,8 +1329,9 @@ mod tests {
     use super::SqliteScheduleRepository;
     use crate::application::{ScheduleError, ScheduleRepository, WorkspaceRepository};
     use crate::domain::{
-        DateRange, LocalDate, NewSubject, NewTask, NewWorkspace, RescheduleDraft, SubjectColor,
-        TaskChangeType, TaskDetailsDraft, TaskDraft, TaskPriority, TaskStatus, TaskTransition,
+        DateRange, LocalDate, NewStudySession, NewSubject, NewTask, NewWorkspace, RescheduleDraft,
+        SplitChildDraft, SplitTaskDraft, SubjectColor, TaskChangeType, TaskDetailsDraft, TaskDraft,
+        TaskPriority, TaskStatus, TaskTransition,
     };
     use crate::infrastructure::SqliteWorkspaceRepository;
 
@@ -1218,5 +1781,245 @@ mod tests {
         assert_eq!(changes[0].change_type, TaskChangeType::Restored);
         assert_eq!(changes[1].change_type, TaskChangeType::Canceled);
         assert_eq!(changes[2].change_type, TaskChangeType::Created);
+    }
+
+    #[test]
+    fn split_task_cancels_parent_and_creates_inherited_children_atomically() {
+        let fixture = initialized_fixture();
+        let parent = fixture
+            .schedule
+            .create_task(&new_task(
+                "完成强化章节",
+                TaskPriority::High,
+                1_700_000_000_001,
+            ))
+            .expect("parent should persist");
+        let split = SplitTaskDraft::new(
+            vec![
+                SplitChildDraft::new("看课程", None, Some(30)).expect("child should be valid"),
+                SplitChildDraft::new("做习题", Some("完成对应例题"), Some(60))
+                    .expect("child should be valid"),
+            ],
+            1_700_000_000_002,
+        )
+        .expect("split should be valid");
+
+        let result = fixture
+            .schedule
+            .split_task(&parent.id, &split)
+            .expect("split should commit");
+        let changes = fixture
+            .schedule
+            .list_task_changes(&parent.id)
+            .expect("parent history should list");
+
+        assert_eq!(result.parent.status, TaskStatus::Canceled);
+        assert_eq!(result.children.len(), 2);
+        assert!(result.children.iter().all(|child| {
+            child.parent_task_id.as_deref() == Some(parent.id.as_str())
+                && child.planned_date == parent.planned_date
+                && child.priority == parent.priority
+                && child.subject_id == parent.subject_id
+        }));
+        assert_eq!(changes[0].change_type, TaskChangeType::Split);
+    }
+
+    #[test]
+    fn split_task_rolls_back_parent_and_first_child_when_a_later_insert_fails() {
+        let fixture = initialized_fixture();
+        let parent = fixture
+            .schedule
+            .create_task(&new_task(
+                "原子拆分",
+                TaskPriority::Normal,
+                1_700_000_000_001,
+            ))
+            .expect("parent should persist");
+        let first = SplitChildDraft::new("第一步", None, Some(30)).expect("child should be valid");
+        let mut second =
+            SplitChildDraft::new("第二步", None, Some(30)).expect("child should be valid");
+        second.id = first.id.clone();
+        let split = SplitTaskDraft::new(vec![first, second], 1_700_000_000_002)
+            .expect("split fixture should be structurally valid");
+
+        fixture
+            .schedule
+            .split_task(&parent.id, &split)
+            .expect_err("duplicate child id must fail the transaction");
+        let tasks = fixture
+            .schedule
+            .list_tasks(&one_day_range())
+            .expect("tasks should remain readable");
+        let changes = fixture
+            .schedule
+            .list_task_changes(&parent.id)
+            .expect("history should remain readable");
+
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].status, TaskStatus::Todo);
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].change_type, TaskChangeType::Created);
+    }
+
+    #[test]
+    fn recycle_bin_restore_preserves_canceled_lifecycle_state() {
+        let fixture = initialized_fixture();
+        let created = fixture
+            .schedule
+            .create_task(&new_task(
+                "回收站状态",
+                TaskPriority::Normal,
+                1_700_000_000_001,
+            ))
+            .expect("task should persist");
+        fixture
+            .schedule
+            .transition_task(&created.id, TaskTransition::Cancel, 1_700_000_000_002)
+            .expect("task should cancel");
+        fixture
+            .schedule
+            .trash_task(&created.id, 1_700_000_000_003)
+            .expect("task should enter recycle bin");
+
+        let trashed = fixture
+            .schedule
+            .list_trashed_tasks()
+            .expect("recycle bin should list");
+        let restored = fixture
+            .schedule
+            .restore_trashed_task(&created.id, 1_700_000_000_004)
+            .expect("trashed task should restore");
+
+        assert_eq!(trashed.len(), 1);
+        assert_eq!(restored.status, TaskStatus::Canceled);
+        assert_eq!(
+            fixture
+                .schedule
+                .list_tasks(&one_day_range())
+                .expect("restored task should list")
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn multiple_study_sessions_do_not_overwrite_task_estimate() {
+        let fixture = initialized_fixture();
+        let task = fixture
+            .schedule
+            .create_task(&new_task(
+                "记录实际学习",
+                TaskPriority::Normal,
+                1_700_000_000_001,
+            ))
+            .expect("task should persist");
+        for (offset, duration) in [(2_i64, 25_u32), (3_i64, 40_u32)] {
+            let session = NewStudySession::new(
+                Some(task.id.clone()),
+                task.subject_id.clone(),
+                task.planned_date.clone(),
+                duration,
+                80,
+                Some("手动记录"),
+                1_700_000_000_000 + offset,
+            )
+            .expect("session should be valid");
+            fixture
+                .schedule
+                .create_study_session(&session)
+                .expect("session should persist");
+        }
+
+        let sessions = fixture
+            .schedule
+            .list_study_sessions(&one_day_range())
+            .expect("sessions should list");
+        let tasks = fixture
+            .schedule
+            .list_tasks(&one_day_range())
+            .expect("task should list");
+
+        assert_eq!(sessions.len(), 2);
+        assert_eq!(
+            sessions
+                .iter()
+                .map(|session| session.duration_minutes)
+                .sum::<u32>(),
+            65
+        );
+        assert_eq!(tasks[0].estimated_minutes, Some(60));
+    }
+
+    #[test]
+    fn statistics_exclude_canceled_and_trashed_tasks_without_fake_empty_rate() {
+        let fixture = initialized_fixture();
+        let completed = fixture
+            .schedule
+            .create_task(&new_task("已完成", TaskPriority::Normal, 1_700_000_000_001))
+            .expect("task should persist");
+        let active = fixture
+            .schedule
+            .create_task(&new_task("未完成", TaskPriority::Normal, 1_700_000_000_002))
+            .expect("task should persist");
+        let canceled = fixture
+            .schedule
+            .create_task(&new_task("已取消", TaskPriority::Normal, 1_700_000_000_003))
+            .expect("task should persist");
+        let trashed = fixture
+            .schedule
+            .create_task(&new_task("回收站", TaskPriority::Normal, 1_700_000_000_004))
+            .expect("task should persist");
+        fixture
+            .schedule
+            .transition_task(&completed.id, TaskTransition::Complete, 1_700_000_000_005)
+            .expect("task should complete");
+        fixture
+            .schedule
+            .transition_task(&canceled.id, TaskTransition::Cancel, 1_700_000_000_006)
+            .expect("task should cancel");
+        fixture
+            .schedule
+            .trash_task(&trashed.id, 1_700_000_000_007)
+            .expect("task should enter recycle bin");
+        let session = NewStudySession::new(
+            Some(active.id.clone()),
+            active.subject_id.clone(),
+            active.planned_date.clone(),
+            90,
+            50,
+            None,
+            1_700_000_000_008,
+        )
+        .expect("session should be valid");
+        fixture
+            .schedule
+            .create_study_session(&session)
+            .expect("session should persist");
+
+        let statistics = fixture
+            .schedule
+            .study_statistics(
+                &one_day_range(),
+                &LocalDate::parse("2026-07-19").expect("today should parse"),
+            )
+            .expect("statistics should calculate");
+        let empty_date = LocalDate::parse("2026-07-20").expect("empty date should parse");
+        let empty = fixture
+            .schedule
+            .study_statistics(
+                &DateRange::new(empty_date.clone(), empty_date)
+                    .expect("empty range should be valid"),
+                &LocalDate::parse("2026-07-19").expect("today should parse"),
+            )
+            .expect("empty statistics should calculate");
+
+        assert_eq!(statistics.task_count, 2);
+        assert_eq!(statistics.completed_task_count, 1);
+        assert_eq!(statistics.completion_rate_percent, Some(50));
+        assert_eq!(statistics.planned_minutes, 120);
+        assert_eq!(statistics.actual_minutes, 90);
+        assert_eq!(statistics.minute_difference, -30);
+        assert_eq!(statistics.overdue_task_count, 1);
+        assert_eq!(empty.completion_rate_percent, None);
     }
 }

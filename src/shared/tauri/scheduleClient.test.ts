@@ -4,11 +4,15 @@ import {
   localDateForTimezone,
   normalizeScheduleCommandError,
   parseStudySubject,
+  parseStudySession,
+  parseStudyStatistics,
   parseStudyTask,
   parseStudyTaskChange,
   parseSubjectList,
   parseTaskChangeList,
   parseTaskList,
+  parseTaskSplitResult,
+  parseTrashedStudyTask,
 } from "./scheduleClient";
 
 const VALID_SUBJECT = {
@@ -185,5 +189,104 @@ describe("normalizeScheduleCommandError", () => {
 
     expect(error.message).toBe("任务内容不符合要求。");
     expect(error.operationId).toBe("operation-1");
+  });
+});
+
+describe("parseTaskSplitResult", () => {
+  it("accepts canceled parent and inherited child fields", () => {
+    const parent = { ...VALID_TASK, status: "canceled" };
+    const children = [1, 2].map((index) => ({
+      ...VALID_TASK,
+      id: `019f7328-4b66-7613-9729-e3570fc4152${index}`,
+      parentTaskId: VALID_TASK.id,
+      title: `子任务 ${index}`,
+    }));
+
+    const result = parseTaskSplitResult({ parent, children });
+
+    expect(result.children).toHaveLength(2);
+  });
+
+  it("rejects a child that changes the inherited date", () => {
+    expect(() =>
+      parseTaskSplitResult({
+        parent: { ...VALID_TASK, status: "canceled" },
+        children: [
+          { ...VALID_TASK, parentTaskId: VALID_TASK.id },
+          {
+            ...VALID_TASK,
+            id: "019f7328-4b66-7613-9729-e3570fc41527",
+            parentTaskId: VALID_TASK.id,
+            plannedDate: "2026-07-19",
+          },
+        ],
+      }),
+    ).toThrowError("TASK_SPLIT_DTO_INVALID");
+  });
+});
+
+describe("parseTrashedStudyTask", () => {
+  it("returns only controlled task fields and deletion time", () => {
+    const task = parseTrashedStudyTask({
+      ...VALID_TASK,
+      updatedAt: 1_700_000_000_100,
+      deletedAt: 1_700_000_000_100,
+      databasePath: "F:\\private\\kystudy.sqlite3",
+    });
+
+    expect(task.deletedAt).toBe(1_700_000_000_100);
+    expect("databasePath" in task).toBe(false);
+  });
+});
+
+describe("parseStudySession", () => {
+  it("parses an actual record without storage internals", () => {
+    const session = parseStudySession({
+      id: "019f7328-4b66-7613-9729-e3570fc41528",
+      taskId: VALID_TASK.id,
+      subjectId: null,
+      sessionDate: "2026-07-18",
+      durationMinutes: 45,
+      completionPercent: 80,
+      reflection: "复盘薄弱点",
+      createdAt: 1_700_000_000_000,
+      updatedAt: 1_700_000_000_000,
+      storageKey: "private/session.json",
+    });
+
+    expect(session.durationMinutes).toBe(45);
+    expect("storageKey" in session).toBe(false);
+  });
+});
+
+describe("parseStudyStatistics", () => {
+  it("represents an empty completion rate as undefined", () => {
+    const statistics = parseStudyStatistics({
+      taskCount: 0,
+      completedTaskCount: 0,
+      completionRatePercent: null,
+      plannedMinutes: 0,
+      actualMinutes: 0,
+      minuteDifference: 0,
+      overdueTaskCount: 0,
+      subjects: [],
+    });
+
+    expect(statistics.completionRatePercent).toBeUndefined();
+  });
+
+  it("rejects a fake perfect rate for empty data", () => {
+    expect(() =>
+      parseStudyStatistics({
+        taskCount: 0,
+        completedTaskCount: 0,
+        completionRatePercent: 100,
+        plannedMinutes: 0,
+        actualMinutes: 0,
+        minuteDifference: 0,
+        overdueTaskCount: 0,
+        subjects: [],
+      }),
+    ).toThrowError("STUDY_STATISTICS_DTO_INVALID");
   });
 });

@@ -9,14 +9,18 @@ import {
   localDateForTimezone,
   normalizeScheduleCommandError,
   rescheduleTask,
+  splitTask,
+  trashTask,
   transitionTask,
   updateTaskDetails,
   type CreateSubjectInput,
   type RescheduleTaskInput,
   type ScheduleCommandError,
+  type SplitTaskInput,
   type StudySubject,
   type StudyTask,
   type TaskPriority,
+  type TaskSplitResult,
   type TaskTransition,
   type UpdateTaskDetailsInput,
 } from "../../shared/tauri/scheduleClient";
@@ -396,6 +400,49 @@ export function TodayTaskPanel() {
     }
   };
 
+  const handleSplitSelectedTask = async (
+    request: SplitTaskInput,
+  ): Promise<TaskSplitResult> => {
+    if (selectedTaskId === undefined) {
+      throw new Error("TASK_NOT_SELECTED");
+    }
+    const result = await splitTask(selectedTaskId, request);
+    setState((current) =>
+      current.kind === "ready"
+        ? {
+            kind: "ready",
+            tasks: sortTasks([
+              ...current.tasks.filter((task) => task.id !== result.parent.id),
+              result.parent,
+              ...result.children,
+            ]),
+          }
+        : current,
+    );
+    setSelectedTaskId(undefined);
+    setActionNotice(
+      `任务已拆分为 ${result.children.length} 个子任务，父任务已取消。`,
+    );
+    return result;
+  };
+
+  const handleTrashSelectedTask = async (): Promise<void> => {
+    if (selectedTaskId === undefined) {
+      throw new Error("TASK_NOT_SELECTED");
+    }
+    const trashed = await trashTask(selectedTaskId);
+    setState((current) =>
+      current.kind === "ready"
+        ? {
+            kind: "ready",
+            tasks: current.tasks.filter((task) => task.id !== trashed.id),
+          }
+        : current,
+    );
+    setSelectedTaskId(undefined);
+    setActionNotice("任务已移入回收站，可在“计划与执行总览”中恢复。");
+  };
+
   const completedCount =
     state.kind === "ready"
       ? state.tasks.filter((task) => task.status === "done").length
@@ -661,6 +708,8 @@ export function TodayTaskPanel() {
                 onSave={handleUpdateSelectedTask}
                 onTransition={handleSelectedTaskTransition}
                 onReschedule={handleRescheduleSelectedTask}
+                onSplit={handleSplitSelectedTask}
+                onTrash={handleTrashSelectedTask}
               />
             )}
           </div>

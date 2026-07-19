@@ -507,13 +507,19 @@ mod tests {
         read_manifest,
     };
     use crate::application::{
-        BackupRepository, ImportRequest, ResourceRepository, WorkspaceRepository,
+        BackupRepository, ImportRequest, ResourceRepository, ScheduleRepository,
+        WorkspaceRepository,
     };
-    use crate::domain::NewWorkspace;
-    use crate::infrastructure::{SqliteBlobStore, SqliteWorkspaceRepository};
+    use crate::domain::{
+        LocalDate, NewStudySession, NewSubject, NewTask, NewWorkspace, SubjectColor, TaskDraft,
+        TaskPriority,
+    };
+    use crate::infrastructure::{
+        SqliteBlobStore, SqliteScheduleRepository, SqliteWorkspaceRepository,
+    };
 
     struct Fixture {
-        _application_data: TempDir,
+        application_data: TempDir,
         workspace: SqliteWorkspaceRepository,
         backup: SqliteBackupStore,
         document_sha256: String,
@@ -542,7 +548,7 @@ mod tests {
 
         Fixture {
             backup: SqliteBackupStore::new(application_data.path()),
-            _application_data: application_data,
+            application_data,
             workspace,
             document_sha256: document.sha256,
         }
@@ -686,6 +692,138 @@ mod tests {
     }
 
     #[test]
+    fn complete_backup_restores_subject_task_history_and_study_session() {
+        let fixture = initialized_fixture();
+        let schedule = SqliteScheduleRepository::new(fixture.application_data.path());
+        let subject = schedule
+            .create_subject(
+                &NewSubject::new("408", SubjectColor::Blue, 0, 1_700_000_000_002)
+                    .expect("subject should be valid"),
+            )
+            .expect("subject should persist");
+        let task = schedule
+            .create_task(
+                &NewTask::manual(
+                    TaskDraft::new(
+                        Some(subject.id.clone()),
+                        "数据结构复盘",
+                        None,
+                        LocalDate::parse("2026-07-18").expect("date should parse"),
+                        Some(60),
+                        TaskPriority::High,
+                        0,
+                    )
+                    .expect("task draft should be valid"),
+                    1_700_000_000_003,
+                )
+                .expect("task should be valid"),
+            )
+            .expect("task should persist");
+        schedule
+            .create_study_session(
+                &NewStudySession::new(
+                    Some(task.id.clone()),
+                    Some(subject.id.clone()),
+                    LocalDate::parse("2026-07-18").expect("date should parse"),
+                    45,
+                    75,
+                    Some("定位薄弱章节"),
+                    1_700_000_000_004,
+                )
+                .expect("session should be valid"),
+            )
+            .expect("session should persist");
+        let output = tempdir().expect("output directory should exist");
+        let backup = create_backup(&fixture, &output);
+        let destination = output.path().join("restored-complete-data");
+
+        fixture
+            .backup
+            .restore_backup(&backup, &destination)
+            .expect("complete data should restore");
+        let connection = Connection::open(destination.join("kystudy.sqlite3"))
+            .expect("restored database should open");
+        let counts: (i64, i64, i64, i64) = (
+            connection
+                .query_row("SELECT COUNT(*) FROM subject", [], |row| row.get(0))
+                .expect("subjects should count"),
+            connection
+                .query_row("SELECT COUNT(*) FROM task", [], |row| row.get(0))
+                .expect("tasks should count"),
+            connection
+                .query_row("SELECT COUNT(*) FROM task_change", [], |row| row.get(0))
+                .expect("history should count"),
+            connection
+                .query_row("SELECT COUNT(*) FROM study_session", [], |row| row.get(0))
+                .expect("sessions should count"),
+        );
+        let (estimated_minutes, actual_minutes): (i64, i64) = connection
+            .query_row(
+                "SELECT task.estimated_minutes, study_session.duration_minutes
+                 FROM task JOIN study_session ON study_session.task_id = task.id
+                 WHERE task.id = ?1",
+                [task.id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("restored task and session should remain associated");
+
+        assert_eq!(counts, (1, 1, 1, 1));
+        assert_eq!(estimated_minutes, 60);
+        assert_eq!(actual_minutes, 45);
+    }
+
+    #[test]
+    fn restore_migrates_a_verified_v3_backup_copy_to_v4() {
+        let fixture = initialized_fixture();
+        let output = tempdir().expect("output directory should exist");
+        let backup = create_backup(&fixture, &output);
+        let database_path = backup.join("kystudy.sqlite3");
+        let connection = Connection::open(&database_path).expect("backup database should open");
+        connection
+            .execute_batch(
+                "DROP TABLE study_session;
+                 DELETE FROM schema_migration WHERE version = 4;
+                 PRAGMA user_version = 3;",
+            )
+            .expect("fixture should represent a v3 backup");
+        drop(connection);
+        let (sha256, size_bytes) = hash_file(&database_path).expect("database should hash");
+        let mut manifest = read_manifest(&backup).expect("manifest should load");
+        manifest.schema_version = 3;
+        manifest.database.sha256 = sha256;
+        manifest.database.size_bytes = size_bytes;
+        fs::write(
+            backup.join(MANIFEST_FILE_NAME),
+            serde_json::to_vec_pretty(&manifest).expect("manifest should serialize"),
+        )
+        .expect("historical manifest should update");
+        let destination = output.path().join("restored-v3");
+
+        fixture
+            .backup
+            .restore_backup(&backup, &destination)
+            .expect("known v3 backup should restore");
+        let restored = Connection::open(destination.join("kystudy.sqlite3"))
+            .expect("restored database should open");
+        let (version, study_session_table): (u32, i64) = (
+            restored
+                .pragma_query_value(None, "user_version", |row| row.get(0))
+                .expect("restored schema should be readable"),
+            restored
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_schema
+                     WHERE type = 'table' AND name = 'study_session'",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("study session table should be readable"),
+        );
+
+        assert_eq!(version, 4);
+        assert_eq!(study_session_table, 1);
+    }
+
+    #[test]
     fn restore_migrates_a_verified_v2_backup_copy_to_the_latest_schema() {
         let fixture = initialized_fixture();
         let output = tempdir().expect("output directory should exist");
@@ -694,10 +832,11 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE task_change;
+                "DROP TABLE study_session;
+                 DROP TABLE task_change;
                  DROP TABLE task;
                  DROP TABLE subject;
-                 DELETE FROM schema_migration WHERE version = 3;
+                 DELETE FROM schema_migration WHERE version IN (3, 4);
                  PRAGMA user_version = 2;",
             )
             .expect("fixture should represent a v2 backup");
@@ -726,8 +865,8 @@ mod tests {
         let restored_manifest =
             read_manifest(&destination).expect("restored manifest should be readable");
 
-        assert_eq!(version, 3);
-        assert_eq!(restored_manifest.schema_version, 3);
+        assert_eq!(version, 4);
+        assert_eq!(restored_manifest.schema_version, 4);
     }
 
     #[test]

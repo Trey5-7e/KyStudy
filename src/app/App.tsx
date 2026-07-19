@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ResourcePanel } from "../features/library/ResourcePanel";
 import { BackupPanel } from "../features/backup/BackupPanel";
 import { TodayTaskPanel } from "../features/schedule/TodayTaskPanel";
+import { ScheduleOverviewPanel } from "../features/schedule/ScheduleOverviewPanel";
 import { WorkspacePanel } from "../features/workspace/WorkspacePanel";
 import {
   getRuntimeStatus,
@@ -115,6 +116,8 @@ export function App() {
       <WorkspacePanel />
 
       <TodayTaskPanel />
+
+      <ScheduleOverviewPanel />
 
       <ResourcePanel />
 
