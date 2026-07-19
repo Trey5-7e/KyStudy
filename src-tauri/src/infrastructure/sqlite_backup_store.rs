@@ -507,15 +507,16 @@ mod tests {
         read_manifest,
     };
     use crate::application::{
-        BackupRepository, ImportRequest, ResourceRepository, ScheduleRepository,
-        WorkspaceRepository,
+        BackupRepository, ImportRequest, KnowledgeRepository, ResourceRepository,
+        ScheduleRepository, WorkspaceRepository,
     };
     use crate::domain::{
-        LocalDate, NewStudySession, NewSubject, NewTask, NewWorkspace, SubjectColor, TaskDraft,
-        TaskPriority,
+        KnowledgeMap, KnowledgeNode, LATEST_SCHEMA_VERSION, LocalDate, MasteryState,
+        NewStudySession, NewSubject, NewTask, NewWorkspace, SubjectColor, TaskDraft, TaskPriority,
     };
     use crate::infrastructure::{
-        SqliteBlobStore, SqliteScheduleRepository, SqliteWorkspaceRepository,
+        SqliteBlobStore, SqliteKnowledgeRepository, SqliteScheduleRepository,
+        SqliteWorkspaceRepository,
     };
 
     struct Fixture {
@@ -692,6 +693,91 @@ mod tests {
     }
 
     #[test]
+    fn complete_backup_restores_knowledge_map_nodes_and_revisions() {
+        let fixture = initialized_fixture();
+        let repository = SqliteKnowledgeRepository::new(fixture.application_data.path());
+        let map_id = Uuid::now_v7().to_string();
+        let root_id = Uuid::now_v7().to_string();
+        repository
+            .create_map(
+                KnowledgeMap {
+                    id: map_id.clone(),
+                    subject_id: None,
+                    title: "408 知识树".to_owned(),
+                    root_node_id: root_id.clone(),
+                    current_revision: 1,
+                    deleted_at: None,
+                    created_at: 1_700_000_000_002,
+                    updated_at: 1_700_000_000_002,
+                },
+                KnowledgeNode {
+                    id: root_id.clone(),
+                    map_id: map_id.clone(),
+                    subject_id: None,
+                    parent_id: None,
+                    title: "408".to_owned(),
+                    note_markdown: None,
+                    mastery_state: MasteryState::Unknown,
+                    importance: 3,
+                    sort_order: 0,
+                    collapsed: false,
+                    created_at: 1_700_000_000_002,
+                    updated_at: 1_700_000_000_002,
+                },
+            )
+            .expect("knowledge map should persist");
+        repository
+            .create_node(KnowledgeNode {
+                id: Uuid::now_v7().to_string(),
+                map_id,
+                subject_id: None,
+                parent_id: Some(root_id),
+                title: "数据结构".to_owned(),
+                note_markdown: Some("重点复习树与图".to_owned()),
+                mastery_state: MasteryState::Weak,
+                importance: 5,
+                sort_order: u32::MAX,
+                collapsed: false,
+                created_at: 1_700_000_000_003,
+                updated_at: 1_700_000_000_003,
+            })
+            .expect("knowledge node should persist");
+        let output = tempdir().expect("output directory should exist");
+        let backup = create_backup(&fixture, &output);
+        let destination = output.path().join("restored-knowledge-data");
+
+        fixture
+            .backup
+            .restore_backup(&backup, &destination)
+            .expect("knowledge data should restore");
+        let connection = Connection::open(destination.join("kystudy.sqlite3"))
+            .expect("restored database should open");
+        let counts: (i64, i64, i64) = (
+            connection
+                .query_row("SELECT COUNT(*) FROM knowledge_map", [], |row| row.get(0))
+                .expect("knowledge maps should count"),
+            connection
+                .query_row("SELECT COUNT(*) FROM knowledge_node", [], |row| row.get(0))
+                .expect("knowledge nodes should count"),
+            connection
+                .query_row("SELECT COUNT(*) FROM knowledge_map_revision", [], |row| {
+                    row.get(0)
+                })
+                .expect("knowledge revisions should count"),
+        );
+        let note: String = connection
+            .query_row(
+                "SELECT note_markdown FROM knowledge_node WHERE title = '数据结构'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("knowledge node note should restore");
+
+        assert_eq!(counts, (1, 2, 2));
+        assert_eq!(note, "重点复习树与图");
+    }
+
+    #[test]
     fn complete_backup_restores_subject_task_history_and_study_session() {
         let fixture = initialized_fixture();
         let schedule = SqliteScheduleRepository::new(fixture.application_data.path());
@@ -781,14 +867,19 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE plan_reference;
+                "DROP TABLE map_import_draft;
+                 DROP TABLE knowledge_node_resource;
+                 DROP TABLE knowledge_map_revision;
+                 DROP TABLE knowledge_node;
+                 DROP TABLE knowledge_map;
+                 DROP TABLE plan_reference;
                  DROP TABLE plan_stage;
                  DROP TABLE study_plan;
                  DROP TABLE resource_reading_state;
                  ALTER TABLE resource_document DROP COLUMN page_count;
                  ALTER TABLE resource_document DROP COLUMN role;
                  DROP TABLE study_session;
-                 DELETE FROM schema_migration WHERE version IN (4, 5);
+                 DELETE FROM schema_migration WHERE version IN (4, 5, 6);
                  PRAGMA user_version = 3;",
             )
             .expect("fixture should represent a v3 backup");
@@ -825,7 +916,7 @@ mod tests {
                 .expect("study session table should be readable"),
         );
 
-        assert_eq!(version, 5);
+        assert_eq!(version, LATEST_SCHEMA_VERSION);
         assert_eq!(study_session_table, 1);
     }
 
@@ -838,7 +929,12 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE plan_reference;
+                "DROP TABLE map_import_draft;
+                 DROP TABLE knowledge_node_resource;
+                 DROP TABLE knowledge_map_revision;
+                 DROP TABLE knowledge_node;
+                 DROP TABLE knowledge_map;
+                 DROP TABLE plan_reference;
                  DROP TABLE plan_stage;
                  DROP TABLE study_plan;
                  DROP TABLE resource_reading_state;
@@ -848,7 +944,7 @@ mod tests {
                  DROP TABLE task_change;
                  DROP TABLE task;
                  DROP TABLE subject;
-                 DELETE FROM schema_migration WHERE version IN (3, 4, 5);
+                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6);
                  PRAGMA user_version = 2;",
             )
             .expect("fixture should represent a v2 backup");
@@ -877,8 +973,8 @@ mod tests {
         let restored_manifest =
             read_manifest(&destination).expect("restored manifest should be readable");
 
-        assert_eq!(version, 5);
-        assert_eq!(restored_manifest.schema_version, 5);
+        assert_eq!(version, LATEST_SCHEMA_VERSION);
+        assert_eq!(restored_manifest.schema_version, LATEST_SCHEMA_VERSION);
     }
 
     #[test]

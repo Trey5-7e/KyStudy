@@ -1,6 +1,8 @@
 //! Application-level use cases and DTOs.
 
 mod backup;
+mod mindmap;
+mod mindmap_import;
 mod planning;
 mod resource;
 mod runtime;
@@ -10,13 +12,18 @@ mod workspace;
 pub(crate) use backup::{
     BackupError, BackupReport, BackupRepository, BackupUseCases, RestoreReport,
 };
+pub(crate) use mindmap::{
+    AddNodeResourceInput, CreateKnowledgeMapInput, KnowledgeError, KnowledgeRepository,
+    KnowledgeUseCases, MoveKnowledgeNodeInput, UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput,
+    ValidatedKnowledgeNodeUpdate,
+};
 pub(crate) use planning::{
     AddPlanReferenceInput, PlanningError, PlanningRepository, PlanningUseCases, SavePlanInput,
     SavePlanStageInput,
 };
 pub(crate) use resource::{
-    ImportError, ImportProgress, ImportRequest, ReadableResource, RecoveryReport, ResourceDocument,
-    ResourceReaderDescriptor, ResourceRepository, ResourceUseCases,
+    ImportError, ImportProgress, ImportRequest, MindMapSource, ReadableResource, RecoveryReport,
+    ResourceDocument, ResourceReaderDescriptor, ResourceRepository, ResourceUseCases,
 };
 pub(crate) use runtime::{RuntimeStatus, get_runtime_status};
 pub(crate) use schedule::{

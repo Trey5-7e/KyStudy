@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>408 知识结构验收样本</title>
+  </head>
+  <body>
+    <outline text="408" _note="仅用于 KyStudy M4 验收">
+      <outline text="数据结构">
+        <outline text="线性表" />
+        <outline text="树与二叉树" />
+        <outline text="图" />
+      </outline>
+      <outline text="操作系统">
+        <outline text="进程管理" />
+        <outline text="内存管理" />
+      </outline>
+    </outline>
+  </body>
+</opml>

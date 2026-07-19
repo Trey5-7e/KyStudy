@@ -101,6 +101,10 @@ const ERROR_COPY: Record<string, { message: string; action: string }> = {
     message: "资料的分类或阅读进度无效。",
     action: "检查页码、总页数或资料用途后重试。",
   },
+  MINDMAP_SOURCE_TOO_LARGE: {
+    message: "思维导图源文件超过当前安全上限。",
+    action: "请把源文件精简到 4 MiB 以内，或拆分为多张导图后重试。",
+  },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

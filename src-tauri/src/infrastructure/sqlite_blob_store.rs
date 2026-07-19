@@ -10,8 +10,8 @@ use tempfile::{Builder, NamedTempFile, TempPath};
 use uuid::Uuid;
 
 use crate::application::{
-    ImportError, ImportProgress, ImportRequest, ReadableResource, RecoveryReport, ResourceDocument,
-    ResourceReaderDescriptor, ResourceRepository, current_utc_millis,
+    ImportError, ImportProgress, ImportRequest, MindMapSource, ReadableResource, RecoveryReport,
+    ResourceDocument, ResourceReaderDescriptor, ResourceRepository, current_utc_millis,
 };
 
 use super::sqlite_workspace::{SqliteWorkspaceRepository, migrate, open_database};
@@ -398,6 +398,61 @@ impl ResourceRepository for SqliteBlobStore {
             .commit()
             .map_err(super::sqlite_workspace::database_error)?;
         load_reader_descriptor(&connection, document_id)
+    }
+
+    fn read_mindmap_source(
+        &self,
+        document_id: &str,
+        maximum_bytes: u64,
+    ) -> Result<MindMapSource, ImportError> {
+        let connection = self.open()?;
+        let registered = connection
+            .query_row(
+                "SELECT d.title, d.kind, d.mime_type, b.size_bytes, b.sha256, b.storage_key
+                 FROM resource_document d
+                 JOIN blob b ON b.id = d.blob_id
+                 WHERE d.id = ?1 AND b.integrity_state = 'ok'",
+                params![document_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(super::sqlite_workspace::database_error)?
+            .ok_or(ImportError::DocumentNotFound)?;
+        if registered.1 != "mindmap_source" {
+            return Err(ImportError::UnsupportedReaderKind);
+        }
+        let size_bytes = u64::try_from(registered.3).map_err(|_| ImportError::IntegrityMismatch)?;
+        if size_bytes > maximum_bytes {
+            return Err(ImportError::MindMapSourceTooLarge);
+        }
+        validate_storage_key(&registered.4, &registered.5)?;
+        let path = blob_path(&self.workspace_directory, &registered.4)?;
+        let mut file = File::open(path)?;
+        if file.metadata()?.len() != size_bytes {
+            return Err(ImportError::IntegrityMismatch);
+        }
+        let capacity =
+            usize::try_from(size_bytes).map_err(|_| ImportError::MindMapSourceTooLarge)?;
+        let mut bytes = Vec::with_capacity(capacity);
+        file.read_to_end(&mut bytes)?;
+        if bytes.len() != capacity {
+            return Err(ImportError::IntegrityMismatch);
+        }
+        Ok(MindMapSource {
+            document_id: document_id.to_owned(),
+            title: registered.0,
+            mime_type: registered.2,
+            bytes,
+        })
     }
 }
 

@@ -1,9 +1,14 @@
 //! Pure domain values and invariants.
 
+mod mindmap;
 mod planning;
 mod schedule;
 mod workspace;
 
+pub(crate) use mindmap::{
+    KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource, MasteryState,
+    MindMapDraftNode, MindMapImportDraft,
+};
 pub(crate) use planning::{PlanReference, PlanStage, PlanStatus, StudyPlan, StudyPlanBundle};
 pub(crate) use schedule::{
     DateRange, LocalDate, NewStudySession, NewSubject, NewTask, RescheduleDraft,

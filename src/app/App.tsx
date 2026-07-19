@@ -6,6 +6,7 @@ import {
 } from "../features/library/ResourcePanel";
 import { PersonalPlanPanel } from "../features/planning/PersonalPlanPanel";
 import { BackupPanel } from "../features/backup/BackupPanel";
+import { MindMapPanel } from "../features/mindmap/MindMapPanel";
 import { TodayTaskPanel } from "../features/schedule/TodayTaskPanel";
 import { ScheduleOverviewPanel } from "../features/schedule/ScheduleOverviewPanel";
 import { WorkspacePanel } from "../features/workspace/WorkspacePanel";
@@ -24,7 +25,8 @@ const CURRENT_BOUNDARIES = [
   "前端只通过类型化 Command DTO 与本地核心通信",
   "SQLite 由 Rust Repository 管理，不向 WebView 暴露路径或 SQL",
   "PDF 只经 document ID 和受控 Range 协议读取，不暴露路径或整本 Base64",
-  "AI、OCR 和全文检索尚未接入，当前计划完全由用户确认和维护",
+  "OPML 与 FreeMind 只生成待确认草案，XMind 需先导出为 OPML",
+  "AI、OCR 和全文检索尚未接入，导图与计划完全由用户确认和维护",
 ] as const;
 
 export function App() {
@@ -78,10 +80,10 @@ export function App() {
   return (
     <main className="shell">
       <section className="hero" aria-labelledby="page-title">
-        <p className="eyebrow">KyStudy · M3 资料与规划闭环</p>
-        <h1 id="page-title">把备考资料、执行与复习留在自己手中</h1>
+        <p className="eyebrow">KyStudy · M4 本地知识结构</p>
+        <h1 id="page-title">把知识结构、资料依据与复习状态连起来</h1>
         <p className="lead">
-          在已经稳定的日程基础上，把规划资料直接打开、定位到原页，并用手动草案记录真正适合自己的阶段安排。
+          在日程、资料和个人规划之上，用可撤销的思维导图维护知识层级，并把每个节点关联回本地资料原页。
         </p>
       </section>
 
@@ -128,6 +130,12 @@ export function App() {
 
       <PersonalPlanPanel
         onOpenReference={(documentId, page) =>
+          setResourceOpenRequest({ documentId, page, nonce: Date.now() })
+        }
+      />
+
+      <MindMapPanel
+        onOpenResource={(documentId, page) =>
           setResourceOpenRequest({ documentId, page, nonce: Date.now() })
         }
       />

@@ -5,12 +5,12 @@
 | 文档版本   | 0.1                                    |
 | 对应 PRD   | 0.1                                    |
 | 更新日期   | 2026-07-19                             |
-| 状态       | 概念模型；M1-M3 子集已落地至 schema v5 |
+| 状态       | 概念模型；M1-M4 子集已落地至 schema v6 |
 | 数据库方向 | SQLite，本地单工作区优先               |
 
 ## 1. 设计目标
 
-> 实现说明：schema v5 已落地 `resource_document.role/page_count`、`resource_reading_state`、`study_plan`、`plan_stage` 与 `plan_reference`。完整 AI 规划版本、解析索引、知识图谱、题目和错题模型仍按本文概念边界后续实现。
+> 实现说明：schema v6 已在 v5 资料规划表之上落地 `knowledge_map`、`knowledge_node`、`knowledge_node_resource`、`knowledge_map_revision` 与 `map_import_draft`。完整 AI 规划版本、解析索引、通用画布布局、知识图谱、题目和错题模型仍按本文概念边界后续实现。
 
 数据模型需要同时支持日程、资料、思维导图、PDF 题目、错题复习和 AI 用量，又不能把这些功能堆进一个难以演进的通用表。
 
@@ -256,36 +256,40 @@ erDiagram
 
 ### 8.1 `knowledge_map`
 
-| 字段           | 说明         |
-| -------------- | ------------ |
-| `id`           | 导图 ID      |
-| `workspace_id` | 工作区       |
-| `subject_id`   | 可选科目     |
-| `title`        | 导图名称     |
-| `root_node_id` | 根节点       |
-| `revision`     | 当前业务版本 |
-| `deleted_at`   | 回收站状态   |
+| 字段                        | 说明                |
+| --------------------------- | ------------------- |
+| `id`                        | 导图 ID             |
+| `workspace_id`              | 工作区              |
+| `subject_id`                | 可选科目            |
+| `title`                     | 导图名称            |
+| `root_node_id`              | 根节点              |
+| `current_revision`          | 当前可撤销 Revision |
+| `deleted_at`                | 回收站状态          |
+| `created_at` / `updated_at` | 创建和更新时间      |
 
 ### 8.2 `knowledge_node`
 
 知识语义与画布坐标分离。
 
-| 字段            | 说明                                    |
-| --------------- | --------------------------------------- |
-| `id`            | 节点 ID                                 |
-| `map_id`        | 所属导图                                |
-| `subject_id`    | 科目，可继承但显式保存                  |
-| `parent_id`     | 父节点，根节点为空                      |
-| `title`         | 节点标题                                |
-| `note_markdown` | 节点笔记                                |
-| `mastery_state` | `unknown`、`learning`、`weak`、`stable` |
-| `importance`    | 用户重要度                              |
-| `sort_order`    | 同级排序                                |
-| `deleted_at`    | 回收站状态                              |
+| 字段                        | 说明                                    |
+| --------------------------- | --------------------------------------- |
+| `id`                        | 节点 ID                                 |
+| `map_id`                    | 所属导图                                |
+| `subject_id`                | 科目，可继承但显式保存                  |
+| `parent_id`                 | 父节点，根节点为空                      |
+| `title`                     | 节点标题                                |
+| `note_markdown`             | 节点笔记                                |
+| `mastery_state`             | `unknown`、`learning`、`weak`、`stable` |
+| `importance`                | 用户重要度                              |
+| `sort_order`                | 同级排序                                |
+| `collapsed`                 | 当前树视图是否折叠                      |
+| `created_at` / `updated_at` | 创建和更新时间                          |
 
-业务层必须阻止节点成为自己的祖先。删除父节点时需要用户选择删除子树或把子节点提升一级。
+业务层必须阻止节点成为自己的祖先。schema v6 对非根节点执行显式子树删除，并在删除前形成可撤销 Revision；节点级软删除和“提升子节点”尚未实现。
 
 ### 8.3 `map_node_layout`
+
+该表是后续自由画布的概念模型，schema v6 尚未创建。当前 M4 使用树形画布，`collapsed` 直接保存在 `knowledge_node`；没有保存具体前端组件的坐标或私有 JSON。
 
 | 字段               | 说明                 |
 | ------------------ | -------------------- |
@@ -312,7 +316,7 @@ erDiagram
 
 ### 8.5 关联表
 
-- `knowledge_node_resource(node_id, resource_id, page_id, chunk_id, note)`
+- schema v6 已实现 `knowledge_node_resource(node_id, document_id, page_start, page_end, note, created_at)`；
 - `knowledge_node_question(node_id, question_id, relevance)`
 - `knowledge_node_task(node_id, task_id)`
 
@@ -320,17 +324,34 @@ erDiagram
 
 ### 8.6 `map_import_draft`
 
-保存结构化导图导入或 AI 图片识别结果，确认前不写入正式节点。
+schema v6 保存结构化导图导入结果，确认前不写入正式节点。AI 图片识别仍沿用相同“先草案、后确认”原则，但尚未实现。
 
-| 字段                 | 说明                                                     |
-| -------------------- | -------------------------------------------------------- |
-| `id`                 | 草案 ID                                                  |
-| `map_id`             | 目标导图，可为空表示新建                                 |
-| `source_resource_id` | 来源资料                                                 |
-| `source_format`      | 输入格式                                                 |
-| `draft_tree_json`    | 独立草案树                                               |
-| `state`              | `generated`、`partially_applied`、`accepted`、`rejected` |
-| `ai_call_id`         | 可选 AI 调用                                             |
+| 字段                        | 说明                                |
+| --------------------------- | ----------------------------------- |
+| `id`                        | 草案 ID                             |
+| `workspace_id`              | 所属工作区                          |
+| `source_resource_id`        | 来源资料                            |
+| `source_format`             | `opml` 或 `freemind`                |
+| `title`                     | 草案建议标题                        |
+| `draft_tree_json`           | 独立草案树                          |
+| `warnings_json`             | 类型化返回给前端的导入警告来源      |
+| `node_count`                | 已校验节点数                        |
+| `state`                     | `generated`、`accepted`、`rejected` |
+| `accepted_map_id`           | 确认后创建的正式导图                |
+| `created_at` / `updated_at` | 创建和更新时间                      |
+
+### 8.7 `knowledge_map_revision`
+
+| 字段              | 说明                                    |
+| ----------------- | --------------------------------------- |
+| `id`              | Revision ID                             |
+| `map_id`          | 所属导图                                |
+| `revision_number` | 单调递增版本号                          |
+| `snapshot_json`   | 仅限 Rust/SQLite 内部使用的完整业务快照 |
+| `change_summary`  | 用户可理解的修改摘要                    |
+| `created_at`      | 创建时间                                |
+
+用户在撤销后产生新修改时，会在同一事务中截断原 redo 分支并追加新 Revision。`snapshot_json` 不经 Command DTO 暴露给 WebView。
 
 ## 9. 规划、日程与执行
 
@@ -714,7 +735,7 @@ FTS 表属于派生数据。正式表更新后通过同一事务或可靠后台�
 1. 业务层最终放在 Rust 还是 TypeScript，以及 Repository 边界如何跨 Tauri IPC；
 2. SQLite 驱动的基础能力已由 TV-02 验证：`rusqlite 0.40.1 + bundled` 提供 SQLite 3.53.2、FTS5、事务迁移和 Online Backup；中文检索质量仍待独立实验；
 3. PDF.js 坐标、旋转和 HiDPI 到归一化区域的映射已由 TV-04 自动及 Release WebView 人工验证；正式 `QuestionRegion` 应遵守已接受的 [ADR-003](adr/003-pdf-rendering.md) 的 PDF 点归一化矩形与 `coordinate_version=1`；
-4. XMind、FreeMind、Markdown 大纲能提供哪些稳定字段；
+4. OPML 与 FreeMind `.mm` 的标题、笔记和层级已完成首批验证；XMind 多版本 ZIP 与 Markdown 大纲仍待真实样本验证；
 5. OCR 是否返回可靠的文字框坐标，公式内容如何降级；
 6. AI 提供商返回的 Token 字段如何统一，缺失字段如何估算；
 7. 大文件 Blob 去重、复制中断、完整性扫描和完整工作区恢复已由 TV-03 验证；正式数据模型应遵守 [ADR-004](adr/004-file-storage.md) 的相对 storage key、持久化 Job 与版本化备份约束；

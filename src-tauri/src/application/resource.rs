@@ -43,6 +43,15 @@ pub(crate) struct ReadableResource {
     pub(crate) size_bytes: u64,
 }
 
+/// Bounded bytes from one registered structured mind-map source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MindMapSource {
+    pub(crate) document_id: String,
+    pub(crate) title: String,
+    pub(crate) mime_type: String,
+    pub(crate) bytes: Vec<u8>,
+}
+
 /// Progress emitted after each bounded streaming chunk is written.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ImportProgress {
@@ -108,6 +117,9 @@ pub(crate) enum ImportError {
     /// A role, page count, reading position, or reference page was invalid.
     #[error("resource metadata is invalid")]
     InvalidMetadata,
+    /// A structured source exceeds the parser's fixed byte limit.
+    #[error("mind-map source is too large")]
+    MindMapSourceTooLarge,
     /// A managed filesystem operation failed.
     #[error("managed file operation failed")]
     File {
@@ -135,6 +147,7 @@ impl ImportError {
             Self::DocumentNotFound => "RESOURCE_NOT_FOUND",
             Self::UnsupportedReaderKind => "RESOURCE_READER_UNSUPPORTED",
             Self::InvalidMetadata => "RESOURCE_METADATA_INVALID",
+            Self::MindMapSourceTooLarge => "MINDMAP_SOURCE_TOO_LARGE",
             Self::File { .. } => "FILE_OPERATION_FAILED",
             Self::Persistence(error) => error.code(),
         }
@@ -181,6 +194,13 @@ pub(crate) trait ResourceRepository: Clone + Send + Sync + 'static {
         page_count: u32,
         last_page: u32,
     ) -> Result<ResourceReaderDescriptor, ImportError>;
+
+    /// Reads one registered OPML, `FreeMind`, or `XMind` source under a fixed limit.
+    fn read_mindmap_source(
+        &self,
+        document_id: &str,
+        maximum_bytes: u64,
+    ) -> Result<MindMapSource, ImportError>;
 }
 
 /// Resource use cases with a statically dispatched storage adapter.
@@ -261,6 +281,16 @@ impl<R: ResourceRepository> ResourceUseCases<R> {
         self.repository
             .save_reading_progress(document_id, page_count, last_page)
     }
+
+    /// Loads bounded structured source bytes without exposing a managed path.
+    pub(crate) fn read_mindmap_source(
+        &self,
+        document_id: &str,
+        maximum_bytes: u64,
+    ) -> Result<MindMapSource, ImportError> {
+        self.repository
+            .read_mindmap_source(document_id, maximum_bytes)
+    }
 }
 
 fn classify_source(path: &Path) -> Result<(String, String, String), ImportError> {
@@ -289,6 +319,7 @@ fn classify_source(path: &Path) -> Result<(String, String, String), ImportError>
         "webp" => ("image", "image/webp"),
         "xmind" => ("mindmap_source", "application/x-xmind"),
         "opml" => ("mindmap_source", "text/x-opml"),
+        "mm" => ("mindmap_source", "application/x-freemind"),
         "md" => ("document", "text/markdown"),
         "txt" => ("document", "text/plain"),
         _ => ("document", "application/octet-stream"),
@@ -316,5 +347,21 @@ mod tests {
             classify_source(Path::new("线性代数错题.md")).expect("Unicode name should classify");
 
         assert_eq!(title, "线性代数错题");
+    }
+
+    #[test]
+    fn classify_source_recognizes_supported_mindmap_formats() {
+        let formats = [
+            ("大纲.opml", "text/x-opml"),
+            ("知识树.mm", "application/x-freemind"),
+            ("原始导图.xmind", "application/x-xmind"),
+        ];
+
+        for (file_name, expected_mime_type) in formats {
+            let (_, kind, mime_type) =
+                classify_source(Path::new(file_name)).expect("mind-map source should classify");
+            assert_eq!(kind, "mindmap_source");
+            assert_eq!(mime_type, expected_mime_type);
+        }
     }
 }

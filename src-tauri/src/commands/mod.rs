@@ -6,17 +6,20 @@ use tauri_plugin_dialog::{DialogExt, FilePath};
 use uuid::Uuid;
 
 use crate::application::{
-    AddPlanReferenceInput, BackupError, BackupReport, CreateStudySessionInput, CreateSubjectInput,
-    CreateTaskInput, ImportError, ImportProgress, PlanningError, RescheduleTaskInput,
-    ResourceDocument, ResourceReaderDescriptor, RestoreReport, RuntimeStatus, SavePlanInput,
-    SavePlanStageInput, ScheduleError, SplitChildInput, SplitTaskInput, UpdateTaskDetailsInput,
+    AddNodeResourceInput, AddPlanReferenceInput, BackupError, BackupReport,
+    CreateKnowledgeMapInput, CreateStudySessionInput, CreateSubjectInput, CreateTaskInput,
+    ImportError, ImportProgress, KnowledgeError, MoveKnowledgeNodeInput, PlanningError,
+    RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor, RestoreReport, RuntimeStatus,
+    SavePlanInput, SavePlanStageInput, ScheduleError, SplitChildInput, SplitTaskInput,
+    UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput, UpdateTaskDetailsInput,
     get_runtime_status as load_runtime_status,
 };
 use crate::bootstrap::AppState;
 use crate::domain::{
-    PlanReference, PlanStage, StudyPlan, StudyPlanBundle, StudySession, StudyStatistics, Subject,
-    SubjectStatistics, Task, TaskChange, TaskChangeSnapshot, TaskSplit, TaskTransition,
-    TrashedTask, Workspace,
+    KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource, MindMapDraftNode,
+    MindMapImportDraft, PlanReference, PlanStage, StudyPlan, StudyPlanBundle, StudySession,
+    StudyStatistics, Subject, SubjectStatistics, Task, TaskChange, TaskChangeSnapshot, TaskSplit,
+    TaskTransition, TrashedTask, Workspace,
 };
 
 #[tauri::command]
@@ -617,6 +620,280 @@ impl From<StudyPlanBundle> for StudyPlanBundleDto {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct CreateKnowledgeMapRequestDto {
+    title: String,
+    subject_id: Option<String>,
+}
+
+impl From<CreateKnowledgeMapRequestDto> for CreateKnowledgeMapInput {
+    fn from(request: CreateKnowledgeMapRequestDto) -> Self {
+        Self {
+            title: request.title,
+            subject_id: request.subject_id,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UpdateKnowledgeMapRequestDto {
+    map_id: String,
+    title: String,
+    subject_id: Option<String>,
+}
+
+impl From<UpdateKnowledgeMapRequestDto> for UpdateKnowledgeMapInput {
+    fn from(request: UpdateKnowledgeMapRequestDto) -> Self {
+        Self {
+            map_id: request.map_id,
+            title: request.title,
+            subject_id: request.subject_id,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UpdateKnowledgeNodeRequestDto {
+    node_id: String,
+    title: String,
+    note_markdown: Option<String>,
+    mastery_state: String,
+    importance: u8,
+    subject_id: Option<String>,
+}
+
+impl From<UpdateKnowledgeNodeRequestDto> for UpdateKnowledgeNodeInput {
+    fn from(request: UpdateKnowledgeNodeRequestDto) -> Self {
+        Self {
+            node_id: request.node_id,
+            title: request.title,
+            note_markdown: request.note_markdown,
+            mastery_state: request.mastery_state,
+            importance: request.importance,
+            subject_id: request.subject_id,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct MoveKnowledgeNodeRequestDto {
+    node_id: String,
+    new_parent_id: String,
+    position: u32,
+}
+
+impl From<MoveKnowledgeNodeRequestDto> for MoveKnowledgeNodeInput {
+    fn from(request: MoveKnowledgeNodeRequestDto) -> Self {
+        Self {
+            node_id: request.node_id,
+            new_parent_id: request.new_parent_id,
+            position: request.position,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct AddNodeResourceRequestDto {
+    node_id: String,
+    document_id: String,
+    page_start: Option<u32>,
+    page_end: Option<u32>,
+    note: Option<String>,
+}
+
+impl From<AddNodeResourceRequestDto> for AddNodeResourceInput {
+    fn from(request: AddNodeResourceRequestDto) -> Self {
+        Self {
+            node_id: request.node_id,
+            document_id: request.document_id,
+            page_start: request.page_start,
+            page_end: request.page_end,
+            note: request.note,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct KnowledgeMapDto {
+    id: String,
+    subject_id: Option<String>,
+    title: String,
+    root_node_id: String,
+    current_revision: u32,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<KnowledgeMap> for KnowledgeMapDto {
+    fn from(map: KnowledgeMap) -> Self {
+        Self {
+            id: map.id,
+            subject_id: map.subject_id,
+            title: map.title,
+            root_node_id: map.root_node_id,
+            current_revision: map.current_revision,
+            created_at: map.created_at,
+            updated_at: map.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct KnowledgeNodeDto {
+    id: String,
+    map_id: String,
+    subject_id: Option<String>,
+    parent_id: Option<String>,
+    title: String,
+    note_markdown: Option<String>,
+    mastery_state: &'static str,
+    importance: u8,
+    sort_order: u32,
+    collapsed: bool,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<KnowledgeNode> for KnowledgeNodeDto {
+    fn from(node: KnowledgeNode) -> Self {
+        Self {
+            id: node.id,
+            map_id: node.map_id,
+            subject_id: node.subject_id,
+            parent_id: node.parent_id,
+            title: node.title,
+            note_markdown: node.note_markdown,
+            mastery_state: node.mastery_state.as_str(),
+            importance: node.importance,
+            sort_order: node.sort_order,
+            collapsed: node.collapsed,
+            created_at: node.created_at,
+            updated_at: node.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct KnowledgeNodeResourceDto {
+    id: String,
+    node_id: String,
+    document_id: String,
+    document_title: String,
+    page_start: Option<u32>,
+    page_end: Option<u32>,
+    note: Option<String>,
+    created_at: i64,
+}
+
+impl From<KnowledgeNodeResource> for KnowledgeNodeResourceDto {
+    fn from(resource: KnowledgeNodeResource) -> Self {
+        Self {
+            id: resource.id,
+            node_id: resource.node_id,
+            document_id: resource.document_id,
+            document_title: resource.document_title,
+            page_start: resource.page_start,
+            page_end: resource.page_end,
+            note: resource.note,
+            created_at: resource.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct KnowledgeMapBundleDto {
+    map: KnowledgeMapDto,
+    nodes: Vec<KnowledgeNodeDto>,
+    resources: Vec<KnowledgeNodeResourceDto>,
+    can_undo: bool,
+    can_redo: bool,
+}
+
+impl From<KnowledgeMapBundle> for KnowledgeMapBundleDto {
+    fn from(bundle: KnowledgeMapBundle) -> Self {
+        Self {
+            map: KnowledgeMapDto::from(bundle.map),
+            nodes: bundle
+                .nodes
+                .into_iter()
+                .map(KnowledgeNodeDto::from)
+                .collect(),
+            resources: bundle
+                .resources
+                .into_iter()
+                .map(KnowledgeNodeResourceDto::from)
+                .collect(),
+            can_undo: bundle.can_undo,
+            can_redo: bundle.can_redo,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MindMapDraftNodeDto {
+    title: String,
+    note_markdown: Option<String>,
+    children: Vec<Self>,
+}
+
+impl From<MindMapDraftNode> for MindMapDraftNodeDto {
+    fn from(node: MindMapDraftNode) -> Self {
+        Self {
+            title: node.title,
+            note_markdown: node.note_markdown,
+            children: node
+                .children
+                .into_iter()
+                .map(MindMapDraftNodeDto::from)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MindMapImportDraftDto {
+    id: String,
+    source_resource_id: String,
+    source_format: String,
+    title: String,
+    tree: MindMapDraftNodeDto,
+    warnings: Vec<String>,
+    node_count: u32,
+    state: String,
+    accepted_map_id: Option<String>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<MindMapImportDraft> for MindMapImportDraftDto {
+    fn from(draft: MindMapImportDraft) -> Self {
+        Self {
+            id: draft.id,
+            source_resource_id: draft.source_resource_id,
+            source_format: draft.source_format,
+            title: draft.title,
+            tree: MindMapDraftNodeDto::from(draft.tree),
+            warnings: draft.warnings,
+            node_count: draft.node_count,
+            state: draft.state,
+            accepted_map_id: draft.accepted_map_id,
+            created_at: draft.created_at,
+            updated_at: draft.updated_at,
+        }
+    }
+}
+
 /// Imported resource metadata that deliberately excludes every local path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -833,6 +1110,10 @@ impl AppErrorDto {
                 "资料的分类或阅读进度无效。",
                 "检查页码、总页数或资料用途后重试。",
             ),
+            ImportError::MindMapSourceTooLarge => (
+                "思维导图源文件超过当前安全上限。",
+                "请把源文件精简到 4 MiB 以内，或拆分为多张导图后重试。",
+            ),
             ImportError::File { .. } => (
                 "无法读取来源文件或写入本地资料库。",
                 "检查文件占用、磁盘空间和目录权限后重试。",
@@ -866,6 +1147,60 @@ impl AppErrorDto {
                 "选择已导入的 PDF，并检查起止页码。",
             ),
             PlanningError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    fn from_knowledge(error: &KnowledgeError) -> Self {
+        let (message, action) = match error {
+            KnowledgeError::WorkspaceNotInitialized => {
+                ("尚未创建本地工作区。", "先创建本地工作区，再建立思维导图。")
+            }
+            KnowledgeError::MapNotFound => ("找不到这张思维导图。", "刷新导图列表后重新选择。"),
+            KnowledgeError::NodeNotFound => ("找不到这个知识节点。", "刷新导图后重新选择节点。"),
+            KnowledgeError::InvalidInput => (
+                "导图内容不完整或格式无效。",
+                "检查标题、掌握状态、重要度或标识后重试。",
+            ),
+            KnowledgeError::RootProtected => (
+                "根节点不能移动或删除。",
+                "可以编辑根节点内容，或操作它下面的子节点。",
+            ),
+            KnowledgeError::CycleDetected => (
+                "这次移动会让节点成为自己的后代。",
+                "请选择当前节点子树之外的父节点。",
+            ),
+            KnowledgeError::NodeLimitExceeded => (
+                "这张导图已达到 2000 个节点的首版上限。",
+                "拆分为多张导图后继续整理。",
+            ),
+            KnowledgeError::InvalidResourceReference => (
+                "节点关联的资料或页码范围无效。",
+                "选择已导入资料，并检查 PDF 起止页码。",
+            ),
+            KnowledgeError::DraftNotFound => (
+                "找不到可处理的导入草案。",
+                "刷新草案列表，或重新从源文件生成。",
+            ),
+            KnowledgeError::UnsupportedFormat => (
+                "当前不能直接解析这种思维导图格式。",
+                "XMind 请先导出为 OPML；本批次正式支持 OPML 和 FreeMind .mm。",
+            ),
+            KnowledgeError::InvalidImportSource => (
+                "思维导图源文件结构无效或包含不安全声明。",
+                "确认文件能在原软件中打开，再导出为标准 OPML 或 FreeMind .mm。",
+            ),
+            KnowledgeError::ImportLimitExceeded => (
+                "导入内容超过节点数或层级安全上限。",
+                "把导图拆分到每张 2000 个节点、32 层以内后重试。",
+            ),
+            KnowledgeError::Source(error) => return Self::from_import(error),
+            KnowledgeError::Persistence(error) => return Self::from_persistence(error),
         };
         Self {
             code: error.code(),
@@ -1378,6 +1713,251 @@ pub(crate) async fn delete_plan_reference(
 }
 
 #[tauri::command]
+pub(crate) async fn list_knowledge_maps(
+    state: State<'_, AppState>,
+) -> Result<Vec<KnowledgeMapBundleDto>, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_maps())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|maps| maps.into_iter().map(KnowledgeMapBundleDto::from).collect())
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn create_knowledge_map(
+    request: CreateKnowledgeMapRequestDto,
+    state: State<'_, AppState>,
+) -> Result<KnowledgeMapBundleDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.create_map(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(KnowledgeMapBundleDto::from)
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn update_knowledge_map(
+    request: UpdateKnowledgeMapRequestDto,
+    state: State<'_, AppState>,
+) -> Result<KnowledgeMapBundleDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let input = request.into();
+        use_cases.update_map(&input)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(KnowledgeMapBundleDto::from)
+    .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn duplicate_knowledge_map(
+    map_id: String,
+    state: State<'_, AppState>,
+) -> Result<KnowledgeMapBundleDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.duplicate_map(&map_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(KnowledgeMapBundleDto::from)
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn trash_knowledge_map(
+    map_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.trash_map(&map_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn create_knowledge_node(
+    map_id: String,
+    parent_id: String,
+    title: String,
+    state: State<'_, AppState>,
+) -> Result<KnowledgeMapBundleDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.create_node(&map_id, &parent_id, &title))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(KnowledgeMapBundleDto::from)
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn update_knowledge_node(
+    request: UpdateKnowledgeNodeRequestDto,
+    state: State<'_, AppState>,
+) -> Result<KnowledgeMapBundleDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.update_node(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(KnowledgeMapBundleDto::from)
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn move_knowledge_node(
+    request: MoveKnowledgeNodeRequestDto,
+    state: State<'_, AppState>,
+) -> Result<KnowledgeMapBundleDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let input = request.into();
+        use_cases.move_node(&input)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(KnowledgeMapBundleDto::from)
+    .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn delete_knowledge_subtree(
+    node_id: String,
+    state: State<'_, AppState>,
+) -> Result<KnowledgeMapBundleDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.delete_subtree(&node_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(KnowledgeMapBundleDto::from)
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn set_knowledge_node_collapsed(
+    node_id: String,
+    collapsed: bool,
+    state: State<'_, AppState>,
+) -> Result<KnowledgeMapBundleDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.set_collapsed(&node_id, collapsed))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(KnowledgeMapBundleDto::from)
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn add_knowledge_node_resource(
+    request: AddNodeResourceRequestDto,
+    state: State<'_, AppState>,
+) -> Result<KnowledgeMapBundleDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.add_resource(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(KnowledgeMapBundleDto::from)
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn delete_knowledge_node_resource(
+    resource_id: String,
+    state: State<'_, AppState>,
+) -> Result<KnowledgeMapBundleDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.delete_resource(&resource_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(KnowledgeMapBundleDto::from)
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn undo_knowledge_map(
+    map_id: String,
+    state: State<'_, AppState>,
+) -> Result<KnowledgeMapBundleDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.undo(&map_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(KnowledgeMapBundleDto::from)
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn redo_knowledge_map(
+    map_id: String,
+    state: State<'_, AppState>,
+) -> Result<KnowledgeMapBundleDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.redo(&map_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(KnowledgeMapBundleDto::from)
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_mindmap_import_drafts(
+    state: State<'_, AppState>,
+) -> Result<Vec<MindMapImportDraftDto>, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_import_drafts())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|drafts| {
+            drafts
+                .into_iter()
+                .map(MindMapImportDraftDto::from)
+                .collect()
+        })
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn create_mindmap_import_draft(
+    document_id: String,
+    state: State<'_, AppState>,
+) -> Result<MindMapImportDraftDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.create_import_draft(&document_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(MindMapImportDraftDto::from)
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn accept_mindmap_import_draft(
+    draft_id: String,
+    state: State<'_, AppState>,
+) -> Result<KnowledgeMapBundleDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.accept_import_draft(&draft_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(KnowledgeMapBundleDto::from)
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn reject_mindmap_import_draft(
+    draft_id: String,
+    state: State<'_, AppState>,
+) -> Result<MindMapImportDraftDto, AppErrorDto> {
+    let use_cases = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.reject_import_draft(&draft_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(MindMapImportDraftDto::from)
+        .map_err(|error| AppErrorDto::from_knowledge(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn start_resource_import(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -1390,7 +1970,7 @@ pub(crate) async fn start_resource_import(
             .add_filter(
                 "学习资料",
                 &[
-                    "pdf", "png", "jpg", "jpeg", "webp", "xmind", "opml", "md", "txt",
+                    "pdf", "png", "jpg", "jpeg", "webp", "xmind", "opml", "mm", "md", "txt",
                 ],
             )
             .blocking_pick_file()
@@ -1543,12 +2123,14 @@ fn emit_import_event(app: &AppHandle, event: ImportEventDto) {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppErrorDto, BackupReportDto, RescheduleTaskRequestDto, ResourceDocumentDto, SubjectDto,
-        TaskChangeDto, TaskDto, UpdateTaskDetailsRequestDto, get_runtime_status,
+        AppErrorDto, BackupReportDto, KnowledgeMapBundleDto, RescheduleTaskRequestDto,
+        ResourceDocumentDto, SubjectDto, TaskChangeDto, TaskDto, UpdateTaskDetailsRequestDto,
+        get_runtime_status,
     };
     use crate::application::{BackupReport, PersistenceError, ResourceDocument, ScheduleError};
     use crate::domain::{
-        LocalDate, Subject, SubjectColor, Task, TaskChange, TaskChangeSnapshot, TaskChangeType,
+        KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource, LocalDate,
+        MasteryState, Subject, SubjectColor, Task, TaskChange, TaskChangeSnapshot, TaskChangeType,
         TaskPriority, TaskStatus,
     };
 
@@ -1638,6 +2220,58 @@ mod tests {
         assert!(value.get("path").is_none());
         assert!(value.get("storageKey").is_none());
         assert!(value.get("originalName").is_none());
+    }
+
+    #[test]
+    fn knowledge_dto_exposes_typed_content_without_snapshots_or_storage_details() {
+        let map_id = "019f7328-4b66-7613-9729-e3570fc41525".to_owned();
+        let node_id = "019f7328-4b66-7613-9729-e3570fc41526".to_owned();
+        let dto = KnowledgeMapBundleDto::from(KnowledgeMapBundle {
+            map: KnowledgeMap {
+                id: map_id.clone(),
+                subject_id: None,
+                title: "408 知识树".to_owned(),
+                root_node_id: node_id.clone(),
+                current_revision: 2,
+                deleted_at: None,
+                created_at: 1_700_000_000_000,
+                updated_at: 1_700_000_000_100,
+            },
+            nodes: vec![KnowledgeNode {
+                id: node_id.clone(),
+                map_id,
+                subject_id: None,
+                parent_id: None,
+                title: "数据结构".to_owned(),
+                note_markdown: Some("线性表".to_owned()),
+                mastery_state: MasteryState::Learning,
+                importance: 5,
+                sort_order: 0,
+                collapsed: false,
+                created_at: 1_700_000_000_000,
+                updated_at: 1_700_000_000_100,
+            }],
+            resources: vec![KnowledgeNodeResource {
+                id: "019f7328-4b66-7613-9729-e3570fc41527".to_owned(),
+                node_id,
+                document_id: "019f7328-4b66-7613-9729-e3570fc41528".to_owned(),
+                document_title: "王道数据结构".to_owned(),
+                page_start: Some(10),
+                page_end: Some(12),
+                note: None,
+                created_at: 1_700_000_000_100,
+            }],
+            can_undo: true,
+            can_redo: false,
+        });
+
+        let value = serde_json::to_value(dto).expect("knowledge DTO should serialize");
+
+        assert_eq!(value["nodes"][0]["masteryState"], "learning");
+        assert!(value["map"].get("deletedAt").is_none());
+        assert!(value.get("snapshotJson").is_none());
+        assert!(value.get("databasePath").is_none());
+        assert!(value["resources"][0].get("storageKey").is_none());
     }
 
     #[test]
