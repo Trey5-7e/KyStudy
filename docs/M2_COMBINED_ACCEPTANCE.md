@@ -27,13 +27,15 @@
 - `pnpm tauri build --no-bundle`：隔离 Release 构建通过；
 - 自动测试已覆盖拆分中第二个子任务插入失败时的全事务回滚、回收站恢复与生命周期恢复相互独立、多次学习记录不覆盖预计时长、统计排除取消/回收站任务、空数据无虚假 100%、v2/v3→v4 迁移，以及备份恢复后四类 M2 数据完整关联。
 
-## 待验收 Release
+## 已验收 Release（历史证据）
 
 ```text
 F:\develop\KyStudy\src-tauri\target\m2-combined\release\kystudy.exe
 大小：12,480,512 bytes
 SHA-256：26BB10C806148372A32C71B4FE69C7B33624EDE4F4F9873530E74D4011E4A415
 ```
+
+以上 SHA-256 是维护者执行综合 Smoke 时的产物证据。M2-010 随后在同一隔离目录重新构建了相同源码，因此该路径当前文件的构建哈希可能不同；最终产物以 [M2 总验收记录](M2_ACCEPTANCE.md) 为准。
 
 该 EXE 不会覆盖 M2-005 的隔离 Release。不要同时运行两个 KyStudy 窗口。
 
