@@ -31,14 +31,14 @@ M5 完成了不依赖 OCR、AI 或网络的本地习题整理闭环：
 | Prettier / ESLint / TypeScript   | passed，零警告                                                      |
 | Cargo fmt / Clippy `-D warnings` | passed，零警告                                                      |
 | Vite production build            | passed；主 JS 330.82 kB，CSS 32.25 kB，PDF 阅读器保持独立懒加载     |
-| Tauri Release                    | passed；隔离目录构建，未自动启动桌面窗口                             |
+| Tauri Release                    | passed；统一 Release 目录构建，未自动启动桌面窗口                    |
 
 ### 2.1 本次 Release
 
 ```text
-F:\develop\KyStudy\src-tauri\target\m5-final\release\kystudy.exe
+F:\develop\KyStudy\src-tauri\target\release\kystudy.exe
 大小：15,110,656 bytes
-SHA-256：B90CF4755BC0B99382A869F55169282B9E276FAD59425078B2FCC2047CCD9CB6
+SHA-256：4268AA26BDBCDF033C0C1ED1EE08F6F9DAF1A02DC23BECF5974C004D39483E2D
 签名：NotSigned（内部验收构建，符合当前阶段边界）
 ```
 

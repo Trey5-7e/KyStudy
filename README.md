@@ -79,6 +79,8 @@ cargo clippy --all-targets --all-features --locked --manifest-path src-tauri\Car
 pnpm tauri build --no-bundle
 ```
 
+本地只维护这一份主项目，所有后续功能直接在当前工作树迭代，历史状态由 Git commit 保存。Release 固定输出到 `src-tauri\target\release\kystudy.exe`；不要再通过 `CARGO_TARGET_DIR` 创建 `m2-final`、`m3-final` 等版本目录。`target` 只是可重新生成的编译缓存，不作为源码或用户数据备份。
+
 ## 面向谁
 
 - 准备全国硕士研究生招生考试、尤其需要长期管理多门科目的人；
