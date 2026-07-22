@@ -4,7 +4,7 @@ import { resolveStoredView } from "./navigation";
 
 describe("resolveStoredView", () => {
   it("restores a supported menu id", () => {
-    expect(resolveStoredView("review")).toBe("review");
+    expect(resolveStoredView("analytics")).toBe("analytics");
   });
 
   it.each([null, "", "workspace", "unknown"])(

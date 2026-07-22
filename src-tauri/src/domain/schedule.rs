@@ -75,6 +75,13 @@ impl LocalDate {
         Self::parse(&format!("{year:04}-{month:02}-{day:02}"))
     }
 
+    /// Moves this date backward by a bounded number of calendar days.
+    pub(crate) fn subtract_days(&self, days: u32) -> Result<Self, ScheduleValidationError> {
+        let target = days_from_civil(self.components()) - i64::from(days);
+        let (year, month, day) = civil_from_days(target).ok_or(ScheduleValidationError::Date)?;
+        Self::parse(&format!("{year:04}-{month:02}-{day:02}"))
+    }
+
     fn components(&self) -> (i64, i64, i64) {
         let bytes = self.0.as_bytes();
         (
@@ -913,6 +920,15 @@ mod tests {
         let later = LocalDate::parse("2024-03-01").expect("fixture date should parse");
 
         assert_eq!(later.days_since(&earlier), 2);
+    }
+
+    #[test]
+    fn local_date_subtraction_crosses_month_and_leap_day() {
+        let march = LocalDate::parse("2024-03-01").expect("date should parse");
+
+        let result = march.subtract_days(2).expect("date should remain valid");
+
+        assert_eq!(result.as_str(), "2024-02-28");
     }
 
     #[test]

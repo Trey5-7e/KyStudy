@@ -1,6 +1,7 @@
 //! Application-level use cases and DTOs.
 
 mod ai;
+mod analytics;
 mod backup;
 mod mindmap;
 mod mindmap_import;
@@ -20,6 +21,11 @@ pub(crate) use ai::{
     AiCachedResponse, AiCallPreview, AiCallPurpose, AiCallResult, AiError, AiOverview,
     AiPreviewInput, AiProviderGateway, AiProviderResponse, AiRepository, AiUseCases, BeginAiCall,
     SaveAiBudgetInput, SaveAiProviderInput, SecretStore, default_provider, estimate_tokens,
+};
+pub(crate) use analytics::{
+    AnalyticsBacklog, AnalyticsError, AnalyticsInput, AnalyticsOverview, AnalyticsPeriodSummary,
+    AnalyticsRepository, AnalyticsUseCases, DailyAnalyticsPoint, KnowledgeAnalytics,
+    RepeatedMistakeAnalytics, SubjectAnalytics, rounded_percent,
 };
 pub(crate) use backup::{
     BackupError, BackupReport, BackupRepository, BackupUseCases, RestoreReport,

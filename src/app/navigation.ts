@@ -6,6 +6,7 @@ export type AppView =
   | "mindmap"
   | "workbook"
   | "review"
+  | "analytics"
   | "ai"
   | "data";
 
@@ -17,6 +18,7 @@ const VIEW_IDS = new Set<AppView>([
   "mindmap",
   "workbook",
   "review",
+  "analytics",
   "ai",
   "data",
 ]);

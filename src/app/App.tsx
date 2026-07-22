@@ -53,6 +53,11 @@ const AiFoundationPanel = lazy(() =>
     default: module.AiFoundationPanel,
   })),
 );
+const AnalyticsPanel = lazy(() =>
+  import("../features/analytics/AnalyticsPanel").then((module) => ({
+    default: module.AnalyticsPanel,
+  })),
+);
 const BackupPanel = lazy(() =>
   import("../features/backup/BackupPanel").then((module) => ({
     default: module.BackupPanel,
@@ -69,6 +74,7 @@ interface PageContentProps {
   resourceOpenRequest?: ResourceOpenRequest;
   runtimeState: RuntimeState;
   onOpenResource: (documentId: string, page: number) => void;
+  onNavigate: (view: AppView) => void;
   onRetryRuntime: () => void;
 }
 
@@ -86,6 +92,7 @@ const NAVIGATION: ReadonlyArray<{
   { id: "mindmap", label: "思维导图", caption: "知识结构" },
   { id: "workbook", label: "习题册", caption: "题目与作答" },
   { id: "review", label: "错题复习", caption: "今日复习队列" },
+  { id: "analytics", label: "学习分析", caption: "进度与薄弱点" },
   { id: "ai", label: "AI 设置", caption: "Provider 与预算" },
   { id: "data", label: "数据与备份", caption: "运行状态与恢复" },
 ];
@@ -168,6 +175,7 @@ function PageContent({
   resourceOpenRequest,
   runtimeState,
   onOpenResource,
+  onNavigate,
   onRetryRuntime,
 }: PageContentProps) {
   switch (activeView) {
@@ -190,6 +198,15 @@ function PageContent({
       return <WorkbookPanel />;
     case "review":
       return <ReviewPanel />;
+    case "analytics":
+      return (
+        <AnalyticsPanel
+          onOpenSchedule={() => onNavigate("schedule")}
+          onOpenReview={() => onNavigate("review")}
+          onOpenMindMap={() => onNavigate("mindmap")}
+          onOpenAi={() => onNavigate("ai")}
+        />
+      );
     case "ai":
       return <AiFoundationPanel />;
     case "data":
@@ -316,7 +333,7 @@ export function App() {
       <main className="app-content">
         <header className="app-page-header">
           <div>
-            <p className="eyebrow">KyStudy · M9</p>
+            <p className="eyebrow">KyStudy · M11</p>
             <h1>{currentPage.label}</h1>
           </div>
           <p>{currentPage.caption}</p>
@@ -333,6 +350,7 @@ export function App() {
             resourceOpenRequest={resourceOpenRequest}
             runtimeState={runtimeState}
             onOpenResource={openResource}
+            onNavigate={navigate}
             onRetryRuntime={() => void retryRuntimeStatus()}
           />
         </Suspense>

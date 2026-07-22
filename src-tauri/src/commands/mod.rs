@@ -7,18 +7,20 @@ use uuid::Uuid;
 
 use crate::application::{
     AddNodeResourceInput, AddPlanReferenceInput, AddQuestionAttemptInput, AddQuestionRegionInput,
-    AiCallPreview, AiCallResult, AiError, AiOverview, AiPreviewInput, BackupError, BackupReport,
-    BeginResourceIndexInput, ConfirmPlanningChatInput, CreateKnowledgeMapInput,
+    AiCallPreview, AiCallResult, AiError, AiOverview, AiPreviewInput, AnalyticsBacklog,
+    AnalyticsError, AnalyticsInput, AnalyticsOverview, AnalyticsPeriodSummary, BackupError,
+    BackupReport, BeginResourceIndexInput, ConfirmPlanningChatInput, CreateKnowledgeMapInput,
     CreateQuestionInput, CreateStudySessionInput, CreateSubjectInput, CreateTaskInput,
-    GenerateReviewQueueInput, ImportError, ImportProgress, InsertReviewQueueItemInput,
-    KnowledgeError, MoveKnowledgeNodeInput, PinQuestionReviewInput, PlanningChatError,
-    PlanningChatInput, PlanningChatPreview, PlanningChatReply, PlanningContextSelection,
-    PlanningConversation, PlanningError, PlanningMessage, PlanningSource, QuestionError,
-    QuestionRegionInput, RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor,
-    RestoreReport, ReviewError, RuntimeStatus, SaveAiBudgetInput, SaveAiProviderInput,
-    SavePlanInput, SavePlanStageInput, ScheduleError, SearchError, SearchResourcesInput,
-    SetQuestionReviewInput, SplitChildInput, SplitTaskInput, StoreResourcePageTextInput,
-    SubmitReviewInput, UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput, UpdateQuestionInput,
+    DailyAnalyticsPoint, GenerateReviewQueueInput, ImportError, ImportProgress,
+    InsertReviewQueueItemInput, KnowledgeAnalytics, KnowledgeError, MoveKnowledgeNodeInput,
+    PinQuestionReviewInput, PlanningChatError, PlanningChatInput, PlanningChatPreview,
+    PlanningChatReply, PlanningContextSelection, PlanningConversation, PlanningError,
+    PlanningMessage, PlanningSource, QuestionError, QuestionRegionInput, RepeatedMistakeAnalytics,
+    RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor, RestoreReport, ReviewError,
+    RuntimeStatus, SaveAiBudgetInput, SaveAiProviderInput, SavePlanInput, SavePlanStageInput,
+    ScheduleError, SearchError, SearchResourcesInput, SetQuestionReviewInput, SplitChildInput,
+    SplitTaskInput, StoreResourcePageTextInput, SubjectAnalytics, SubmitReviewInput,
+    UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput, UpdateQuestionInput,
     UpdateReviewPreferencesInput, UpdateTaskDetailsInput,
     get_runtime_status as load_runtime_status,
 };
@@ -36,6 +38,20 @@ use crate::domain::{
 #[tauri::command]
 pub(crate) fn get_runtime_status() -> RuntimeStatus {
     load_runtime_status()
+}
+
+#[tauri::command]
+pub(crate) async fn get_analytics_overview(
+    request: AnalyticsRequestDto,
+    state: State<'_, AppState>,
+) -> Result<AnalyticsOverviewDto, AppErrorDto> {
+    let use_cases = state.analytics.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.overview(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_analytics(&error))
 }
 
 #[tauri::command]
@@ -453,6 +469,236 @@ impl From<StudyStatistics> for StudyStatisticsDto {
                 .subjects
                 .into_iter()
                 .map(SubjectStatisticsDto::from)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct AnalyticsRequestDto {
+    today: String,
+    days: u32,
+}
+
+impl From<AnalyticsRequestDto> for AnalyticsInput {
+    fn from(value: AnalyticsRequestDto) -> Self {
+        Self {
+            today: value.today,
+            days: value.days,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AnalyticsPeriodSummaryDto {
+    task_count: u32,
+    completed_task_count: u32,
+    completion_rate_percent: Option<u32>,
+    planned_minutes: u32,
+    actual_minutes: u32,
+    attempt_count: u32,
+    correct_attempt_count: u32,
+    accuracy_percent: Option<u32>,
+    review_item_count: u32,
+    completed_review_count: u32,
+    review_completion_percent: Option<u32>,
+    ai_tokens: u64,
+}
+
+impl From<AnalyticsPeriodSummary> for AnalyticsPeriodSummaryDto {
+    fn from(value: AnalyticsPeriodSummary) -> Self {
+        Self {
+            task_count: value.task_count,
+            completed_task_count: value.completed_task_count,
+            completion_rate_percent: value.completion_rate_percent,
+            planned_minutes: value.planned_minutes,
+            actual_minutes: value.actual_minutes,
+            attempt_count: value.attempt_count,
+            correct_attempt_count: value.correct_attempt_count,
+            accuracy_percent: value.accuracy_percent,
+            review_item_count: value.review_item_count,
+            completed_review_count: value.completed_review_count,
+            review_completion_percent: value.review_completion_percent,
+            ai_tokens: value.ai_tokens,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AnalyticsBacklogDto {
+    overdue_tasks: u32,
+    active_mistakes: u32,
+    due_reviews: u32,
+    queued_reviews: u32,
+}
+
+impl From<AnalyticsBacklog> for AnalyticsBacklogDto {
+    fn from(value: AnalyticsBacklog) -> Self {
+        Self {
+            overdue_tasks: value.overdue_tasks,
+            active_mistakes: value.active_mistakes,
+            due_reviews: value.due_reviews,
+            queued_reviews: value.queued_reviews,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DailyAnalyticsPointDto {
+    date: String,
+    task_count: u32,
+    completed_task_count: u32,
+    planned_minutes: u32,
+    actual_minutes: u32,
+    attempt_count: u32,
+    correct_attempt_count: u32,
+    review_item_count: u32,
+    completed_review_count: u32,
+    ai_tokens: u64,
+}
+
+impl From<DailyAnalyticsPoint> for DailyAnalyticsPointDto {
+    fn from(value: DailyAnalyticsPoint) -> Self {
+        Self {
+            date: value.date,
+            task_count: value.task_count,
+            completed_task_count: value.completed_task_count,
+            planned_minutes: value.planned_minutes,
+            actual_minutes: value.actual_minutes,
+            attempt_count: value.attempt_count,
+            correct_attempt_count: value.correct_attempt_count,
+            review_item_count: value.review_item_count,
+            completed_review_count: value.completed_review_count,
+            ai_tokens: value.ai_tokens,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SubjectAnalyticsDto {
+    subject_id: Option<String>,
+    subject_name: String,
+    color_key: &'static str,
+    task_count: u32,
+    completed_task_count: u32,
+    completion_rate_percent: Option<u32>,
+    actual_minutes: u32,
+}
+
+impl From<SubjectAnalytics> for SubjectAnalyticsDto {
+    fn from(value: SubjectAnalytics) -> Self {
+        Self {
+            subject_id: value.subject_id,
+            subject_name: value.subject_name,
+            color_key: value.color.as_str(),
+            task_count: value.task_count,
+            completed_task_count: value.completed_task_count,
+            completion_rate_percent: value.completion_rate_percent,
+            actual_minutes: value.actual_minutes,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct KnowledgeAnalyticsDto {
+    node_id: String,
+    node_title: String,
+    map_id: String,
+    map_title: String,
+    subject_name: Option<String>,
+    question_count: u32,
+    attempt_count: u32,
+    correct_attempt_count: u32,
+    accuracy_percent: Option<u32>,
+    active_mistake_count: u32,
+}
+
+impl From<KnowledgeAnalytics> for KnowledgeAnalyticsDto {
+    fn from(value: KnowledgeAnalytics) -> Self {
+        Self {
+            node_id: value.node_id,
+            node_title: value.node_title,
+            map_id: value.map_id,
+            map_title: value.map_title,
+            subject_name: value.subject_name,
+            question_count: value.question_count,
+            attempt_count: value.attempt_count,
+            correct_attempt_count: value.correct_attempt_count,
+            accuracy_percent: value.accuracy_percent,
+            active_mistake_count: value.active_mistake_count,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RepeatedMistakeAnalyticsDto {
+    question_id: String,
+    question_title: String,
+    document_id: String,
+    document_title: String,
+    mistake_count: u32,
+    consecutive_failure_count: u32,
+    mastery: String,
+    due_date: String,
+    last_mistake_at: Option<i64>,
+}
+
+impl From<RepeatedMistakeAnalytics> for RepeatedMistakeAnalyticsDto {
+    fn from(value: RepeatedMistakeAnalytics) -> Self {
+        Self {
+            question_id: value.question_id,
+            question_title: value.question_title,
+            document_id: value.document_id,
+            document_title: value.document_title,
+            mistake_count: value.mistake_count,
+            consecutive_failure_count: value.consecutive_failure_count,
+            mastery: value.mastery,
+            due_date: value.due_date,
+            last_mistake_at: value.last_mistake_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AnalyticsOverviewDto {
+    range_start: String,
+    range_end: String,
+    previous_range_start: String,
+    previous_range_end: String,
+    current: AnalyticsPeriodSummaryDto,
+    previous: AnalyticsPeriodSummaryDto,
+    backlog: AnalyticsBacklogDto,
+    daily: Vec<DailyAnalyticsPointDto>,
+    subjects: Vec<SubjectAnalyticsDto>,
+    knowledge: Vec<KnowledgeAnalyticsDto>,
+    repeated_mistakes: Vec<RepeatedMistakeAnalyticsDto>,
+}
+
+impl From<AnalyticsOverview> for AnalyticsOverviewDto {
+    fn from(value: AnalyticsOverview) -> Self {
+        Self {
+            range_start: value.range_start,
+            range_end: value.range_end,
+            previous_range_start: value.previous_range_start,
+            previous_range_end: value.previous_range_end,
+            current: value.current.into(),
+            previous: value.previous.into(),
+            backlog: value.backlog.into(),
+            daily: value.daily.into_iter().map(Into::into).collect(),
+            subjects: value.subjects.into_iter().map(Into::into).collect(),
+            knowledge: value.knowledge.into_iter().map(Into::into).collect(),
+            repeated_mistakes: value
+                .repeated_mistakes
+                .into_iter()
+                .map(Into::into)
                 .collect(),
         }
     }
@@ -2440,6 +2686,30 @@ impl AppErrorDto {
             code: "INTERNAL_ERROR",
             message: "本地任务意外中断。",
             action: "重新启动应用后重试。",
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    fn from_analytics(error: &AnalyticsError) -> Self {
+        let (message, action) = match error {
+            AnalyticsError::WorkspaceNotInitialized => (
+                "尚未创建本地工作区。",
+                "先创建工作区并记录学习数据，再查看分析。",
+            ),
+            AnalyticsError::InvalidInput => (
+                "分析日期或统计周期无效。",
+                "选择 7 天、28 天或 90 天后重试。",
+            ),
+            AnalyticsError::InvalidStoredData => (
+                "部分学习统计数据超出安全范围。",
+                "保留工作区并创建备份，不要手动修改数据库。",
+            ),
+            AnalyticsError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
             operation_id: Uuid::new_v4().to_string(),
         }
     }

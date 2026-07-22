@@ -6,15 +6,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crate::application::{
-    AiUseCases, BackupUseCases, KnowledgeUseCases, PlanningChatUseCases, PlanningUseCases,
-    QuestionUseCases, ResourceUseCases, ReviewUseCases, ScheduleUseCases, SearchUseCases,
-    WorkspaceUseCases,
+    AiUseCases, AnalyticsUseCases, BackupUseCases, KnowledgeUseCases, PlanningChatUseCases,
+    PlanningUseCases, QuestionUseCases, ResourceUseCases, ReviewUseCases, ScheduleUseCases,
+    SearchUseCases, WorkspaceUseCases,
 };
 use crate::infrastructure::{
-    ProviderRouter, SqliteAiRepository, SqliteBackupStore, SqliteBlobStore,
-    SqliteKnowledgeRepository, SqlitePlanningChatRepository, SqlitePlanningRepository,
-    SqliteQuestionRepository, SqliteReviewRepository, SqliteScheduleRepository,
-    SqliteSearchRepository, SqliteWorkspaceRepository, SystemSecretStore,
+    ProviderRouter, SqliteAiRepository, SqliteAnalyticsRepository, SqliteBackupStore,
+    SqliteBlobStore, SqliteKnowledgeRepository, SqlitePlanningChatRepository,
+    SqlitePlanningRepository, SqliteQuestionRepository, SqliteReviewRepository,
+    SqliteScheduleRepository, SqliteSearchRepository, SqliteWorkspaceRepository, SystemSecretStore,
 };
 
 /// Tracks cancel flags without sharing `SQLite` connections across threads.
@@ -76,6 +76,7 @@ pub(crate) struct AppState {
     pub(crate) reviews: ReviewUseCases<SqliteReviewRepository>,
     pub(crate) search: SearchUseCases<SqliteSearchRepository>,
     pub(crate) ai: AiUseCases<SqliteAiRepository, SystemSecretStore, ProviderRouter>,
+    pub(crate) analytics: AnalyticsUseCases<SqliteAnalyticsRepository>,
     pub(crate) planning_chat: PlanningChatUseCases<
         SqlitePlanningChatRepository,
         SqliteAiRepository,
@@ -99,6 +100,7 @@ impl AppState {
         let review_repository = SqliteReviewRepository::new(application_data_directory);
         let search_repository = SqliteSearchRepository::new(application_data_directory);
         let ai_repository = SqliteAiRepository::new(application_data_directory);
+        let analytics_repository = SqliteAnalyticsRepository::new(application_data_directory);
         let planning_chat_repository =
             SqlitePlanningChatRepository::new(application_data_directory);
         let backup_store = SqliteBackupStore::new(application_data_directory);
@@ -117,6 +119,7 @@ impl AppState {
             search: SearchUseCases::new(search_repository),
             planning_chat: PlanningChatUseCases::new(planning_chat_repository, ai.clone()),
             ai,
+            analytics: AnalyticsUseCases::new(analytics_repository),
             backups: BackupUseCases::new(backup_store),
             imports: ImportCoordinator::default(),
             operations: WorkspaceOperationGate::default(),
