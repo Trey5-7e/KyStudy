@@ -20,3 +20,4 @@ Spike 是为了消除技术不确定性而编写的短期实验，不等于正�
 - [TV-02：SQLite、迁移与恢复](TV-02-sqlite.md) — `通过`
 - [TV-03：Blob 文件库与工作区备份](TV-03-blob-store.md) — `通过`
 - [TV-04：PDF 阅读、受控 Blob 加载与区域坐标](TV-04-pdf-viewer.md) — `通过`
+- [TV-07：本地 OCR 打包与效果](TV-07-ocr.md) — `有条件通过`

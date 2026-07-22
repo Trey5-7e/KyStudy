@@ -1,0 +1,7 @@
+output/
+build/
+dist/
+*.spec
+.ruff_cache/
+__pycache__/
+*.pyc

@@ -25,3 +25,4 @@ ADR 用于记录已经做出的重要技术决策，以及当时的上下文、�
 - [ADR-002：SQLite 驱动、迁移与 Repository 边界](002-sqlite-driver.md) — `accepted`
 - [ADR-003：PDF.js 显示层、受控 RangeSource 与区域坐标](003-pdf-rendering.md) — `accepted`
 - [ADR-004：Blob 文件存储、去重与备份格式](004-file-storage.md) — `accepted`
+- [ADR-006：可选本地 OCR Sidecar](006-ocr-deployment.md) — `accepted`
