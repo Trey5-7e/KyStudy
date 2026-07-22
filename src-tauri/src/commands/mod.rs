@@ -13,7 +13,8 @@ use crate::application::{
     CreateKnowledgeMapInput, CreateQuestionInput, CreateStudySessionInput, CreateSubjectInput,
     CreateTaskInput, DailyAnalyticsPoint, GenerateReviewQueueInput, ImportError, ImportProgress,
     InsertReviewQueueItemInput, KnowledgeAnalytics, KnowledgeError, MoveKnowledgeNodeInput,
-    OcrComponentStatus, OcrError, PinQuestionReviewInput, PlanScheduleError, PlanTaskCreation,
+    OcrComponentStatus, OcrError, PinQuestionReviewInput, PlanExecutionProgress, PlanProgressError,
+    PlanProgressInput, PlanProgressSummary, PlanScheduleError, PlanStageProgress, PlanTaskCreation,
     PlanTaskPreview, PlanTaskPreviewItem, PlanTaskScheduleInput, PlanningChatError,
     PlanningChatInput, PlanningChatPreview, PlanningChatReply, PlanningContextSelection,
     PlanningConversation, PlanningError, PlanningMessage, PlanningSource, QuestionError,
@@ -55,6 +56,20 @@ pub(crate) async fn get_analytics_overview(
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)
         .map_err(|error| AppErrorDto::from_analytics(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn get_plan_execution_progress(
+    request: PlanProgressRequestDto,
+    state: State<'_, AppState>,
+) -> Result<PlanExecutionProgressDto, AppErrorDto> {
+    let use_cases = state.plan_progress.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.overview(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_plan_progress(&error))
 }
 
 #[tauri::command]
@@ -703,6 +718,98 @@ impl From<AnalyticsOverview> for AnalyticsOverviewDto {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PlanProgressRequestDto {
+    plan_id: String,
+    today: String,
+}
+
+impl From<PlanProgressRequestDto> for PlanProgressInput {
+    fn from(value: PlanProgressRequestDto) -> Self {
+        Self {
+            plan_id: value.plan_id,
+            today: value.today,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlanProgressSummaryDto {
+    generated_task_count: u32,
+    effective_task_count: u32,
+    completed_task_count: u32,
+    remaining_task_count: u32,
+    overdue_task_count: u32,
+    canceled_task_count: u32,
+    trashed_task_count: u32,
+    planned_minutes: u32,
+    actual_minutes: u32,
+    completion_rate_percent: Option<u32>,
+}
+
+impl From<PlanProgressSummary> for PlanProgressSummaryDto {
+    fn from(value: PlanProgressSummary) -> Self {
+        Self {
+            generated_task_count: value.counts.generated_task_count,
+            effective_task_count: value.counts.effective_task_count,
+            completed_task_count: value.counts.completed_task_count,
+            remaining_task_count: value.counts.remaining_task_count,
+            overdue_task_count: value.counts.overdue_task_count,
+            canceled_task_count: value.counts.canceled_task_count,
+            trashed_task_count: value.counts.trashed_task_count,
+            planned_minutes: value.counts.planned_minutes,
+            actual_minutes: value.counts.actual_minutes,
+            completion_rate_percent: value.completion_rate_percent,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlanStageProgressDto {
+    stage_id: String,
+    stage_title: String,
+    start_date: String,
+    end_date: String,
+    summary: PlanProgressSummaryDto,
+}
+
+impl From<PlanStageProgress> for PlanStageProgressDto {
+    fn from(value: PlanStageProgress) -> Self {
+        Self {
+            stage_id: value.stage_id,
+            stage_title: value.stage_title,
+            start_date: value.start_date.as_str().to_owned(),
+            end_date: value.end_date.as_str().to_owned(),
+            summary: value.summary.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlanExecutionProgressDto {
+    plan_id: String,
+    plan_title: String,
+    plan_status: String,
+    summary: PlanProgressSummaryDto,
+    stages: Vec<PlanStageProgressDto>,
+}
+
+impl From<PlanExecutionProgress> for PlanExecutionProgressDto {
+    fn from(value: PlanExecutionProgress) -> Self {
+        Self {
+            plan_id: value.plan_id,
+            plan_title: value.plan_title,
+            plan_status: value.plan_status.as_str().to_owned(),
+            summary: value.summary.into(),
+            stages: value.stages.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -2922,6 +3029,28 @@ impl AppErrorDto {
         }
     }
 
+    fn from_plan_progress(error: &PlanProgressError) -> Self {
+        let (message, action) = match error {
+            PlanProgressError::WorkspaceNotInitialized => (
+                "尚未创建本地工作区。",
+                "先创建工作区并确认计划任务，再查看执行进度。",
+            ),
+            PlanProgressError::InvalidInput => ("计划进度请求无效。", "刷新个人计划后重新选择。"),
+            PlanProgressError::PlanNotFound => ("找不到这份个人计划。", "刷新计划列表后重新选择。"),
+            PlanProgressError::InvalidStoredData => (
+                "部分计划进度数据不完整。",
+                "先创建完整备份，不要手动修改数据库。",
+            ),
+            PlanProgressError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
     fn from_import(error: &ImportError) -> Self {
         let (message, action) = match error {
             ImportError::WorkspaceNotInitialized => {
@@ -4690,18 +4819,20 @@ fn emit_import_event(app: &AppHandle, event: ImportEventDto) {
 mod tests {
     use super::{
         AiOverviewDto, AppErrorDto, BackupReportDto, KnowledgeMapBundleDto, OcrRecognitionDto,
-        PlanTaskScheduleRequestDto, QuestionBundleDto, RescheduleTaskRequestDto,
-        ResourceDocumentDto, ResourceSearchResultDto, ReviewReasonDto, SubjectDto, TaskChangeDto,
-        TaskDto, UpdateTaskDetailsRequestDto, get_runtime_status,
+        PlanExecutionProgressDto, PlanProgressRequestDto, PlanTaskScheduleRequestDto,
+        QuestionBundleDto, RescheduleTaskRequestDto, ResourceDocumentDto, ResourceSearchResultDto,
+        ReviewReasonDto, SubjectDto, TaskChangeDto, TaskDto, UpdateTaskDetailsRequestDto,
+        get_runtime_status,
     };
     use crate::application::{
-        AiOverview, AiProviderOverview, BackupReport, PersistenceError, ResourceDocument,
+        AiOverview, AiProviderOverview, BackupReport, PersistenceError, PlanExecutionProgress,
+        PlanProgressCounts, PlanProgressSummary, PlanStageProgress, ResourceDocument,
         ScheduleError, default_provider,
     };
     use crate::domain::{
         AttemptResult, KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource,
-        LocalDate, MasteryState, OcrRecognition, OcrRecognitionState, OcrTextLine, Question,
-        QuestionAttempt, QuestionBundle, QuestionRegion, ResourceSearchMatchKind,
+        LocalDate, MasteryState, OcrRecognition, OcrRecognitionState, OcrTextLine, PlanStatus,
+        Question, QuestionAttempt, QuestionBundle, QuestionRegion, ResourceSearchMatchKind,
         ResourceSearchResult, ReviewReason, ReviewSelectionKind, Subject, SubjectColor, Task,
         TaskChange, TaskChangeSnapshot, TaskChangeType, TaskPriority, TaskStatus,
     };
@@ -4723,6 +4854,55 @@ mod tests {
         assert_eq!(value["archivedAt"], 1_700_000_000_100_i64);
         assert!(value.get("workspaceId").is_none());
         assert!(value.get("databasePath").is_none());
+    }
+
+    #[test]
+    fn plan_progress_dto_exposes_only_typed_aggregates() {
+        let summary = PlanProgressSummary {
+            counts: PlanProgressCounts {
+                generated_task_count: 2,
+                effective_task_count: 2,
+                completed_task_count: 1,
+                remaining_task_count: 1,
+                overdue_task_count: 1,
+                canceled_task_count: 0,
+                trashed_task_count: 0,
+                planned_minutes: 120,
+                actual_minutes: 45,
+            },
+            completion_rate_percent: Some(50),
+        };
+        let dto = PlanExecutionProgressDto::from(PlanExecutionProgress {
+            plan_id: "plan-id".to_owned(),
+            plan_title: "408 计划".to_owned(),
+            plan_status: PlanStatus::Active,
+            summary: summary.clone(),
+            stages: vec![PlanStageProgress {
+                stage_id: "stage-id".to_owned(),
+                stage_title: "基础阶段".to_owned(),
+                start_date: LocalDate::parse("2026-07-01").expect("date should parse"),
+                end_date: LocalDate::parse("2026-07-31").expect("date should parse"),
+                summary,
+            }],
+        });
+
+        let value = serde_json::to_value(dto).expect("plan progress DTO should serialize");
+
+        assert_eq!(value["summary"]["completionRatePercent"], 50);
+        assert!(value.get("taskIds").is_none());
+        assert!(value.get("sql").is_none());
+        assert!(value.get("databasePath").is_none());
+    }
+
+    #[test]
+    fn plan_progress_request_rejects_frontend_authored_task_ids() {
+        let request = serde_json::from_value::<PlanProgressRequestDto>(serde_json::json!({
+            "planId": "019f7328-4b66-7613-9729-e3570fc41525",
+            "today": "2026-07-22",
+            "taskIds": ["private"]
+        }));
+
+        assert!(request.is_err());
     }
 
     #[test]

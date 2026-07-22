@@ -29,6 +29,7 @@ macro_rules! kystudy_command_handler {
         tauri::generate_handler![
             commands::get_runtime_status,
             commands::get_analytics_overview,
+            commands::get_plan_execution_progress,
             commands::get_ai_overview,
             commands::create_ai_provider,
             commands::update_ai_provider,

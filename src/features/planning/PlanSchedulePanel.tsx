@@ -46,6 +46,7 @@ interface PlanSchedulePanelProps {
   stages: PlanStage[];
   subjects: StudySubject[];
   onOpenSchedule(): void;
+  onTasksCreated(): void;
 }
 
 export function PlanSchedulePanel({
@@ -53,6 +54,7 @@ export function PlanSchedulePanel({
   stages,
   subjects,
   onOpenSchedule,
+  onTasksCreated,
 }: PlanSchedulePanelProps) {
   const [form, setForm] = useState<ScheduleForm>(() => defaultForm(stages[0]));
   const [preview, setPreview] = useState<PreviewState>();
@@ -125,6 +127,9 @@ export function PlanSchedulePanel({
         request: preview.request,
         value: await previewPlanStageTasks(preview.request),
       });
+      if (creation.createdTasks.length > 0) {
+        onTasksCreated();
+      }
     } catch (confirmError: unknown) {
       setError(normalizePlanScheduleError(confirmError));
     } finally {

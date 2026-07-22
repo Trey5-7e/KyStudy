@@ -21,6 +21,8 @@ import {
   listSubjects,
   type StudySubject,
 } from "../../shared/tauri/scheduleClient";
+import { getWorkspaceStatus } from "../../shared/tauri/workspaceClient";
+import { PlanProgressPanel } from "./PlanProgressPanel";
 import { PlanSchedulePanel } from "./PlanSchedulePanel";
 import { PlanningChatPanel } from "./PlanningChatPanel";
 
@@ -65,6 +67,8 @@ export function PersonalPlanPanel({
   const [plans, setPlans] = useState<StudyPlanBundle[]>([]);
   const [pdfResources, setPdfResources] = useState<ResourceDocument[]>([]);
   const [subjects, setSubjects] = useState<StudySubject[]>([]);
+  const [workspaceTimezone, setWorkspaceTimezone] = useState("Asia/Shanghai");
+  const [progressRefreshToken, setProgressRefreshToken] = useState(0);
   const [selectedId, setSelectedId] = useState<string>();
   const [planForm, setPlanForm] = useState<PlanForm>(EMPTY_PLAN);
   const [stageForm, setStageForm] = useState<StageForm>(EMPTY_STAGE);
@@ -80,8 +84,13 @@ export function PersonalPlanPanel({
 
   useEffect(() => {
     let active = true;
-    void Promise.all([listStudyPlans(), listResources(), listSubjects()]).then(
-      ([loadedPlans, resources, loadedSubjects]) => {
+    void Promise.all([
+      listStudyPlans(),
+      listResources(),
+      listSubjects(),
+      getWorkspaceStatus(),
+    ]).then(
+      ([loadedPlans, resources, loadedSubjects, workspace]) => {
         if (!active) {
           return;
         }
@@ -90,6 +99,7 @@ export function PersonalPlanPanel({
           resources.filter((resource) => resource.kind === "pdf"),
         );
         setSubjects(loadedSubjects);
+        setWorkspaceTimezone(workspace?.timezone ?? "Asia/Shanghai");
         const initial = loadedPlans[0];
         if (initial !== undefined) {
           selectBundle(initial, setSelectedId, setPlanForm);
@@ -508,6 +518,16 @@ export function PersonalPlanPanel({
                   </form>
                 </section>
 
+                <PlanProgressPanel
+                  planId={selected.plan.id}
+                  timezone={workspaceTimezone}
+                  scopeVersion={selected.stages
+                    .map((stage) => `${stage.id}:${stage.updatedAt}`)
+                    .join(",")}
+                  refreshToken={progressRefreshToken}
+                  onOpenSchedule={onOpenSchedule}
+                />
+
                 <PlanSchedulePanel
                   key={`${selected.plan.id}:${selected.plan.status}:${selected.stages
                     .map((stage) => `${stage.id}:${stage.updatedAt}`)
@@ -516,6 +536,9 @@ export function PersonalPlanPanel({
                   stages={selected.stages}
                   subjects={subjects}
                   onOpenSchedule={onOpenSchedule}
+                  onTasksCreated={() =>
+                    setProgressRefreshToken((current) => current + 1)
+                  }
                 />
 
                 <section

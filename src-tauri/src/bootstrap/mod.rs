@@ -7,15 +7,16 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crate::application::{
     AiUseCases, AnalyticsUseCases, BackupUseCases, KnowledgeUseCases, OcrUseCases,
-    PlanScheduleUseCases, PlanningChatUseCases, PlanningUseCases, QuestionUseCases,
-    ResourceUseCases, ReviewUseCases, ScheduleUseCases, SearchUseCases, WorkspaceUseCases,
+    PlanProgressUseCases, PlanScheduleUseCases, PlanningChatUseCases, PlanningUseCases,
+    QuestionUseCases, ResourceUseCases, ReviewUseCases, ScheduleUseCases, SearchUseCases,
+    WorkspaceUseCases,
 };
 use crate::infrastructure::{
     LocalOcrWorker, ProviderRouter, SqliteAiRepository, SqliteAnalyticsRepository,
     SqliteBackupStore, SqliteBlobStore, SqliteKnowledgeRepository, SqliteOcrRepository,
-    SqlitePlanningChatRepository, SqlitePlanningRepository, SqliteQuestionRepository,
-    SqliteReviewRepository, SqliteScheduleRepository, SqliteSearchRepository,
-    SqliteWorkspaceRepository, SystemSecretStore,
+    SqlitePlanProgressRepository, SqlitePlanningChatRepository, SqlitePlanningRepository,
+    SqliteQuestionRepository, SqliteReviewRepository, SqliteScheduleRepository,
+    SqliteSearchRepository, SqliteWorkspaceRepository, SystemSecretStore,
 };
 
 /// Tracks cancel flags without sharing `SQLite` connections across threads.
@@ -109,6 +110,7 @@ pub(crate) struct AppState {
     pub(crate) resources: ResourceUseCases<SqliteBlobStore>,
     pub(crate) schedule: ScheduleUseCases<SqliteScheduleRepository>,
     pub(crate) plan_schedule: PlanScheduleUseCases<SqliteScheduleRepository>,
+    pub(crate) plan_progress: PlanProgressUseCases<SqlitePlanProgressRepository>,
     pub(crate) planning: PlanningUseCases<SqlitePlanningRepository>,
     pub(crate) knowledge: KnowledgeUseCases<SqliteKnowledgeRepository, SqliteBlobStore>,
     pub(crate) questions: QuestionUseCases<SqliteQuestionRepository>,
@@ -136,6 +138,8 @@ impl AppState {
         let blob_store = SqliteBlobStore::new(application_data_directory);
         let schedule_repository = SqliteScheduleRepository::new(application_data_directory);
         let planning_repository = SqlitePlanningRepository::new(application_data_directory);
+        let plan_progress_repository =
+            SqlitePlanProgressRepository::new(application_data_directory);
         let knowledge_repository = SqliteKnowledgeRepository::new(application_data_directory);
         let question_repository = SqliteQuestionRepository::new(application_data_directory);
         let ocr_repository = SqliteOcrRepository::new(application_data_directory);
@@ -152,6 +156,7 @@ impl AppState {
             resources: ResourceUseCases::new(blob_store.clone()),
             schedule: ScheduleUseCases::new(schedule_repository.clone()),
             plan_schedule: PlanScheduleUseCases::new(schedule_repository),
+            plan_progress: PlanProgressUseCases::new(plan_progress_repository),
             planning: PlanningUseCases::new(planning_repository),
             knowledge: KnowledgeUseCases::new(
                 knowledge_repository,
