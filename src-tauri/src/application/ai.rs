@@ -106,11 +106,28 @@ pub(crate) struct BeginAiCall {
     pub(crate) id: String,
     pub(crate) provider_id: String,
     pub(crate) model_id: String,
+    pub(crate) conversation_id: Option<String>,
+    pub(crate) purpose: AiCallPurpose,
     pub(crate) request_fingerprint: String,
     pub(crate) input_token_estimate: u64,
     pub(crate) output_token_limit: u32,
     pub(crate) cache_hit: bool,
     pub(crate) started_at: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AiCallPurpose {
+    FoundationTest,
+    PlanningChat,
+}
+
+impl AiCallPurpose {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::FoundationTest => "foundation_test",
+            Self::PlanningChat => "planning_chat",
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -427,6 +444,15 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
     }
 
     pub(crate) fn execute(&self, input: &AiPreviewInput) -> Result<AiCallResult, AiError> {
+        self.execute_for(input, AiCallPurpose::FoundationTest, None)
+    }
+
+    pub(crate) fn execute_for(
+        &self,
+        input: &AiPreviewInput,
+        purpose: AiCallPurpose,
+        conversation_id: Option<String>,
+    ) -> Result<AiCallResult, AiError> {
         let preview = self.preview(input)?;
         if !preview.allowed {
             return Err(AiError::BudgetBlocked);
@@ -439,6 +465,8 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
                 id: call_id.clone(),
                 provider_id: provider.id,
                 model_id: model.id,
+                conversation_id,
+                purpose,
                 request_fingerprint: preview.request_fingerprint.clone(),
                 input_token_estimate: preview.input_token_estimate,
                 output_token_limit: input.max_output_tokens,
@@ -473,6 +501,8 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
             id: call_id.clone(),
             provider_id: provider.id.clone(),
             model_id: model.id.clone(),
+            conversation_id,
+            purpose,
             request_fingerprint: preview.request_fingerprint.clone(),
             input_token_estimate: preview.input_token_estimate,
             output_token_limit: input.max_output_tokens,

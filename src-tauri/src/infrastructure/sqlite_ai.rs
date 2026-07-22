@@ -435,13 +435,15 @@ impl AiRepository for SqliteAiRepository {
         connection
             .execute(
                 "INSERT INTO ai_call(
-                    id, provider_config_id, model_profile_id, purpose, request_fingerprint,
+                    id, provider_config_id, model_profile_id, conversation_id, purpose, request_fingerprint,
                     state, input_token_estimate, output_token_limit, cache_hit, started_at
-                 ) VALUES (?1, ?2, ?3, 'foundation_test', ?4, 'pending', ?5, ?6, ?7, ?8)",
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, ?8, ?9, ?10)",
                 params![
                     call.id,
                     call.provider_id,
                     call.model_id,
+                    call.conversation_id,
+                    call.purpose.as_str(),
                     call.request_fingerprint,
                     to_i64(call.input_token_estimate)?,
                     i64::from(call.output_token_limit),

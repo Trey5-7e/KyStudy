@@ -1022,7 +1022,10 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE ai_response_cache;
+                "DROP TABLE ai_context_ref;
+                 DROP TABLE ai_message;
+                 DROP TABLE ai_conversation;
+                 DROP TABLE ai_response_cache;
                  DROP TABLE ai_usage;
                  DROP TABLE ai_call;
                  DROP TABLE ai_budget;
@@ -1053,7 +1056,7 @@ mod tests {
                  ALTER TABLE resource_document DROP COLUMN page_count;
                  ALTER TABLE resource_document DROP COLUMN role;
                  DROP TABLE study_session;
-                 DELETE FROM schema_migration WHERE version IN (4, 5, 6, 7, 8, 9, 10, 11);
+                 DELETE FROM schema_migration WHERE version IN (4, 5, 6, 7, 8, 9, 10, 11, 12);
                  PRAGMA user_version = 3;",
             )
             .expect("fixture should represent a v3 backup");
@@ -1103,7 +1106,10 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE ai_response_cache;
+                "DROP TABLE ai_context_ref;
+                 DROP TABLE ai_message;
+                 DROP TABLE ai_conversation;
+                 DROP TABLE ai_response_cache;
                  DROP TABLE ai_usage;
                  DROP TABLE ai_call;
                  DROP TABLE ai_budget;
@@ -1137,7 +1143,7 @@ mod tests {
                  DROP TABLE task_change;
                  DROP TABLE task;
                  DROP TABLE subject;
-                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6, 7, 8, 9, 10, 11);
+                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
                  PRAGMA user_version = 2;",
             )
             .expect("fixture should represent a v2 backup");

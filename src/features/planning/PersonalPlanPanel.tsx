@@ -17,6 +17,7 @@ import {
   type ResourceCommandError,
   type ResourceDocument,
 } from "../../shared/tauri/resourceClient";
+import { PlanningChatPanel } from "./PlanningChatPanel";
 
 interface PersonalPlanPanelProps {
   onOpenReference(documentId: string, page: number): void;
@@ -244,6 +245,10 @@ export function PersonalPlanPanel({ onOpenReference }: PersonalPlanPanelProps) {
       className="personal-plan-card"
       aria-labelledby="personal-plan-title"
     >
+      <PlanningChatPanel
+        onOpenReference={onOpenReference}
+        onDraftCreated={reloadSelected}
+      />
       <div className="personal-plan-heading">
         <div>
           <p className="section-label">资料驱动的手动草案</p>

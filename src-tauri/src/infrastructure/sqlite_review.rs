@@ -1497,7 +1497,11 @@ mod tests {
         let connection = Connection::open(database_path).expect("database should open");
         connection
             .execute_batch(
-                "DROP TABLE ai_response_cache;
+                "DROP TABLE ai_context_ref;
+                 DROP TABLE ai_message;
+                 DROP TABLE ai_conversation;
+                 ALTER TABLE study_plan DROP COLUMN source_ai_message_id;
+                 DROP TABLE ai_response_cache;
                  DROP TABLE ai_usage;
                  DROP TABLE ai_call;
                  DROP TABLE ai_budget;
@@ -1512,7 +1516,7 @@ mod tests {
                  DROP TABLE review_event;
                  DROP TABLE review_state;
                  DROP TABLE mistake_profile;
-                 DELETE FROM schema_migration WHERE version IN (8, 9, 10, 11);
+                 DELETE FROM schema_migration WHERE version IN (8, 9, 10, 11, 12);
                  PRAGMA user_version = 7;",
             )
             .expect("fixture should become schema v7");

@@ -316,7 +316,7 @@ export function App() {
       <main className="app-content">
         <header className="app-page-header">
           <div>
-            <p className="eyebrow">KyStudy · M8.1</p>
+            <p className="eyebrow">KyStudy · M9</p>
             <h1>{currentPage.label}</h1>
           </div>
           <p>{currentPage.caption}</p>

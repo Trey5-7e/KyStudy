@@ -8,16 +8,19 @@ use uuid::Uuid;
 use crate::application::{
     AddNodeResourceInput, AddPlanReferenceInput, AddQuestionAttemptInput, AddQuestionRegionInput,
     AiCallPreview, AiCallResult, AiError, AiOverview, AiPreviewInput, BackupError, BackupReport,
-    BeginResourceIndexInput, CreateKnowledgeMapInput, CreateQuestionInput, CreateStudySessionInput,
-    CreateSubjectInput, CreateTaskInput, GenerateReviewQueueInput, ImportError, ImportProgress,
-    InsertReviewQueueItemInput, KnowledgeError, MoveKnowledgeNodeInput, PinQuestionReviewInput,
-    PlanningError, QuestionError, QuestionRegionInput, RescheduleTaskInput, ResourceDocument,
-    ResourceReaderDescriptor, RestoreReport, ReviewError, RuntimeStatus, SaveAiBudgetInput,
-    SaveAiProviderInput, SavePlanInput, SavePlanStageInput, ScheduleError, SearchError,
-    SearchResourcesInput, SetQuestionReviewInput, SplitChildInput, SplitTaskInput,
-    StoreResourcePageTextInput, SubmitReviewInput, UpdateKnowledgeMapInput,
-    UpdateKnowledgeNodeInput, UpdateQuestionInput, UpdateReviewPreferencesInput,
-    UpdateTaskDetailsInput, get_runtime_status as load_runtime_status,
+    BeginResourceIndexInput, ConfirmPlanningChatInput, CreateKnowledgeMapInput,
+    CreateQuestionInput, CreateStudySessionInput, CreateSubjectInput, CreateTaskInput,
+    GenerateReviewQueueInput, ImportError, ImportProgress, InsertReviewQueueItemInput,
+    KnowledgeError, MoveKnowledgeNodeInput, PinQuestionReviewInput, PlanningChatError,
+    PlanningChatInput, PlanningChatPreview, PlanningChatReply, PlanningContextSelection,
+    PlanningConversation, PlanningError, PlanningMessage, PlanningSource, QuestionError,
+    QuestionRegionInput, RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor,
+    RestoreReport, ReviewError, RuntimeStatus, SaveAiBudgetInput, SaveAiProviderInput,
+    SavePlanInput, SavePlanStageInput, ScheduleError, SearchError, SearchResourcesInput,
+    SetQuestionReviewInput, SplitChildInput, SplitTaskInput, StoreResourcePageTextInput,
+    SubmitReviewInput, UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput, UpdateQuestionInput,
+    UpdateReviewPreferencesInput, UpdateTaskDetailsInput,
+    get_runtime_status as load_runtime_status,
 };
 use crate::bootstrap::AppState;
 use crate::domain::{
@@ -170,6 +173,74 @@ pub(crate) async fn execute_ai_call(
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)
         .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_planning_conversations(
+    state: State<'_, AppState>,
+) -> Result<Vec<PlanningConversationDto>, AppErrorDto> {
+    let use_cases = state.planning_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|items| items.into_iter().map(Into::into).collect())
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn create_planning_conversation(
+    request: CreatePlanningConversationRequestDto,
+    state: State<'_, AppState>,
+) -> Result<PlanningConversationDto, AppErrorDto> {
+    let use_cases = state.planning_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.create(&request.title))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn preview_planning_chat(
+    request: PlanningChatRequestDto,
+    state: State<'_, AppState>,
+) -> Result<PlanningChatPreviewDto, AppErrorDto> {
+    let use_cases = state.planning_chat.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.preview(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn execute_planning_chat(
+    request: ConfirmPlanningChatRequestDto,
+    state: State<'_, AppState>,
+) -> Result<PlanningChatReplyDto, AppErrorDto> {
+    let use_cases = state.planning_chat.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.execute(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn save_planning_reply_as_draft(
+    request: SavePlanningReplyRequestDto,
+    state: State<'_, AppState>,
+) -> Result<SavedPlanningDraftDto, AppErrorDto> {
+    let use_cases = state.planning_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.save_reply_as_plan(&request.message_id, &request.title)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(|plan_id| SavedPlanningDraftDto { plan_id })
+    .map_err(|error| AppErrorDto::from_planning_chat(&error))
 }
 
 /// Workspace metadata returned without a database path or row representation.
@@ -2141,6 +2212,183 @@ impl From<AiCallResult> for AiCallResultDto {
     }
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct CreatePlanningConversationRequestDto {
+    title: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PlanningContextSelectionDto {
+    document_id: String,
+    page_number: u32,
+    search_query: String,
+}
+
+impl From<PlanningContextSelectionDto> for PlanningContextSelection {
+    fn from(value: PlanningContextSelectionDto) -> Self {
+        Self {
+            document_id: value.document_id,
+            page_number: value.page_number,
+            search_query: value.search_query,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PlanningChatRequestDto {
+    conversation_id: String,
+    question: String,
+    contexts: Vec<PlanningContextSelectionDto>,
+    max_output_tokens: u32,
+}
+
+impl From<PlanningChatRequestDto> for PlanningChatInput {
+    fn from(value: PlanningChatRequestDto) -> Self {
+        Self {
+            conversation_id: value.conversation_id,
+            question: value.question,
+            contexts: value.contexts.into_iter().map(Into::into).collect(),
+            max_output_tokens: value.max_output_tokens,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ConfirmPlanningChatRequestDto {
+    conversation_id: String,
+    question: String,
+    contexts: Vec<PlanningContextSelectionDto>,
+    max_output_tokens: u32,
+    confirmed_prompt: String,
+}
+
+impl From<ConfirmPlanningChatRequestDto> for ConfirmPlanningChatInput {
+    fn from(value: ConfirmPlanningChatRequestDto) -> Self {
+        Self {
+            chat: PlanningChatInput {
+                conversation_id: value.conversation_id,
+                question: value.question,
+                contexts: value.contexts.into_iter().map(Into::into).collect(),
+                max_output_tokens: value.max_output_tokens,
+            },
+            confirmed_prompt: value.confirmed_prompt,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SavePlanningReplyRequestDto {
+    message_id: String,
+    title: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SavedPlanningDraftDto {
+    plan_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlanningSourceDto {
+    document_id: String,
+    document_title: String,
+    page_number: u32,
+    citation_label: String,
+}
+
+impl From<PlanningSource> for PlanningSourceDto {
+    fn from(value: PlanningSource) -> Self {
+        Self {
+            document_id: value.document_id,
+            document_title: value.document_title,
+            page_number: value.page_number,
+            citation_label: value.citation_label,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlanningMessageDto {
+    id: String,
+    role: String,
+    content: String,
+    sources: Vec<PlanningSourceDto>,
+    created_at: i64,
+}
+
+impl From<PlanningMessage> for PlanningMessageDto {
+    fn from(value: PlanningMessage) -> Self {
+        Self {
+            id: value.id,
+            role: value.role,
+            content: value.content,
+            sources: value.sources.into_iter().map(Into::into).collect(),
+            created_at: value.created_at,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlanningConversationDto {
+    id: String,
+    title: String,
+    messages: Vec<PlanningMessageDto>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<PlanningConversation> for PlanningConversationDto {
+    fn from(value: PlanningConversation) -> Self {
+        Self {
+            id: value.id,
+            title: value.title,
+            messages: value.messages.into_iter().map(Into::into).collect(),
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlanningChatPreviewDto {
+    preview: AiCallPreviewDto,
+    sources: Vec<PlanningSourceDto>,
+}
+
+impl From<PlanningChatPreview> for PlanningChatPreviewDto {
+    fn from(value: PlanningChatPreview) -> Self {
+        Self {
+            preview: value.preview.into(),
+            sources: value.sources.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlanningChatReplyDto {
+    result: AiCallResultDto,
+    conversation: PlanningConversationDto,
+}
+
+impl From<PlanningChatReply> for PlanningChatReplyDto {
+    fn from(value: PlanningChatReply) -> Self {
+        Self {
+            result: value.result.into(),
+            conversation: value.conversation.into(),
+        }
+    }
+}
+
 const IMPORT_EVENT_NAME: &str = "kystudy-import-progress";
 
 /// Stable, non-sensitive command failure returned to the `WebView`.
@@ -2301,6 +2549,41 @@ impl AppErrorDto {
                 "检查模型名称和 Provider 账户权限后重试。",
             ),
             AiError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    fn from_planning_chat(error: &PlanningChatError) -> Self {
+        let (message, action) = match error {
+            PlanningChatError::WorkspaceNotInitialized => {
+                ("尚未创建本地工作区。", "先创建工作区，再开始 AI 规划对话。")
+            }
+            PlanningChatError::InvalidInput => (
+                "规划对话、资料范围或输出上限无效。",
+                "检查问题长度、资料数量和 Token 上限后重新预览。",
+            ),
+            PlanningChatError::ConversationNotFound => {
+                ("找不到这段规划对话。", "刷新对话列表或新建一段对话后重试。")
+            }
+            PlanningChatError::ContextNotFound => (
+                "选中的资料页没有可用文字片段。",
+                "重新建立该 PDF 的文字索引，或改选其他搜索结果。",
+            ),
+            PlanningChatError::PreviewStale => (
+                "资料或对话已变化，本次确认已失效。",
+                "重新生成外发预览并核对完整文本后再确认。",
+            ),
+            PlanningChatError::ReplyNotFound => (
+                "找不到可保存的 AI 回复。",
+                "刷新对话后选择一条完整的助手回复。",
+            ),
+            PlanningChatError::Ai(error) => return Self::from_ai(error),
+            PlanningChatError::Persistence(error) => return Self::from_persistence(error),
         };
         Self {
             code: error.code(),
