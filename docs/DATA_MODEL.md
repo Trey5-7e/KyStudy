@@ -5,12 +5,12 @@
 | 文档版本   | 0.1                                    |
 | 对应 PRD   | 0.1                                    |
 | 更新日期   | 2026-07-22                             |
-| 状态       | 概念模型；M1-M7 子集已落地至 schema v9 |
+| 状态       | 概念模型；M1-M8 子集已落地至 schema v10 |
 | 数据库方向 | SQLite，本地单工作区优先               |
 
 ## 1. 设计目标
 
-> 实现说明：schema v9 已在 v8 复习模型之上落地 `resource_index_job`、`resource_page_text`、`resource_text_chunk` 与 FTS5 派生索引。AI Provider、对话、Token 用量、OCR 和派生题目识别仍按本文概念边界后续实现。
+> 实现说明：schema v10 已落地非敏感 Provider/模型配置、Token 预算、调用状态、实际用量和响应缓存；API Key 只保存到系统安全凭据存储，不进入 SQLite 或普通备份。AI 对话、资料上下文引用、OCR 和派生题目识别仍按本文概念边界后续实现。
 
 数据模型需要同时支持日程、资料、思维导图、PDF 题目、错题复习和 AI 用量，又不能把这些功能堆进一个难以演进的通用表。
 

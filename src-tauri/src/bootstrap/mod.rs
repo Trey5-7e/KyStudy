@@ -6,13 +6,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crate::application::{
-    BackupUseCases, KnowledgeUseCases, PlanningUseCases, QuestionUseCases, ResourceUseCases,
-    ReviewUseCases, ScheduleUseCases, SearchUseCases, WorkspaceUseCases,
+    AiUseCases, BackupUseCases, KnowledgeUseCases, PlanningUseCases, QuestionUseCases,
+    ResourceUseCases, ReviewUseCases, ScheduleUseCases, SearchUseCases, WorkspaceUseCases,
 };
 use crate::infrastructure::{
-    SqliteBackupStore, SqliteBlobStore, SqliteKnowledgeRepository, SqlitePlanningRepository,
-    SqliteQuestionRepository, SqliteReviewRepository, SqliteScheduleRepository,
-    SqliteSearchRepository, SqliteWorkspaceRepository,
+    ProviderRouter, SqliteAiRepository, SqliteBackupStore, SqliteBlobStore,
+    SqliteKnowledgeRepository, SqlitePlanningRepository, SqliteQuestionRepository,
+    SqliteReviewRepository, SqliteScheduleRepository, SqliteSearchRepository,
+    SqliteWorkspaceRepository, SystemSecretStore,
 };
 
 /// Tracks cancel flags without sharing `SQLite` connections across threads.
@@ -73,6 +74,7 @@ pub(crate) struct AppState {
     pub(crate) questions: QuestionUseCases<SqliteQuestionRepository>,
     pub(crate) reviews: ReviewUseCases<SqliteReviewRepository>,
     pub(crate) search: SearchUseCases<SqliteSearchRepository>,
+    pub(crate) ai: AiUseCases<SqliteAiRepository, SystemSecretStore, ProviderRouter>,
     pub(crate) backups: BackupUseCases<SqliteBackupStore>,
     pub(crate) imports: ImportCoordinator,
     pub(crate) operations: WorkspaceOperationGate,
@@ -89,6 +91,7 @@ impl AppState {
         let question_repository = SqliteQuestionRepository::new(application_data_directory);
         let review_repository = SqliteReviewRepository::new(application_data_directory);
         let search_repository = SqliteSearchRepository::new(application_data_directory);
+        let ai_repository = SqliteAiRepository::new(application_data_directory);
         let backup_store = SqliteBackupStore::new(application_data_directory);
         Self {
             workspace: WorkspaceUseCases::new(workspace_repository),
@@ -102,6 +105,7 @@ impl AppState {
             questions: QuestionUseCases::new(question_repository),
             reviews: ReviewUseCases::new(review_repository),
             search: SearchUseCases::new(search_repository),
+            ai: AiUseCases::new(ai_repository, SystemSecretStore, ProviderRouter),
             backups: BackupUseCases::new(backup_store),
             imports: ImportCoordinator::default(),
             operations: WorkspaceOperationGate::default(),

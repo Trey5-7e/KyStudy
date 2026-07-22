@@ -1,6 +1,8 @@
 //! Local infrastructure adapters.
 
+mod ai_services;
 mod resource_protocol;
+mod sqlite_ai;
 mod sqlite_backup_store;
 mod sqlite_blob_store;
 mod sqlite_knowledge;
@@ -11,7 +13,9 @@ mod sqlite_schedule;
 mod sqlite_search;
 mod sqlite_workspace;
 
+pub(crate) use ai_services::{ProviderRouter, SystemSecretStore};
 pub(crate) use resource_protocol::{respond_image, respond_pdf};
+pub(crate) use sqlite_ai::SqliteAiRepository;
 pub(crate) use sqlite_backup_store::SqliteBackupStore;
 pub(crate) use sqlite_blob_store::SqliteBlobStore;
 pub(crate) use sqlite_knowledge::SqliteKnowledgeRepository;

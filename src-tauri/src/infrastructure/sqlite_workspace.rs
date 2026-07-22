@@ -66,6 +66,11 @@ const MIGRATION_009: Migration = Migration {
     name: "resource_search",
     sql: include_str!("../../migrations/0009_resource_search.sql"),
 };
+const MIGRATION_010: Migration = Migration {
+    version: 10,
+    name: "ai_foundation",
+    sql: include_str!("../../migrations/0010_ai_foundation.sql"),
+};
 const MIGRATIONS: &[Migration] = &[
     MIGRATION_001,
     MIGRATION_002,
@@ -76,6 +81,7 @@ const MIGRATIONS: &[Migration] = &[
     MIGRATION_007,
     MIGRATION_008,
     MIGRATION_009,
+    MIGRATION_010,
 ];
 
 /// `rusqlite` adapter for the single local workspace used in M1.

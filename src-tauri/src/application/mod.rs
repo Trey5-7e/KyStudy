@@ -1,5 +1,6 @@
 //! Application-level use cases and DTOs.
 
+mod ai;
 mod backup;
 mod mindmap;
 mod mindmap_import;
@@ -12,6 +13,11 @@ mod schedule;
 mod search;
 mod workspace;
 
+pub(crate) use ai::{
+    AiCachedResponse, AiCallPreview, AiCallResult, AiError, AiOverview, AiPreviewInput,
+    AiProviderGateway, AiProviderResponse, AiRepository, AiUseCases, BeginAiCall,
+    SaveAiBudgetInput, SaveAiProviderInput, SecretStore, default_provider, estimate_tokens,
+};
 pub(crate) use backup::{
     BackupError, BackupReport, BackupRepository, BackupUseCases, RestoreReport,
 };

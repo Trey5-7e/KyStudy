@@ -6,6 +6,7 @@ import {
 } from "../features/library/ResourcePanel";
 import { PersonalPlanPanel } from "../features/planning/PersonalPlanPanel";
 import { BackupPanel } from "../features/backup/BackupPanel";
+import { AiFoundationPanel } from "../features/ai/AiFoundationPanel";
 import { MindMapPanel } from "../features/mindmap/MindMapPanel";
 import { WorkbookPanel } from "../features/workbook/WorkbookPanel";
 import { ReviewPanel } from "../features/review/ReviewPanel";
@@ -28,7 +29,7 @@ const CURRENT_BOUNDARIES = [
   "SQLite 由 Rust Repository 管理，不向 WebView 暴露路径或 SQL",
   "PDF 只经 document ID 和受控 Range 协议读取，不暴露路径或整本 Base64",
   "OPML 与 FreeMind 只生成待确认草案，XMind 需先导出为 OPML",
-  "PDF 文字层只在本地建立可重建索引；AI、OCR 和外部发送尚未接入",
+  "AI 只在外发预览和明确确认后调用；密钥保存在系统凭据存储",
 ] as const;
 
 export function App() {
@@ -82,11 +83,11 @@ export function App() {
   return (
     <main className="shell">
       <section className="hero" aria-labelledby="page-title">
-        <p className="eyebrow">KyStudy · M7 本地资料检索</p>
-        <h1 id="page-title">从资料原文回到准确页码</h1>
+        <p className="eyebrow">KyStudy · M8 AI 基础设施</p>
+        <h1 id="page-title">先看清发送什么，再决定是否调用</h1>
         <p className="lead">
-          在本机逐页提取 PDF
-          文字层，建立可中断、可重建的搜索索引，为后续带引用的 AI 规划打好基础。
+          本地管理 Provider、系统密钥、Token 预算、请求缓存和调用记录；AI
+          输出仍然只是建议，不会自动修改学习数据。
         </p>
       </section>
 
@@ -148,6 +149,8 @@ export function App() {
       <ReviewPanel />
 
       <ResourcePanel openRequest={resourceOpenRequest} />
+
+      <AiFoundationPanel />
 
       <BackupPanel />
 

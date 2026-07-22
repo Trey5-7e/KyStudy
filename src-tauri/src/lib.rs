@@ -17,6 +17,9 @@ fn initialize_application(app: &mut tauri::App) -> Result<(), Box<dyn std::error
     if let Err(error) = state.search.recover_interrupted() {
         eprintln!("KYSTUDY_INDEX_RECOVERY_FAILED: {}", error.code());
     }
+    if let Err(error) = state.ai.recover_interrupted() {
+        eprintln!("KYSTUDY_AI_RECOVERY_FAILED: {}", error.code());
+    }
     app.manage(state);
     Ok(())
 }
@@ -25,6 +28,13 @@ macro_rules! kystudy_command_handler {
     () => {
         tauri::generate_handler![
             commands::get_runtime_status,
+            commands::get_ai_overview,
+            commands::save_ai_provider,
+            commands::save_ai_budget,
+            commands::save_ai_secret,
+            commands::delete_ai_secret,
+            commands::preview_ai_call,
+            commands::execute_ai_call,
             commands::get_workspace_status,
             commands::initialize_default_workspace,
             commands::list_subjects,

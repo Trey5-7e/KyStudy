@@ -1,5 +1,6 @@
 //! Pure domain values and invariants.
 
+mod ai;
 mod mindmap;
 mod planning;
 mod question;
@@ -8,6 +9,9 @@ mod schedule;
 mod search;
 mod workspace;
 
+pub(crate) use ai::{
+    AiBudget, AiCallSummary, AiModelProfile, AiProviderConfig, AiProviderType, AiUsageSummary,
+};
 pub(crate) use mindmap::{
     KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource, MasteryState,
     MindMapDraftNode, MindMapImportDraft,

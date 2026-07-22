@@ -7,13 +7,14 @@ use uuid::Uuid;
 
 use crate::application::{
     AddNodeResourceInput, AddPlanReferenceInput, AddQuestionAttemptInput, AddQuestionRegionInput,
-    BackupError, BackupReport, BeginResourceIndexInput, CreateKnowledgeMapInput,
-    CreateQuestionInput, CreateStudySessionInput, CreateSubjectInput, CreateTaskInput,
-    GenerateReviewQueueInput, ImportError, ImportProgress, InsertReviewQueueItemInput,
-    KnowledgeError, MoveKnowledgeNodeInput, PinQuestionReviewInput, PlanningError, QuestionError,
-    QuestionRegionInput, RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor,
-    RestoreReport, ReviewError, RuntimeStatus, SavePlanInput, SavePlanStageInput, ScheduleError,
-    SearchError, SearchResourcesInput, SetQuestionReviewInput, SplitChildInput, SplitTaskInput,
+    AiCallPreview, AiCallResult, AiError, AiOverview, AiPreviewInput, BackupError, BackupReport,
+    BeginResourceIndexInput, CreateKnowledgeMapInput, CreateQuestionInput, CreateStudySessionInput,
+    CreateSubjectInput, CreateTaskInput, GenerateReviewQueueInput, ImportError, ImportProgress,
+    InsertReviewQueueItemInput, KnowledgeError, MoveKnowledgeNodeInput, PinQuestionReviewInput,
+    PlanningError, QuestionError, QuestionRegionInput, RescheduleTaskInput, ResourceDocument,
+    ResourceReaderDescriptor, RestoreReport, ReviewError, RuntimeStatus, SaveAiBudgetInput,
+    SaveAiProviderInput, SavePlanInput, SavePlanStageInput, ScheduleError, SearchError,
+    SearchResourcesInput, SetQuestionReviewInput, SplitChildInput, SplitTaskInput,
     StoreResourcePageTextInput, SubmitReviewInput, UpdateKnowledgeMapInput,
     UpdateKnowledgeNodeInput, UpdateQuestionInput, UpdateReviewPreferencesInput,
     UpdateTaskDetailsInput, get_runtime_status as load_runtime_status,
@@ -32,6 +33,99 @@ use crate::domain::{
 #[tauri::command]
 pub(crate) fn get_runtime_status() -> RuntimeStatus {
     load_runtime_status()
+}
+
+#[tauri::command]
+pub(crate) async fn get_ai_overview(
+    state: State<'_, AppState>,
+) -> Result<AiOverviewDto, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.overview())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn save_ai_provider(
+    request: SaveAiProviderRequestDto,
+    state: State<'_, AppState>,
+) -> Result<AiOverviewDto, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.save_provider(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn save_ai_budget(
+    request: SaveAiBudgetRequestDto,
+    state: State<'_, AppState>,
+) -> Result<AiOverviewDto, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.save_budget(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn save_ai_secret(
+    request: SaveAiSecretRequestDto,
+    state: State<'_, AppState>,
+) -> Result<AiOverviewDto, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.set_secret(&request.secret))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn delete_ai_secret(
+    state: State<'_, AppState>,
+) -> Result<AiOverviewDto, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.delete_secret())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn preview_ai_call(
+    request: AiPreviewRequestDto,
+    state: State<'_, AppState>,
+) -> Result<AiCallPreviewDto, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.preview(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn execute_ai_call(
+    request: AiPreviewRequestDto,
+    state: State<'_, AppState>,
+) -> Result<AiCallResultDto, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.execute(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ai(&error))
 }
 
 /// Workspace metadata returned without a database path or row representation.
@@ -1766,6 +1860,232 @@ impl From<RestoreReport> for RestoreReportDto {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SaveAiProviderRequestDto {
+    provider_type: String,
+    display_name: String,
+    base_url: Option<String>,
+    model_name: String,
+    context_limit: u32,
+    max_output_tokens: u32,
+}
+
+impl From<SaveAiProviderRequestDto> for SaveAiProviderInput {
+    fn from(request: SaveAiProviderRequestDto) -> Self {
+        Self {
+            provider_type: request.provider_type,
+            display_name: request.display_name,
+            base_url: request.base_url,
+            model_name: request.model_name,
+            context_limit: request.context_limit,
+            max_output_tokens: request.max_output_tokens,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SaveAiBudgetRequestDto {
+    single_call_limit: u64,
+    daily_token_limit: u64,
+    monthly_token_limit: u64,
+    limit_mode: String,
+}
+
+impl From<SaveAiBudgetRequestDto> for SaveAiBudgetInput {
+    fn from(request: SaveAiBudgetRequestDto) -> Self {
+        Self {
+            single_call_limit: request.single_call_limit,
+            daily_token_limit: request.daily_token_limit,
+            monthly_token_limit: request.monthly_token_limit,
+            limit_mode: request.limit_mode,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct AiPreviewRequestDto {
+    prompt: String,
+    max_output_tokens: u32,
+}
+
+impl From<AiPreviewRequestDto> for AiPreviewInput {
+    fn from(request: AiPreviewRequestDto) -> Self {
+        Self {
+            prompt: request.prompt,
+            max_output_tokens: request.max_output_tokens,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SaveAiSecretRequestDto {
+    secret: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiProviderDto {
+    provider_type: &'static str,
+    display_name: String,
+    base_url: Option<String>,
+    model_name: String,
+    context_limit: u32,
+    max_output_tokens: u32,
+    has_secret: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiBudgetDto {
+    single_call_limit: u64,
+    daily_token_limit: u64,
+    monthly_token_limit: u64,
+    limit_mode: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiUsageDto {
+    today_tokens: u64,
+    month_tokens: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiCallSummaryDto {
+    id: String,
+    provider_name: String,
+    model_name: String,
+    state: String,
+    cache_hit: bool,
+    input_tokens: u64,
+    output_tokens: u64,
+    error_code: Option<String>,
+    started_at: i64,
+    finished_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiOverviewDto {
+    provider: AiProviderDto,
+    budget: AiBudgetDto,
+    usage: AiUsageDto,
+    calls: Vec<AiCallSummaryDto>,
+}
+
+impl From<AiOverview> for AiOverviewDto {
+    fn from(overview: AiOverview) -> Self {
+        Self {
+            provider: AiProviderDto {
+                provider_type: overview.provider.provider_type.as_str(),
+                display_name: overview.provider.display_name,
+                base_url: overview.provider.base_url,
+                model_name: overview.model.model_name,
+                context_limit: overview.model.context_limit,
+                max_output_tokens: overview.model.max_output_tokens,
+                has_secret: overview.has_secret,
+            },
+            budget: AiBudgetDto {
+                single_call_limit: overview.budget.single_call_limit,
+                daily_token_limit: overview.budget.daily_token_limit,
+                monthly_token_limit: overview.budget.monthly_token_limit,
+                limit_mode: overview.budget.limit_mode,
+            },
+            usage: AiUsageDto {
+                today_tokens: overview.usage.today_tokens,
+                month_tokens: overview.usage.month_tokens,
+            },
+            calls: overview
+                .calls
+                .into_iter()
+                .map(|call| AiCallSummaryDto {
+                    id: call.id,
+                    provider_name: call.provider_name,
+                    model_name: call.model_name,
+                    state: call.state,
+                    cache_hit: call.cache_hit,
+                    input_tokens: call.input_tokens,
+                    output_tokens: call.output_tokens,
+                    error_code: call.error_code,
+                    started_at: call.started_at,
+                    finished_at: call.finished_at,
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiCallPreviewDto {
+    provider_name: String,
+    provider_type: &'static str,
+    model_name: String,
+    destination: String,
+    prompt: String,
+    input_token_estimate: u64,
+    output_token_limit: u32,
+    projected_tokens: u64,
+    today_tokens: u64,
+    month_tokens: u64,
+    allowed: bool,
+    warnings: Vec<String>,
+}
+
+impl From<AiCallPreview> for AiCallPreviewDto {
+    fn from(preview: AiCallPreview) -> Self {
+        Self {
+            provider_name: preview.provider_name,
+            provider_type: preview.provider_type.as_str(),
+            model_name: preview.model_name,
+            destination: preview.destination,
+            prompt: preview.prompt,
+            input_token_estimate: preview.input_token_estimate,
+            output_token_limit: preview.output_token_limit,
+            projected_tokens: preview.projected_tokens,
+            today_tokens: preview.today_tokens,
+            month_tokens: preview.month_tokens,
+            allowed: preview.allowed,
+            warnings: preview.warnings,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiCallResultDto {
+    call_id: String,
+    response_text: String,
+    input_tokens: u64,
+    output_tokens: u64,
+    cached_input_tokens: u64,
+    reasoning_tokens: u64,
+    usage_source: String,
+    cache_hit: bool,
+    finished_at: i64,
+}
+
+impl From<AiCallResult> for AiCallResultDto {
+    fn from(result: AiCallResult) -> Self {
+        Self {
+            call_id: result.call_id,
+            response_text: result.response_text,
+            input_tokens: result.input_tokens,
+            output_tokens: result.output_tokens,
+            cached_input_tokens: result.cached_input_tokens,
+            reasoning_tokens: result.reasoning_tokens,
+            usage_source: result.usage_source,
+            cache_hit: result.cache_hit,
+            finished_at: result.finished_at,
+        }
+    }
+}
+
 const IMPORT_EVENT_NAME: &str = "kystudy-import-progress";
 
 /// Stable, non-sensitive command failure returned to the `WebView`.
@@ -1868,6 +2188,60 @@ impl AppErrorDto {
                 "检查文件占用、磁盘空间和目录权限后重试。",
             ),
             ImportError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    fn from_ai(error: &AiError) -> Self {
+        let (message, action) = match error {
+            AiError::WorkspaceNotInitialized => {
+                ("尚未创建本地工作区。", "先创建工作区，再配置 AI。")
+            }
+            AiError::ConfigurationNotFound => {
+                ("AI 配置尚未初始化。", "重新打开 AI 基础设施面板后重试。")
+            }
+            AiError::InvalidInput => (
+                "AI 配置、上下文或 Token 上限无效。",
+                "检查模型名称、地址、文字长度和 Token 数值后重试。",
+            ),
+            AiError::BudgetBlocked => (
+                "本次调用已被 Token 硬预算阻止。",
+                "减少上下文或输出上限，或明确调整预算后重新预览。",
+            ),
+            AiError::SecretMissing => (
+                "当前 Provider 尚未保存 API Key。",
+                "把密钥保存到系统凭据存储后重新预览。",
+            ),
+            AiError::SecretStoreUnavailable => (
+                "系统安全凭据存储暂时不可用。",
+                "确认当前 Windows 用户可使用凭据管理器后重试。",
+            ),
+            AiError::ProviderAuthentication => (
+                "AI Provider 拒绝了身份验证。",
+                "检查 API Key 是否有效；密钥内容不会写入日志。",
+            ),
+            AiError::ProviderRateLimited => (
+                "AI Provider 当前限制了请求频率或额度。",
+                "稍后重试，并检查 Provider 侧额度。",
+            ),
+            AiError::ProviderUnavailable => (
+                "暂时无法连接 AI Provider。",
+                "检查网络和 Provider 地址后重试，离线功能不受影响。",
+            ),
+            AiError::ProviderInvalidResponse => (
+                "AI Provider 返回了无法识别的结果。",
+                "确认该地址兼容 Responses API 后重试。",
+            ),
+            AiError::ProviderRejected => (
+                "AI Provider 拒绝了本次请求。",
+                "检查模型名称和 Provider 账户权限后重试。",
+            ),
+            AiError::Persistence(error) => return Self::from_persistence(error),
         };
         Self {
             code: error.code(),
@@ -3298,11 +3672,14 @@ fn emit_import_event(app: &AppHandle, event: ImportEventDto) {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppErrorDto, BackupReportDto, KnowledgeMapBundleDto, QuestionBundleDto,
+        AiOverviewDto, AppErrorDto, BackupReportDto, KnowledgeMapBundleDto, QuestionBundleDto,
         RescheduleTaskRequestDto, ResourceDocumentDto, ResourceSearchResultDto, ReviewReasonDto,
         SubjectDto, TaskChangeDto, TaskDto, UpdateTaskDetailsRequestDto, get_runtime_status,
     };
-    use crate::application::{BackupReport, PersistenceError, ResourceDocument, ScheduleError};
+    use crate::application::{
+        AiOverview, BackupReport, PersistenceError, ResourceDocument, ScheduleError,
+        default_provider,
+    };
     use crate::domain::{
         AttemptResult, KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource,
         LocalDate, MasteryState, Question, QuestionAttempt, QuestionBundle, QuestionRegion,
@@ -3328,6 +3705,25 @@ mod tests {
         assert_eq!(value["archivedAt"], 1_700_000_000_100_i64);
         assert!(value.get("workspaceId").is_none());
         assert!(value.get("databasePath").is_none());
+    }
+
+    #[test]
+    fn ai_overview_dto_never_exposes_secret_references_or_fingerprints() {
+        let (mut provider, model, budget) = default_provider(1_700_000_000_000);
+        provider.secret_ref = Some("private-secret-reference".to_owned());
+        let dto = AiOverviewDto::from(AiOverview {
+            provider,
+            model,
+            budget,
+            usage: crate::domain::AiUsageSummary::default(),
+            has_secret: true,
+            calls: Vec::new(),
+        });
+
+        let serialized = serde_json::to_string(&dto).expect("AI overview should serialize");
+
+        assert!(!serialized.contains("private-secret-reference"));
+        assert!(!serialized.contains("fingerprint"));
     }
 
     #[test]
