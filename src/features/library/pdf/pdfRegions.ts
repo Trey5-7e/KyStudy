@@ -14,6 +14,14 @@ export interface ViewportRectangle {
   height: number;
 }
 
+export interface OcrRegionRenderSpec {
+  scale: number;
+  width: number;
+  height: number;
+}
+
+export const OCR_REGION_LONG_EDGE_PIXELS = 1600;
+
 export function normalizePdfSelection(
   pageNumber: number,
   pageView: PdfPageView,
@@ -73,6 +81,34 @@ export function projectNormalizedRegion(
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
   return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
+}
+
+export function buildOcrRegionRenderSpec(
+  pageView: PdfPageView,
+  viewportAtScaleOne: PdfViewportAdapter,
+  region: Pick<QuestionRegionInput, "x" | "y" | "width" | "height">,
+): OcrRegionRenderSpec {
+  const rectangle = projectNormalizedRegion(
+    pageView,
+    viewportAtScaleOne,
+    region,
+  );
+  const longEdge = Math.max(rectangle.width, rectangle.height);
+  if (!Number.isFinite(longEdge) || longEdge <= 0) {
+    throw new Error("PDF_OCR_REGION_INVALID");
+  }
+  const scale = OCR_REGION_LONG_EDGE_PIXELS / longEdge;
+  return {
+    scale,
+    width:
+      rectangle.width >= rectangle.height
+        ? OCR_REGION_LONG_EDGE_PIXELS
+        : Math.max(1, Math.round(rectangle.width * scale)),
+    height:
+      rectangle.height >= rectangle.width
+        ? OCR_REGION_LONG_EDGE_PIXELS
+        : Math.max(1, Math.round(rectangle.height * scale)),
+  };
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

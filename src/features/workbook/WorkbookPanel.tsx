@@ -35,13 +35,17 @@ import {
   type ResourceDocument,
   type ResourceReaderDescriptor,
 } from "../../shared/tauri/resourceClient";
-import type { PdfRegionOverlay } from "../library/pdf/PdfReader";
+import type {
+  PdfReaderHandle,
+  PdfRegionOverlay,
+} from "../library/pdf/PdfReader";
 import { localDateForTimezone } from "../../shared/tauri/scheduleClient";
 import { getWorkspaceStatus } from "../../shared/tauri/workspaceClient";
 import {
   normalizeReviewError,
   setQuestionReview,
 } from "../../shared/tauri/reviewClient";
+import { QuestionOcrPanel } from "./QuestionOcrPanel";
 
 const PdfReader = lazy(() =>
   import("../library/pdf/PdfReader").then((module) => ({
@@ -76,6 +80,7 @@ interface QuestionEditorProps {
     answerNote: string | undefined,
   ): Promise<boolean>;
   onActivateReview(userPriority: number): Promise<boolean>;
+  onCaptureRegion(region: QuestionRegion): Promise<Uint8Array>;
   onTrash(): void;
 }
 
@@ -99,6 +104,7 @@ export function WorkbookPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ResourceCommandError>();
   const lastSavedProgress = useRef<string | undefined>(undefined);
+  const pdfReaderRef = useRef<PdfReaderHandle>(null);
 
   const workbooks = resources.filter(
     (resource) => resource.kind === "pdf" && resource.role === "workbook",
@@ -317,6 +323,17 @@ export function WorkbookPanel() {
     [readerDocumentId],
   );
 
+  const captureOcrRegion = useCallback(
+    (region: QuestionRegion): Promise<Uint8Array> => {
+      const currentReader = pdfReaderRef.current;
+      if (currentReader === null) {
+        return Promise.reject(new Error("PDF_READER_NOT_READY"));
+      }
+      return currentReader.captureRegionPng(region);
+    },
+    [],
+  );
+
   const removeQuestion = async () => {
     if (selectedQuestion === undefined) {
       return;
@@ -483,6 +500,7 @@ export function WorkbookPanel() {
                 fallback={<p className="empty-state">正在加载 PDF 阅读器…</p>}
               >
                 <PdfReader
+                  ref={pdfReaderRef}
                   key={`${reader.documentId}:${readerNonce}`}
                   descriptor={reader}
                   requestedPage={requestedPage}
@@ -560,6 +578,7 @@ export function WorkbookPanel() {
                 onActivateReview={(userPriority) =>
                   activateReview(selectedQuestion.question.id, userPriority)
                 }
+                onCaptureRegion={captureOcrRegion}
                 onTrash={() => void removeQuestion()}
               />
             )}
@@ -669,6 +688,7 @@ function QuestionEditor({
   onDeleteRegion,
   onAddAttempt,
   onActivateReview,
+  onCaptureRegion,
   onTrash,
 }: QuestionEditorProps) {
   const question = bundle.question;
@@ -806,6 +826,12 @@ function QuestionEditor({
         </button>
         {reviewActivated ? <span role="status">已加入错题复习</span> : null}
       </section>
+
+      <QuestionOcrPanel
+        questionId={question.id}
+        regions={bundle.regions}
+        captureRegion={onCaptureRegion}
+      />
 
       <section
         className="question-regions"

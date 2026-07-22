@@ -9,30 +9,31 @@ use crate::application::{
     AddNodeResourceInput, AddPlanReferenceInput, AddQuestionAttemptInput, AddQuestionRegionInput,
     AiCallPreview, AiCallResult, AiError, AiOverview, AiPreviewInput, AnalyticsBacklog,
     AnalyticsError, AnalyticsInput, AnalyticsOverview, AnalyticsPeriodSummary, BackupError,
-    BackupReport, BeginResourceIndexInput, ConfirmPlanningChatInput, CreateKnowledgeMapInput,
-    CreateQuestionInput, CreateStudySessionInput, CreateSubjectInput, CreateTaskInput,
-    DailyAnalyticsPoint, GenerateReviewQueueInput, ImportError, ImportProgress,
+    BackupReport, BeginResourceIndexInput, ConfirmPlanningChatInput, ConfirmQuestionRegionOcrInput,
+    CreateKnowledgeMapInput, CreateQuestionInput, CreateStudySessionInput, CreateSubjectInput,
+    CreateTaskInput, DailyAnalyticsPoint, GenerateReviewQueueInput, ImportError, ImportProgress,
     InsertReviewQueueItemInput, KnowledgeAnalytics, KnowledgeError, MoveKnowledgeNodeInput,
-    PinQuestionReviewInput, PlanningChatError, PlanningChatInput, PlanningChatPreview,
-    PlanningChatReply, PlanningContextSelection, PlanningConversation, PlanningError,
-    PlanningMessage, PlanningSource, QuestionError, QuestionRegionInput, RepeatedMistakeAnalytics,
-    RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor, RestoreReport, ReviewError,
-    RuntimeStatus, SaveAiBudgetInput, SaveAiProviderInput, SavePlanInput, SavePlanStageInput,
-    ScheduleError, SearchError, SearchResourcesInput, SetQuestionReviewInput, SplitChildInput,
-    SplitTaskInput, StoreResourcePageTextInput, SubjectAnalytics, SubmitReviewInput,
-    UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput, UpdateQuestionInput,
-    UpdateReviewPreferencesInput, UpdateTaskDetailsInput,
-    get_runtime_status as load_runtime_status,
+    OcrComponentStatus, OcrError, PinQuestionReviewInput, PlanningChatError, PlanningChatInput,
+    PlanningChatPreview, PlanningChatReply, PlanningContextSelection, PlanningConversation,
+    PlanningError, PlanningMessage, PlanningSource, QuestionError, QuestionRegionInput,
+    RecognizeQuestionRegionInput, RepeatedMistakeAnalytics, RescheduleTaskInput, ResourceDocument,
+    ResourceReaderDescriptor, RestoreReport, ReviewError, RuntimeStatus, SaveAiBudgetInput,
+    SaveAiProviderInput, SavePlanInput, SavePlanStageInput, ScheduleError, SearchError,
+    SearchResourcesInput, SetQuestionReviewInput, SplitChildInput, SplitTaskInput,
+    StoreResourcePageTextInput, SubjectAnalytics, SubmitReviewInput, UpdateKnowledgeMapInput,
+    UpdateKnowledgeNodeInput, UpdateQuestionInput, UpdateReviewPreferencesInput,
+    UpdateTaskDetailsInput, get_runtime_status as load_runtime_status,
 };
 use crate::bootstrap::AppState;
 use crate::domain::{
     DailyReviewItem, DailyReviewQueue, KnowledgeMap, KnowledgeMapBundle, KnowledgeNode,
-    KnowledgeNodeResource, MindMapDraftNode, MindMapImportDraft, MistakeProfile, PlanReference,
-    PlanStage, Question, QuestionAttempt, QuestionBundle, QuestionKnowledgeLink, QuestionRegion,
-    ResourceIndexSession, ResourceIndexStatus, ResourceSearchResult, ReviewBacklog,
-    ReviewDashboard, ReviewEvent, ReviewPreferences, ReviewQuestion, ReviewReason, ReviewState,
-    StudyPlan, StudyPlanBundle, StudySession, StudyStatistics, Subject, SubjectStatistics, Task,
-    TaskChange, TaskChangeSnapshot, TaskSplit, TaskTransition, TrashedTask, Workspace,
+    KnowledgeNodeResource, MindMapDraftNode, MindMapImportDraft, MistakeProfile, OcrRecognition,
+    OcrTextLine, PlanReference, PlanStage, Question, QuestionAttempt, QuestionBundle,
+    QuestionKnowledgeLink, QuestionRegion, ResourceIndexSession, ResourceIndexStatus,
+    ResourceSearchResult, ReviewBacklog, ReviewDashboard, ReviewEvent, ReviewPreferences,
+    ReviewQuestion, ReviewReason, ReviewState, StudyPlan, StudyPlanBundle, StudySession,
+    StudyStatistics, Subject, SubjectStatistics, Task, TaskChange, TaskChangeSnapshot, TaskSplit,
+    TaskTransition, TrashedTask, Workspace,
 };
 
 #[tauri::command]
@@ -1606,6 +1607,125 @@ impl From<QuestionBundle> for QuestionBundleDto {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RecognizeQuestionRegionRequestDto {
+    operation_id: String,
+    region_id: String,
+    image_bytes: Vec<u8>,
+}
+
+impl From<RecognizeQuestionRegionRequestDto> for RecognizeQuestionRegionInput {
+    fn from(request: RecognizeQuestionRegionRequestDto) -> Self {
+        Self {
+            region_id: request.region_id,
+            image_bytes: request.image_bytes,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ConfirmQuestionRegionOcrRequestDto {
+    recognition_id: String,
+    confirmed_text: String,
+}
+
+impl From<ConfirmQuestionRegionOcrRequestDto> for ConfirmQuestionRegionOcrInput {
+    fn from(request: ConfirmQuestionRegionOcrRequestDto) -> Self {
+        Self {
+            recognition_id: request.recognition_id,
+            confirmed_text: request.confirmed_text,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OcrComponentStatusDto {
+    state: &'static str,
+    engine: &'static str,
+    models_bundled: bool,
+    component_size_bytes: Option<u64>,
+}
+
+impl From<OcrComponentStatus> for OcrComponentStatusDto {
+    fn from(status: OcrComponentStatus) -> Self {
+        Self {
+            state: status.state.as_str(),
+            engine: status.engine,
+            models_bundled: status.models_bundled,
+            component_size_bytes: status.component_size_bytes,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OcrTextLineDto {
+    id: String,
+    recognition_id: String,
+    text: String,
+    confidence: f64,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    sort_order: u32,
+}
+
+impl From<OcrTextLine> for OcrTextLineDto {
+    fn from(line: OcrTextLine) -> Self {
+        Self {
+            id: line.id,
+            recognition_id: line.recognition_id,
+            text: line.text,
+            confidence: line.confidence,
+            x: line.x,
+            y: line.y,
+            width: line.width,
+            height: line.height,
+            sort_order: line.sort_order,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OcrRecognitionDto {
+    id: String,
+    question_id: String,
+    region_id: String,
+    page_number: u32,
+    engine: String,
+    recognized_text: String,
+    confirmed_text: Option<String>,
+    mean_confidence: f64,
+    state: &'static str,
+    lines: Vec<OcrTextLineDto>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<OcrRecognition> for OcrRecognitionDto {
+    fn from(recognition: OcrRecognition) -> Self {
+        Self {
+            id: recognition.id,
+            question_id: recognition.question_id,
+            region_id: recognition.region_id,
+            page_number: recognition.page_number,
+            engine: recognition.engine,
+            recognized_text: recognition.recognized_text,
+            confirmed_text: recognition.confirmed_text,
+            mean_confidence: recognition.mean_confidence,
+            state: recognition.state.as_str(),
+            lines: recognition.lines.into_iter().map(Into::into).collect(),
+            created_at: recognition.created_at,
+            updated_at: recognition.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct UpdateReviewPreferencesRequestDto {
     daily_quota: u32,
     early_fill_enabled: bool,
@@ -3015,6 +3135,62 @@ impl AppErrorDto {
         }
     }
 
+    fn from_ocr(error: &OcrError) -> Self {
+        let (message, action) = match error {
+            OcrError::WorkspaceNotInitialized => {
+                ("尚未创建本地工作区。", "先创建工作区，再使用本地 OCR。")
+            }
+            OcrError::QuestionNotFound | OcrError::RegionNotFound => (
+                "找不到可识别的题目区域。",
+                "刷新习题册，并确认题目和来源区域仍然存在。",
+            ),
+            OcrError::RecognitionNotFound => (
+                "找不到这份 OCR 草稿。",
+                "刷新 OCR 结果，或重新识别当前区域。",
+            ),
+            OcrError::RecognitionNotDraft => (
+                "这份 OCR 结果已经确认或失效。",
+                "刷新 OCR 结果后再处理当前草稿。",
+            ),
+            OcrError::InvalidInput => (
+                "OCR 图片或确认文本不符合安全范围。",
+                "重新打开 PDF 区域并识别，确认文本需保留有效内容。",
+            ),
+            OcrError::ComponentMissing => (
+                "本地 OCR 组件尚未安装。",
+                "安装可选 OCR 组件后重新检测；PDF 阅读和手动框选仍可使用。",
+            ),
+            OcrError::ComponentIncomplete => (
+                "本地 OCR 组件文件不完整。",
+                "重新安装 OCR 组件，不要手动拼接模型目录。",
+            ),
+            OcrError::ComponentIncompatible => (
+                "本地 OCR 组件版本不兼容。",
+                "安装与当前 KyStudy 匹配的 OCR 组件后重试。",
+            ),
+            OcrError::Canceled => ("OCR 已取消。", "原题目区域保持不变，可以稍后重新识别。"),
+            OcrError::Timeout => (
+                "本地 OCR 处理超时。",
+                "缩小框选区域后重试；原 PDF 和已确认文本不受影响。",
+            ),
+            OcrError::WorkerFailed | OcrError::ResultInvalid => (
+                "本地 OCR 未能返回可用结果。",
+                "重新检测组件或缩小区域后重试，并保留原图人工录入。",
+            ),
+            OcrError::OperationConflict => (
+                "已有 OCR 操作仍在运行。",
+                "等待当前操作结束，或先取消后再试。",
+            ),
+            OcrError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
     fn from_review(error: &ReviewError) -> Self {
         let (message, action) = match error {
             ReviewError::WorkspaceNotInitialized => {
@@ -4023,6 +4199,87 @@ pub(crate) async fn restore_question(
 }
 
 #[tauri::command]
+pub(crate) async fn get_ocr_status(
+    state: State<'_, AppState>,
+) -> Result<OcrComponentStatusDto, AppErrorDto> {
+    let use_cases = state.ocr.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.status())
+        .await
+        .map(OcrComponentStatusDto::from)
+        .map_err(|_| AppErrorDto::task_failed())
+}
+
+#[tauri::command]
+pub(crate) async fn list_question_ocr(
+    question_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<OcrRecognitionDto>, AppErrorDto> {
+    let use_cases = state.ocr.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_for_question(&question_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|recognitions| recognitions.into_iter().map(Into::into).collect())
+        .map_err(|error| AppErrorDto::from_ocr(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn recognize_question_region(
+    request: RecognizeQuestionRegionRequestDto,
+    state: State<'_, AppState>,
+) -> Result<OcrRecognitionDto, AppErrorDto> {
+    let operation_id = request.operation_id.clone();
+    if Uuid::parse_str(&operation_id).is_err() {
+        return Err(AppErrorDto::from_ocr(&OcrError::InvalidInput));
+    }
+    let coordinator = state.ocr_jobs.clone();
+    let canceled = coordinator
+        .register(operation_id.clone())
+        .ok_or_else(|| AppErrorDto::from_ocr(&OcrError::OperationConflict))?;
+    let use_cases = state.ocr.clone();
+    let input = request.into();
+    let outcome =
+        tauri::async_runtime::spawn_blocking(move || use_cases.recognize_region(&input, &canceled))
+            .await;
+    coordinator.finish(&operation_id);
+    outcome
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ocr(&error))
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)] // Tauri owns deserialized command arguments and state guards.
+pub(crate) fn cancel_ocr(operation_id: String, state: State<'_, AppState>) -> bool {
+    Uuid::parse_str(&operation_id).is_ok() && state.ocr_jobs.cancel(&operation_id)
+}
+
+#[tauri::command]
+pub(crate) async fn confirm_question_region_ocr(
+    request: ConfirmQuestionRegionOcrRequestDto,
+    state: State<'_, AppState>,
+) -> Result<OcrRecognitionDto, AppErrorDto> {
+    let use_cases = state.ocr.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.confirm(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ocr(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn discard_question_region_ocr(
+    recognition_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppErrorDto> {
+    let use_cases = state.ocr.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.discard(&recognition_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map_err(|error| AppErrorDto::from_ocr(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn get_review_dashboard(
     today: String,
     state: State<'_, AppState>,
@@ -4284,9 +4541,10 @@ fn emit_import_event(app: &AppHandle, event: ImportEventDto) {
 #[cfg(test)]
 mod tests {
     use super::{
-        AiOverviewDto, AppErrorDto, BackupReportDto, KnowledgeMapBundleDto, QuestionBundleDto,
-        RescheduleTaskRequestDto, ResourceDocumentDto, ResourceSearchResultDto, ReviewReasonDto,
-        SubjectDto, TaskChangeDto, TaskDto, UpdateTaskDetailsRequestDto, get_runtime_status,
+        AiOverviewDto, AppErrorDto, BackupReportDto, KnowledgeMapBundleDto, OcrRecognitionDto,
+        QuestionBundleDto, RescheduleTaskRequestDto, ResourceDocumentDto, ResourceSearchResultDto,
+        ReviewReasonDto, SubjectDto, TaskChangeDto, TaskDto, UpdateTaskDetailsRequestDto,
+        get_runtime_status,
     };
     use crate::application::{
         AiOverview, AiProviderOverview, BackupReport, PersistenceError, ResourceDocument,
@@ -4294,10 +4552,10 @@ mod tests {
     };
     use crate::domain::{
         AttemptResult, KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource,
-        LocalDate, MasteryState, Question, QuestionAttempt, QuestionBundle, QuestionRegion,
-        ResourceSearchMatchKind, ResourceSearchResult, ReviewReason, ReviewSelectionKind, Subject,
-        SubjectColor, Task, TaskChange, TaskChangeSnapshot, TaskChangeType, TaskPriority,
-        TaskStatus,
+        LocalDate, MasteryState, OcrRecognition, OcrRecognitionState, OcrTextLine, Question,
+        QuestionAttempt, QuestionBundle, QuestionRegion, ResourceSearchMatchKind,
+        ResourceSearchResult, ReviewReason, ReviewSelectionKind, Subject, SubjectColor, Task,
+        TaskChange, TaskChangeSnapshot, TaskChangeType, TaskPriority, TaskStatus,
     };
 
     #[test]
@@ -4530,6 +4788,43 @@ mod tests {
         assert!(value.get("databasePath").is_none());
         assert!(value["regions"][0].get("canvasPixels").is_none());
         assert!(value["regions"][0].get("storageKey").is_none());
+    }
+
+    #[test]
+    fn ocr_dto_exposes_text_boxes_without_worker_internals() {
+        let recognition_id = "019f7328-4b66-7613-9729-e3570fc41525".to_owned();
+        let dto = OcrRecognitionDto::from(OcrRecognition {
+            id: recognition_id.clone(),
+            question_id: "019f7328-4b66-7613-9729-e3570fc41526".to_owned(),
+            region_id: "019f7328-4b66-7613-9729-e3570fc41527".to_owned(),
+            page_number: 2,
+            engine: "local-ocr".to_owned(),
+            recognized_text: "线性表".to_owned(),
+            confirmed_text: None,
+            mean_confidence: 0.98,
+            state: OcrRecognitionState::Draft,
+            lines: vec![OcrTextLine {
+                id: "019f7328-4b66-7613-9729-e3570fc41528".to_owned(),
+                recognition_id,
+                text: "线性表".to_owned(),
+                confidence: 0.98,
+                x: 0.1,
+                y: 0.2,
+                width: 0.5,
+                height: 0.1,
+                sort_order: 0,
+            }],
+            created_at: 1_700_000_000_000,
+            updated_at: 1_700_000_000_000,
+        });
+
+        let value = serde_json::to_value(dto).expect("OCR DTO should serialize");
+
+        assert_eq!(value["lines"][0]["confidence"], 0.98);
+        assert!(value.get("componentPath").is_none());
+        assert!(value.get("temporaryImage").is_none());
+        assert!(value.get("stderr").is_none());
+        assert!(value.get("workerResponse").is_none());
     }
 
     #[test]

@@ -2,6 +2,7 @@
 
 mod ai;
 mod mindmap;
+mod ocr;
 mod planning;
 mod question;
 mod review;
@@ -16,6 +17,7 @@ pub(crate) use mindmap::{
     KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource, MasteryState,
     MindMapDraftNode, MindMapImportDraft,
 };
+pub(crate) use ocr::{OcrRecognition, OcrRecognitionState, OcrTextLine};
 pub(crate) use planning::{PlanReference, PlanStage, PlanStatus, StudyPlan, StudyPlanBundle};
 pub(crate) use question::{
     AttemptResult, Question, QuestionAttempt, QuestionBundle, QuestionKnowledgeLink, QuestionRegion,

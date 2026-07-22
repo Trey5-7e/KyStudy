@@ -81,6 +81,11 @@ const MIGRATION_012: Migration = Migration {
     name: "planning_chat",
     sql: include_str!("../../migrations/0012_planning_chat.sql"),
 };
+const MIGRATION_013: Migration = Migration {
+    version: 13,
+    name: "question_region_ocr",
+    sql: include_str!("../../migrations/0013_question_region_ocr.sql"),
+};
 const MIGRATIONS: &[Migration] = &[
     MIGRATION_001,
     MIGRATION_002,
@@ -94,6 +99,7 @@ const MIGRATIONS: &[Migration] = &[
     MIGRATION_010,
     MIGRATION_011,
     MIGRATION_012,
+    MIGRATION_013,
 ];
 
 /// `rusqlite` adapter for the single local workspace used in M1.
@@ -468,7 +474,7 @@ mod tests {
 
     use super::{
         APPLICATION_ID, MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004, MIGRATION_005,
-        MIGRATION_006, MIGRATION_007, MIGRATION_008, MIGRATION_009, Migration,
+        MIGRATION_006, MIGRATION_007, MIGRATION_008, MIGRATION_009, MIGRATION_013, Migration,
         SqliteWorkspaceRepository, apply_migrations, configure_connection, migration_checksum,
     };
     use crate::application::{PersistenceError, WorkspaceRepository};
@@ -658,6 +664,16 @@ mod tests {
             MIGRATION_009
                 .sql
                 .contains("CREATE VIRTUAL TABLE resource_text_fts")
+        );
+        assert!(
+            MIGRATION_013
+                .sql
+                .contains("CREATE TABLE question_region_ocr")
+        );
+        assert!(
+            MIGRATION_013
+                .sql
+                .contains("CREATE TABLE question_region_ocr_line")
         );
     }
 

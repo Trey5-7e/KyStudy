@@ -1040,6 +1040,8 @@ mod tests {
                  DROP TABLE review_event;
                  DROP TABLE review_state;
                  DROP TABLE mistake_profile;
+                 DROP TABLE question_region_ocr_line;
+                 DROP TABLE question_region_ocr;
                  DROP TABLE question_knowledge_node;
                  DROP TABLE question_attempt;
                  DROP TABLE question_region;
@@ -1056,7 +1058,7 @@ mod tests {
                  ALTER TABLE resource_document DROP COLUMN page_count;
                  ALTER TABLE resource_document DROP COLUMN role;
                  DROP TABLE study_session;
-                 DELETE FROM schema_migration WHERE version IN (4, 5, 6, 7, 8, 9, 10, 11, 12);
+                 DELETE FROM schema_migration WHERE version IN (4, 5, 6, 7, 8, 9, 10, 11, 12, 13);
                  PRAGMA user_version = 3;",
             )
             .expect("fixture should represent a v3 backup");
@@ -1124,6 +1126,8 @@ mod tests {
                  DROP TABLE review_event;
                  DROP TABLE review_state;
                  DROP TABLE mistake_profile;
+                 DROP TABLE question_region_ocr_line;
+                 DROP TABLE question_region_ocr;
                  DROP TABLE question_knowledge_node;
                  DROP TABLE question_attempt;
                  DROP TABLE question_region;
@@ -1143,7 +1147,7 @@ mod tests {
                  DROP TABLE task_change;
                  DROP TABLE task;
                  DROP TABLE subject;
-                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13);
                  PRAGMA user_version = 2;",
             )
             .expect("fixture should represent a v2 backup");

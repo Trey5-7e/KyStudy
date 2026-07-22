@@ -3,8 +3,8 @@
 | 项目     | 内容                |
 | -------- | ------------------- |
 | 文档版本 | 0.1                 |
-| 更新日期 | 2026-07-18          |
-| 当前阶段 | M1-B 正式本地基础   |
+| 更新日期 | 2026-07-22          |
+| 当前阶段 | M10 题目区域 OCR    |
 | 目标平台 | Windows 11 x64 优先 |
 
 ## 1. 当前原则
@@ -80,6 +80,8 @@ pnpm config get store-dir --global
 | 测试       | `vitest`                    | `4.1.10`            |
 | 质量       | `eslint` / `prettier`       | `10.7.0` / `3.9.5`  |
 | SQLite     | `rusqlite` / bundled SQLite | `0.40.1` / `3.53.2` |
+| PDF        | `pdfjs-dist`                | `6.1.200`           |
+| 本地 OCR   | RapidOCR / ONNX Runtime     | `3.9.2` / `1.27.0`  |
 
 TypeScript 使用 6.0.3，而不是实验中的 7.0.2，因为当前 `typescript-eslint 8.64.0` 明确支持 `<6.1.0`；正式锁文件不保留 peer dependency 警告。前端和 Rust 锁文件分别为根目录 `pnpm-lock.yaml` 与 `src-tauri/Cargo.lock`。
 
@@ -152,16 +154,26 @@ Release 打包会生成未签名的实验产物。它们只用于技术验证，
 
 没有安装来源弱、维护状态不清晰的 Tauri、SQLite 或通用可访问性 Skill。技术事实仍以官方文档、实际 Spike 和锁定依赖为准。
 
-## 9. 正式工程暂缓安装的依赖
+## 9. M10 可选 OCR 组件
 
-以下能力虽已有部分 Spike 结论，但尚未进入正式工程对应里程碑，因此没有提前安装：
+正式应用已通过稳定 Port 接入 OCR，但 Python、RapidOCR 和 ONNX Runtime 不链接进 Tauri 主进程。开发构建按以下优先级检测打包组件：
 
-- PDF.js 和 PDF 坐标相关依赖（TV-04 已通过，但 M1 不实现正式阅读器）；
-- React Flow 或其他思维导图库；
-- PaddleOCR、模型权重和 Python OCR 环境；
-- 任意 AI 提供商 SDK、嵌入模型和向量数据库。
+1. `<app-data>/components/ocr/kystudy-ocr-worker`；
+2. `experiments/tv-07-ocr/output/pyinstaller/dist/kystudy-ocr-worker`。
 
-它们只在对应正式工作项开始时，依据已接受 ADR 或新的 AI/OCR Spike 锁定版本。
+如果第二个目录不存在，可使用 F 盘现有 Python 环境重建：
+
+```powershell
+cd F:\develop\KyStudy\experiments\tv-07-ocr
+$OcrPython = 'F:\develop\KyStudy-deps\ocr-py312\Scripts\python.exe'
+& $OcrPython -m ruff check .
+& $OcrPython -m unittest discover -s .\tests -v
+.\build_sidecar.ps1 -PythonExecutable $OcrPython
+```
+
+模型随 `onedir` 组件提供，不在运行时下载。组件目录约 246 MiB，识别批次峰值内存约 729 MiB，因此仍是可选组件且不得常驻。当前尚未实现面向用户的组件下载、更新、移除和许可证页面；这不会阻止 PDF 阅读、文字层索引和手动题目管理。
+
+仍暂缓引入 React Flow、本地嵌入模型、向量数据库和各 AI 提供商 SDK。它们只在实际里程碑需要时依据已接受 ADR 或新的技术验证锁定版本。
 
 ## 10. 磁盘占用提示
 

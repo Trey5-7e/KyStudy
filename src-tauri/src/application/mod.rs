@@ -5,6 +5,7 @@ mod analytics;
 mod backup;
 mod mindmap;
 mod mindmap_import;
+mod ocr;
 mod planning;
 mod planning_chat;
 mod question;
@@ -34,6 +35,11 @@ pub(crate) use mindmap::{
     AddNodeResourceInput, CreateKnowledgeMapInput, KnowledgeError, KnowledgeRepository,
     KnowledgeUseCases, MoveKnowledgeNodeInput, UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput,
     ValidatedKnowledgeNodeUpdate,
+};
+pub(crate) use ocr::{
+    ConfirmQuestionRegionOcrInput, OCR_ENGINE_NAME, OcrComponentState, OcrComponentStatus,
+    OcrEngine, OcrEngineLine, OcrEngineOutput, OcrError, OcrRegionSource, OcrRepository,
+    OcrUseCases, RecognizeQuestionRegionInput,
 };
 pub(crate) use planning::{
     AddPlanReferenceInput, PlanningError, PlanningRepository, PlanningUseCases, SavePlanInput,

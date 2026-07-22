@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildOcrRegionRenderSpec,
   normalizePdfSelection,
+  OCR_REGION_LONG_EDGE_PIXELS,
   projectNormalizedRegion,
   type PdfViewportAdapter,
 } from "./pdfRegions";
@@ -60,6 +62,39 @@ describe("PDF question region coordinates", () => {
       y: 0.2,
       width: 1,
       height: 0.7,
+    });
+  });
+
+  it("renders every OCR crop at a deterministic long edge", () => {
+    const identity: PdfViewportAdapter = {
+      convertToPdfPoint: (x, y) => [x, y],
+      convertToViewportPoint: (x, y) => [x, y],
+    };
+
+    expect(
+      buildOcrRegionRenderSpec([0, 0, 100, 200], identity, {
+        x: 0.1,
+        y: 0.2,
+        width: 0.5,
+        height: 0.25,
+      }),
+    ).toEqual({
+      scale: 32,
+      width: OCR_REGION_LONG_EDGE_PIXELS,
+      height: OCR_REGION_LONG_EDGE_PIXELS,
+    });
+
+    expect(
+      buildOcrRegionRenderSpec([0, 0, 100, 200], identity, {
+        x: 0.1,
+        y: 0.2,
+        width: 0.5,
+        height: 0.125,
+      }),
+    ).toEqual({
+      scale: 32,
+      width: OCR_REGION_LONG_EDGE_PIXELS,
+      height: 800,
     });
   });
 });

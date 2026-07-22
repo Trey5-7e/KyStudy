@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import {
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type PointerEvent,
+  type Ref,
+} from "react";
 import type { PDFPageProxy } from "pdfjs-dist";
 
 import {
@@ -9,6 +16,7 @@ import { openPdf, type PdfSession } from "./pdfEngine";
 import { HttpRangeSource } from "./rangeSource";
 import { RenderCoordinator } from "./renderCoordinator";
 import {
+  buildOcrRegionRenderSpec,
   normalizePdfSelection,
   projectNormalizedRegion,
   type PdfPageView,
@@ -23,7 +31,12 @@ export interface PdfRegionOverlay {
   height: number;
 }
 
+export interface PdfReaderHandle {
+  captureRegionPng(region: PdfRegionOverlay): Promise<Uint8Array>;
+}
+
 interface PdfReaderProps {
+  ref?: Ref<PdfReaderHandle>;
   descriptor: ResourceReaderDescriptor;
   requestedPage?: number;
   onProgress(pageCount: number, lastPage: number): void;
@@ -44,6 +57,7 @@ interface PointerSelection {
 }
 
 export function PdfReader({
+  ref,
   descriptor,
   requestedPage,
   onProgress,
@@ -63,6 +77,19 @@ export function PdfReader({
   const [status, setStatus] = useState("正在按范围加载 PDF…");
   const [renderedPage, setRenderedPage] = useState<RenderedPage>();
   const [selection, setSelection] = useState<PointerSelection>();
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      async captureRegionPng(region) {
+        if (session === undefined) {
+          throw new Error("PDF_READER_NOT_READY");
+        }
+        return captureRegionPng(session, region);
+      },
+    }),
+    [session],
+  );
 
   useEffect(() => {
     let disposed = false;
@@ -324,6 +351,55 @@ export function PdfReader({
       </div>
     </div>
   );
+}
+
+async function captureRegionPng(
+  session: PdfSession,
+  region: PdfRegionOverlay,
+): Promise<Uint8Array> {
+  if (
+    !Number.isInteger(region.pageNumber) ||
+    region.pageNumber < 1 ||
+    region.pageNumber > session.document.numPages
+  ) {
+    throw new Error("PDF_OCR_REGION_INVALID");
+  }
+  const page = await session.document.getPage(region.pageNumber);
+  try {
+    const pageView = toPdfPageView(page.view);
+    const baseViewport = page.getViewport({ scale: 1, rotation: page.rotate });
+    const renderSpec = buildOcrRegionRenderSpec(pageView, baseViewport, region);
+    const viewport = page.getViewport({
+      scale: renderSpec.scale,
+      rotation: page.rotate,
+    });
+    const rectangle = projectNormalizedRegion(pageView, viewport, region);
+    const canvas = document.createElement("canvas");
+    canvas.width = renderSpec.width;
+    canvas.height = renderSpec.height;
+    await page.render({
+      canvas,
+      viewport,
+      transform: [1, 0, 0, 1, -rectangle.left, -rectangle.top],
+      background: "#ffffff",
+    }).promise;
+    const blob = await canvasToPng(canvas);
+    return new Uint8Array(await blob.arrayBuffer());
+  } finally {
+    page.cleanup();
+  }
+}
+
+function canvasToPng(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob === null) {
+        reject(new Error("PDF_OCR_CAPTURE_FAILED"));
+        return;
+      }
+      resolve(blob);
+    }, "image/png");
+  });
 }
 
 async function renderPage(
