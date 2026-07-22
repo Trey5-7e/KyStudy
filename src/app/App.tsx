@@ -28,7 +28,7 @@ const CURRENT_BOUNDARIES = [
   "SQLite 由 Rust Repository 管理，不向 WebView 暴露路径或 SQL",
   "PDF 只经 document ID 和受控 Range 协议读取，不暴露路径或整本 Base64",
   "OPML 与 FreeMind 只生成待确认草案，XMind 需先导出为 OPML",
-  "AI、OCR 和全文检索尚未接入，导图与计划完全由用户确认和维护",
+  "PDF 文字层只在本地建立可重建索引；AI、OCR 和外部发送尚未接入",
 ] as const;
 
 export function App() {
@@ -82,10 +82,11 @@ export function App() {
   return (
     <main className="shell">
       <section className="hero" aria-labelledby="page-title">
-        <p className="eyebrow">KyStudy · M6 错题复习闭环</p>
-        <h1 id="page-title">让该复习的错题准时出现</h1>
+        <p className="eyebrow">KyStudy · M7 本地资料检索</p>
+        <h1 id="page-title">从资料原文回到准确页码</h1>
         <p className="lead">
-          根据真实错误与复习反馈生成稳定、可解释的每日队列，同时保留全部积压和调度历史。
+          在本机逐页提取 PDF
+          文字层，建立可中断、可重建的搜索索引，为后续带引用的 AI 规划打好基础。
         </p>
       </section>
 

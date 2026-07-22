@@ -4,13 +4,13 @@
 | ---------- | -------------------------------------- |
 | 文档版本   | 0.1                                    |
 | 对应 PRD   | 0.1                                    |
-| 更新日期   | 2026-07-19                             |
-| 状态       | 概念模型；M1-M6 子集已落地至 schema v8 |
+| 更新日期   | 2026-07-22                             |
+| 状态       | 概念模型；M1-M7 子集已落地至 schema v9 |
 | 数据库方向 | SQLite，本地单工作区优先               |
 
 ## 1. 设计目标
 
-> 实现说明：schema v8 已在 v7 题目模型之上落地 `mistake_profile`、`review_state`、`review_event`、`daily_review_queue` 与 `daily_review_item`。AI 规划版本、解析索引、OCR 和派生题目模型仍按本文概念边界后续实现。
+> 实现说明：schema v9 已在 v8 复习模型之上落地 `resource_index_job`、`resource_page_text`、`resource_text_chunk` 与 FTS5 派生索引。AI Provider、对话、Token 用量、OCR 和派生题目识别仍按本文概念边界后续实现。
 
 数据模型需要同时支持日程、资料、思维导图、PDF 题目、错题复习和 AI 用量，又不能把这些功能堆进一个难以演进的通用表。
 
@@ -217,7 +217,7 @@ erDiagram
 | `text_content`                   | 合并后的可检索文字，允许为空 |
 | `content_hash`                   | 当前页面解析内容哈希         |
 
-`text_content` 是派生数据。原始 PDF 不变时可以重新生成。
+`text_content` 是派生数据。schema v9 使用 `resource_page_text` 落地这一概念，并通过 `document_id + page_number` 与既有题目区域和阅读页码保持一致；原始 PDF 不变时可以清理并重新生成。
 
 ### 7.4 `resource_chunk`
 
@@ -232,7 +232,7 @@ erDiagram
 | `chunk_hash`              | 缓存与增量索引键   |
 | `embedding_state`         | 向量状态，可选     |
 
-首版先使用全文检索。向量数据作为可选派生索引，不进入核心关系约束。
+schema v9 首批使用确定性字符分片和 FTS5 trigram 全文检索。向量数据仍是可选派生索引，不进入核心关系约束。
 
 ### 7.5 `processing_job`
 

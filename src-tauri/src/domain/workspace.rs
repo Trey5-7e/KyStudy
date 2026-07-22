@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 /// Latest database schema understood by this application build.
-pub(crate) const LATEST_SCHEMA_VERSION: u32 = 8;
+pub(crate) const LATEST_SCHEMA_VERSION: u32 = 9;
 
 const DEFAULT_WORKSPACE_NAME: &str = "我的考研工作区";
 const DEFAULT_TIMEZONE: &str = "Asia/Shanghai";

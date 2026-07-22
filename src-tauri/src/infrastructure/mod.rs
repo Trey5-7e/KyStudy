@@ -8,6 +8,7 @@ mod sqlite_planning;
 mod sqlite_question;
 mod sqlite_review;
 mod sqlite_schedule;
+mod sqlite_search;
 mod sqlite_workspace;
 
 pub(crate) use resource_protocol::{respond_image, respond_pdf};
@@ -18,4 +19,5 @@ pub(crate) use sqlite_planning::SqlitePlanningRepository;
 pub(crate) use sqlite_question::SqliteQuestionRepository;
 pub(crate) use sqlite_review::SqliteReviewRepository;
 pub(crate) use sqlite_schedule::SqliteScheduleRepository;
+pub(crate) use sqlite_search::SqliteSearchRepository;
 pub(crate) use sqlite_workspace::SqliteWorkspaceRepository;

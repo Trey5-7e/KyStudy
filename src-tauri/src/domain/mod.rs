@@ -5,6 +5,7 @@ mod planning;
 mod question;
 mod review;
 mod schedule;
+mod search;
 mod workspace;
 
 pub(crate) use mindmap::{
@@ -25,5 +26,9 @@ pub(crate) use schedule::{
     ScheduleValidationError, SplitChildDraft, SplitTaskDraft, StudySession, StudyStatistics,
     Subject, SubjectColor, SubjectStatistics, Task, TaskChange, TaskChangeSnapshot, TaskChangeType,
     TaskDetailsDraft, TaskDraft, TaskPriority, TaskSplit, TaskStatus, TaskTransition, TrashedTask,
+};
+pub(crate) use search::{
+    IndexedResourcePage, ResourceIndexSession, ResourceIndexState, ResourceIndexStatus,
+    ResourceSearchMatchKind, ResourceSearchResult,
 };
 pub(crate) use workspace::{LATEST_SCHEMA_VERSION, NewWorkspace, Workspace};

@@ -1497,12 +1497,16 @@ mod tests {
         let connection = Connection::open(database_path).expect("database should open");
         connection
             .execute_batch(
-                "DROP TABLE daily_review_item;
+                "DROP TABLE resource_text_fts;
+                 DROP TABLE resource_text_chunk;
+                 DROP TABLE resource_page_text;
+                 DROP TABLE resource_index_job;
+                 DROP TABLE daily_review_item;
                  DROP TABLE daily_review_queue;
                  DROP TABLE review_event;
                  DROP TABLE review_state;
                  DROP TABLE mistake_profile;
-                 DELETE FROM schema_migration WHERE version = 8;
+                 DELETE FROM schema_migration WHERE version IN (8, 9);
                  PRAGMA user_version = 7;",
             )
             .expect("fixture should become schema v7");

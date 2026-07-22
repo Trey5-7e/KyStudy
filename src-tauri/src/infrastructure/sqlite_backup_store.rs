@@ -507,9 +507,10 @@ mod tests {
         read_manifest,
     };
     use crate::application::{
-        BackupRepository, CreateQuestionInput, GenerateReviewQueueInput, ImportRequest,
-        KnowledgeRepository, QuestionRegionInput, QuestionUseCases, ResourceRepository,
-        ReviewUseCases, ScheduleRepository, SubmitReviewInput, WorkspaceRepository,
+        BackupRepository, BeginResourceIndexInput, CreateQuestionInput, GenerateReviewQueueInput,
+        ImportRequest, KnowledgeRepository, QuestionRegionInput, QuestionUseCases,
+        ResourceRepository, ReviewUseCases, ScheduleRepository, SearchResourcesInput,
+        SearchUseCases, StoreResourcePageTextInput, SubmitReviewInput, WorkspaceRepository,
     };
     use crate::domain::{
         KnowledgeMap, KnowledgeNode, LATEST_SCHEMA_VERSION, LocalDate, MasteryState,
@@ -517,7 +518,8 @@ mod tests {
     };
     use crate::infrastructure::{
         SqliteBlobStore, SqliteKnowledgeRepository, SqliteQuestionRepository,
-        SqliteReviewRepository, SqliteScheduleRepository, SqliteWorkspaceRepository,
+        SqliteReviewRepository, SqliteScheduleRepository, SqliteSearchRepository,
+        SqliteWorkspaceRepository,
     };
 
     struct Fixture {
@@ -781,6 +783,54 @@ mod tests {
     }
 
     #[test]
+    fn complete_backup_restores_resource_text_index_and_search() {
+        let fixture = initialized_fixture();
+        let search =
+            SearchUseCases::new(SqliteSearchRepository::new(fixture.application_data.path()));
+        search
+            .begin_index(&BeginResourceIndexInput {
+                document_id: fixture.document_id.clone(),
+                total_pages: 1,
+                force: false,
+            })
+            .expect("index should begin");
+        search
+            .store_page(StoreResourcePageTextInput {
+                document_id: fixture.document_id.clone(),
+                page_number: 1,
+                total_pages: 1,
+                width_points: 595.0,
+                height_points: 842.0,
+                text: "强化阶段重点复习操作系统".to_owned(),
+            })
+            .expect("page text should persist");
+        search
+            .complete_index(&fixture.document_id)
+            .expect("index should complete");
+        let output = tempdir().expect("output directory should exist");
+        let backup = create_backup(&fixture, &output);
+        let restored_application_data = output.path().join("restored-search-app");
+        let restored_workspaces = restored_application_data.join("workspaces");
+        fs::create_dir_all(&restored_workspaces).expect("workspace parent should exist");
+        let destination = restored_workspaces.join("default");
+        fixture
+            .backup
+            .restore_backup(&backup, &destination)
+            .expect("search data should restore");
+        let restored_search =
+            SearchUseCases::new(SqliteSearchRepository::new(&restored_application_data));
+
+        let results = restored_search
+            .search(&SearchResourcesInput {
+                query: "操作系统".to_owned(),
+                limit: Some(10),
+            })
+            .expect("restored index should search");
+
+        assert_eq!(results[0].page_number, Some(1));
+    }
+
+    #[test]
     fn complete_backup_restores_questions_attempts_and_review_state() {
         let fixture = initialized_fixture();
         let resources = SqliteBlobStore::new(fixture.application_data.path());
@@ -972,7 +1022,11 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE daily_review_item;
+                "DROP TABLE resource_text_fts;
+                 DROP TABLE resource_text_chunk;
+                 DROP TABLE resource_page_text;
+                 DROP TABLE resource_index_job;
+                 DROP TABLE daily_review_item;
                  DROP TABLE daily_review_queue;
                  DROP TABLE review_event;
                  DROP TABLE review_state;
@@ -993,7 +1047,7 @@ mod tests {
                  ALTER TABLE resource_document DROP COLUMN page_count;
                  ALTER TABLE resource_document DROP COLUMN role;
                  DROP TABLE study_session;
-                 DELETE FROM schema_migration WHERE version IN (4, 5, 6, 7, 8);
+                 DELETE FROM schema_migration WHERE version IN (4, 5, 6, 7, 8, 9);
                  PRAGMA user_version = 3;",
             )
             .expect("fixture should represent a v3 backup");
@@ -1043,7 +1097,11 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE daily_review_item;
+                "DROP TABLE resource_text_fts;
+                 DROP TABLE resource_text_chunk;
+                 DROP TABLE resource_page_text;
+                 DROP TABLE resource_index_job;
+                 DROP TABLE daily_review_item;
                  DROP TABLE daily_review_queue;
                  DROP TABLE review_event;
                  DROP TABLE review_state;
@@ -1067,7 +1125,7 @@ mod tests {
                  DROP TABLE task_change;
                  DROP TABLE task;
                  DROP TABLE subject;
-                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6, 7, 8);
+                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6, 7, 8, 9);
                  PRAGMA user_version = 2;",
             )
             .expect("fixture should represent a v2 backup");

@@ -9,6 +9,7 @@ mod resource;
 mod review;
 mod runtime;
 mod schedule;
+mod search;
 mod workspace;
 
 pub(crate) use backup::{
@@ -43,6 +44,10 @@ pub(crate) use schedule::{
     CreateStudySessionInput, CreateSubjectInput, CreateTaskInput, RescheduleTaskInput,
     ScheduleError, ScheduleRepository, ScheduleUseCases, SplitChildInput, SplitTaskInput,
     UpdateTaskDetailsInput,
+};
+pub(crate) use search::{
+    BeginResourceIndexInput, SearchError, SearchRepository, SearchResourcesInput, SearchUseCases,
+    StoreResourcePageTextInput,
 };
 pub(crate) use workspace::{
     PersistenceError, WorkspaceRepository, WorkspaceUseCases, current_utc_millis,

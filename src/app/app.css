@@ -1018,6 +1018,128 @@ textarea:focus-visible {
   margin-top: 1rem;
 }
 
+.resource-search {
+  display: grid;
+  gap: 1rem;
+  margin: 1.25rem 0;
+  padding: 1.25rem 0;
+  border-top: 1px solid rgb(30 91 66 / 16%);
+  border-bottom: 1px solid rgb(30 91 66 / 16%);
+}
+
+.resource-search-heading,
+.resource-search-form,
+.resource-search-results li,
+.resource-index-item,
+.resource-index-actions {
+  display: flex;
+  align-items: center;
+}
+
+.resource-search-heading,
+.resource-search-results li,
+.resource-index-item {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.resource-search-heading h3,
+.resource-search-results p,
+.resource-index-item strong {
+  margin: 0;
+}
+
+.resource-search-heading h3 {
+  font-size: 1.15rem;
+}
+
+.resource-search-heading > span {
+  color: #52625a;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.resource-search-form {
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.resource-search-form label {
+  display: grid;
+  flex: 1;
+  gap: 0.35rem;
+  color: #52625a;
+  font-size: 0.82rem;
+}
+
+.resource-search-form input {
+  width: 100%;
+}
+
+.resource-search-results,
+.resource-index-manager ul {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resource-search-results li,
+.resource-index-item {
+  padding: 0.85rem 0;
+  border-bottom: 1px solid rgb(30 91 66 / 11%);
+  content-visibility: auto;
+  contain-intrinsic-size: 0 92px;
+}
+
+.resource-search-results li > div,
+.resource-index-item > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+}
+
+.resource-search-results strong,
+.resource-search-results p,
+.resource-index-item strong,
+.resource-index-item span {
+  overflow-wrap: anywhere;
+}
+
+.resource-search-results span,
+.resource-index-item span {
+  color: #52625a;
+  font-size: 0.8rem;
+}
+
+.resource-search-results p {
+  color: #3f4a44;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.resource-index-manager > summary {
+  cursor: pointer;
+  color: #315f4d;
+  font-weight: 700;
+}
+
+.resource-index-manager[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
+.resource-index-item progress {
+  width: min(24rem, 100%);
+  height: 0.55rem;
+}
+
+.resource-index-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .backup-card {
   margin-top: 1rem;
 }
@@ -2694,12 +2816,21 @@ button:disabled {
   .progress-copy,
   .resource-list li,
   .resource-actions,
+  .resource-search-heading,
+  .resource-search-form,
+  .resource-search-results li,
+  .resource-index-item,
+  .resource-index-actions,
   .quick-task-form,
   .subject-heading,
   .subject-list li,
   .task-item {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .resource-search-heading > span {
+    white-space: normal;
   }
 
   .quick-task-form label,

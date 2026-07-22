@@ -7,26 +7,26 @@ use uuid::Uuid;
 
 use crate::application::{
     AddNodeResourceInput, AddPlanReferenceInput, AddQuestionAttemptInput, AddQuestionRegionInput,
-    BackupError, BackupReport, CreateKnowledgeMapInput, CreateQuestionInput,
-    CreateStudySessionInput, CreateSubjectInput, CreateTaskInput, GenerateReviewQueueInput,
-    ImportError, ImportProgress, InsertReviewQueueItemInput, KnowledgeError,
-    MoveKnowledgeNodeInput, PinQuestionReviewInput, PlanningError, QuestionError,
+    BackupError, BackupReport, BeginResourceIndexInput, CreateKnowledgeMapInput,
+    CreateQuestionInput, CreateStudySessionInput, CreateSubjectInput, CreateTaskInput,
+    GenerateReviewQueueInput, ImportError, ImportProgress, InsertReviewQueueItemInput,
+    KnowledgeError, MoveKnowledgeNodeInput, PinQuestionReviewInput, PlanningError, QuestionError,
     QuestionRegionInput, RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor,
     RestoreReport, ReviewError, RuntimeStatus, SavePlanInput, SavePlanStageInput, ScheduleError,
-    SetQuestionReviewInput, SplitChildInput, SplitTaskInput, SubmitReviewInput,
-    UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput, UpdateQuestionInput,
-    UpdateReviewPreferencesInput, UpdateTaskDetailsInput,
-    get_runtime_status as load_runtime_status,
+    SearchError, SearchResourcesInput, SetQuestionReviewInput, SplitChildInput, SplitTaskInput,
+    StoreResourcePageTextInput, SubmitReviewInput, UpdateKnowledgeMapInput,
+    UpdateKnowledgeNodeInput, UpdateQuestionInput, UpdateReviewPreferencesInput,
+    UpdateTaskDetailsInput, get_runtime_status as load_runtime_status,
 };
 use crate::bootstrap::AppState;
 use crate::domain::{
     DailyReviewItem, DailyReviewQueue, KnowledgeMap, KnowledgeMapBundle, KnowledgeNode,
     KnowledgeNodeResource, MindMapDraftNode, MindMapImportDraft, MistakeProfile, PlanReference,
     PlanStage, Question, QuestionAttempt, QuestionBundle, QuestionKnowledgeLink, QuestionRegion,
-    ReviewBacklog, ReviewDashboard, ReviewEvent, ReviewPreferences, ReviewQuestion, ReviewReason,
-    ReviewState, StudyPlan, StudyPlanBundle, StudySession, StudyStatistics, Subject,
-    SubjectStatistics, Task, TaskChange, TaskChangeSnapshot, TaskSplit, TaskTransition,
-    TrashedTask, Workspace,
+    ResourceIndexSession, ResourceIndexStatus, ResourceSearchResult, ReviewBacklog,
+    ReviewDashboard, ReviewEvent, ReviewPreferences, ReviewQuestion, ReviewReason, ReviewState,
+    StudyPlan, StudyPlanBundle, StudySession, StudyStatistics, Subject, SubjectStatistics, Task,
+    TaskChange, TaskChangeSnapshot, TaskSplit, TaskTransition, TrashedTask, Workspace,
 };
 
 #[tauri::command]
@@ -1581,6 +1581,132 @@ impl From<ResourceReaderDescriptor> for ResourceReaderDescriptorDto {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct BeginResourceIndexRequestDto {
+    document_id: String,
+    total_pages: u32,
+    force: bool,
+}
+
+impl From<BeginResourceIndexRequestDto> for BeginResourceIndexInput {
+    fn from(request: BeginResourceIndexRequestDto) -> Self {
+        Self {
+            document_id: request.document_id,
+            total_pages: request.total_pages,
+            force: request.force,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct StoreResourcePageTextRequestDto {
+    document_id: String,
+    page_number: u32,
+    total_pages: u32,
+    width_points: f64,
+    height_points: f64,
+    text: String,
+}
+
+impl From<StoreResourcePageTextRequestDto> for StoreResourcePageTextInput {
+    fn from(request: StoreResourcePageTextRequestDto) -> Self {
+        Self {
+            document_id: request.document_id,
+            page_number: request.page_number,
+            total_pages: request.total_pages,
+            width_points: request.width_points,
+            height_points: request.height_points,
+            text: request.text,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SearchResourcesRequestDto {
+    query: String,
+    limit: Option<u32>,
+}
+
+impl From<SearchResourcesRequestDto> for SearchResourcesInput {
+    fn from(request: SearchResourcesRequestDto) -> Self {
+        Self {
+            query: request.query,
+            limit: request.limit,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ResourceIndexStatusDto {
+    document_id: String,
+    state: &'static str,
+    total_pages: Option<u32>,
+    indexed_pages: u32,
+    text_pages: u32,
+    chunk_count: u32,
+    updated_at: Option<i64>,
+}
+
+impl From<ResourceIndexStatus> for ResourceIndexStatusDto {
+    fn from(status: ResourceIndexStatus) -> Self {
+        Self {
+            document_id: status.document_id,
+            state: status.state.as_str(),
+            total_pages: status.total_pages,
+            indexed_pages: status.indexed_pages,
+            text_pages: status.text_pages,
+            chunk_count: status.chunk_count,
+            updated_at: status.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ResourceIndexSessionDto {
+    status: ResourceIndexStatusDto,
+    next_page: u32,
+    needs_indexing: bool,
+}
+
+impl From<ResourceIndexSession> for ResourceIndexSessionDto {
+    fn from(session: ResourceIndexSession) -> Self {
+        Self {
+            status: session.status.into(),
+            next_page: session.next_page,
+            needs_indexing: session.needs_indexing,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ResourceSearchResultDto {
+    document_id: String,
+    document_title: String,
+    document_kind: String,
+    page_number: Option<u32>,
+    excerpt: String,
+    match_kind: &'static str,
+}
+
+impl From<ResourceSearchResult> for ResourceSearchResultDto {
+    fn from(result: ResourceSearchResult) -> Self {
+        Self {
+            document_id: result.document_id,
+            document_title: result.document_title,
+            document_kind: result.document_kind,
+            page_number: result.page_number,
+            excerpt: result.excerpt,
+            match_kind: result.match_kind.as_str(),
+        }
+    }
+}
+
 /// Handle returned after the user selected a source in the native dialog.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1742,6 +1868,40 @@ impl AppErrorDto {
                 "检查文件占用、磁盘空间和目录权限后重试。",
             ),
             ImportError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    fn from_search(error: &SearchError) -> Self {
+        let (message, action) = match error {
+            SearchError::WorkspaceNotInitialized => {
+                ("尚未创建本地工作区。", "先创建工作区，再建立资料索引。")
+            }
+            SearchError::DocumentNotFound => {
+                ("找不到需要索引的本地资料。", "刷新资料列表后重新选择。")
+            }
+            SearchError::UnsupportedDocument => (
+                "这份资料暂时不能建立文字索引。",
+                "当前只支持带文字层的 PDF；扫描页需要等待 OCR 版本。",
+            ),
+            SearchError::InvalidInput => (
+                "索引页码、页面文字或搜索条件无效。",
+                "重新打开 PDF 后再试，搜索词请控制在 100 个字符以内。",
+            ),
+            SearchError::IndexNotRunning => (
+                "这份资料当前没有正在执行的索引任务。",
+                "刷新索引状态后选择继续或重新建立。",
+            ),
+            SearchError::IndexIncomplete => (
+                "PDF 仍有页面尚未完成索引。",
+                "继续处理剩余页面后再完成索引。",
+            ),
+            SearchError::Persistence(error) => return Self::from_persistence(error),
         };
         Self {
             code: error.code(),
@@ -2322,6 +2482,109 @@ pub(crate) async fn save_resource_reading_progress(
     .map_err(|_| AppErrorDto::task_failed())?
     .map(ResourceReaderDescriptorDto::from)
     .map_err(|error| AppErrorDto::from_import(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_resource_index_statuses(
+    state: State<'_, AppState>,
+) -> Result<Vec<ResourceIndexStatusDto>, AppErrorDto> {
+    let use_cases = state.search.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_statuses())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|statuses| statuses.into_iter().map(Into::into).collect())
+        .map_err(|error| AppErrorDto::from_search(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn begin_resource_index(
+    request: BeginResourceIndexRequestDto,
+    state: State<'_, AppState>,
+) -> Result<ResourceIndexSessionDto, AppErrorDto> {
+    let use_cases = state.search.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.begin_index(&request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_search(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn store_resource_page_text(
+    request: StoreResourcePageTextRequestDto,
+    state: State<'_, AppState>,
+) -> Result<ResourceIndexStatusDto, AppErrorDto> {
+    let use_cases = state.search.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.store_page(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_search(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn complete_resource_index(
+    document_id: String,
+    state: State<'_, AppState>,
+) -> Result<ResourceIndexStatusDto, AppErrorDto> {
+    let use_cases = state.search.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.complete_index(&document_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_search(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn interrupt_resource_index(
+    document_id: String,
+    state: State<'_, AppState>,
+) -> Result<ResourceIndexStatusDto, AppErrorDto> {
+    let use_cases = state.search.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.interrupt_index(&document_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_search(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn fail_resource_index(
+    document_id: String,
+    state: State<'_, AppState>,
+) -> Result<ResourceIndexStatusDto, AppErrorDto> {
+    let use_cases = state.search.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.fail_index(&document_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_search(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn clear_resource_index(
+    document_id: String,
+    state: State<'_, AppState>,
+) -> Result<ResourceIndexStatusDto, AppErrorDto> {
+    let use_cases = state.search.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.clear_index(&document_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_search(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn search_resources(
+    request: SearchResourcesRequestDto,
+    state: State<'_, AppState>,
+) -> Result<Vec<ResourceSearchResultDto>, AppErrorDto> {
+    let use_cases = state.search.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.search(&request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|results| results.into_iter().map(Into::into).collect())
+        .map_err(|error| AppErrorDto::from_search(&error))
 }
 
 #[tauri::command]
@@ -3036,15 +3299,16 @@ fn emit_import_event(app: &AppHandle, event: ImportEventDto) {
 mod tests {
     use super::{
         AppErrorDto, BackupReportDto, KnowledgeMapBundleDto, QuestionBundleDto,
-        RescheduleTaskRequestDto, ResourceDocumentDto, ReviewReasonDto, SubjectDto, TaskChangeDto,
-        TaskDto, UpdateTaskDetailsRequestDto, get_runtime_status,
+        RescheduleTaskRequestDto, ResourceDocumentDto, ResourceSearchResultDto, ReviewReasonDto,
+        SubjectDto, TaskChangeDto, TaskDto, UpdateTaskDetailsRequestDto, get_runtime_status,
     };
     use crate::application::{BackupReport, PersistenceError, ResourceDocument, ScheduleError};
     use crate::domain::{
         AttemptResult, KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource,
         LocalDate, MasteryState, Question, QuestionAttempt, QuestionBundle, QuestionRegion,
-        ReviewReason, ReviewSelectionKind, Subject, SubjectColor, Task, TaskChange,
-        TaskChangeSnapshot, TaskChangeType, TaskPriority, TaskStatus,
+        ResourceSearchMatchKind, ResourceSearchResult, ReviewReason, ReviewSelectionKind, Subject,
+        SubjectColor, Task, TaskChange, TaskChangeSnapshot, TaskChangeType, TaskPriority,
+        TaskStatus,
     };
 
     #[test]
@@ -3133,6 +3397,25 @@ mod tests {
         assert!(value.get("path").is_none());
         assert!(value.get("storageKey").is_none());
         assert!(value.get("originalName").is_none());
+    }
+
+    #[test]
+    fn resource_search_dto_exposes_no_chunk_or_index_internals() {
+        let dto = ResourceSearchResultDto::from(ResourceSearchResult {
+            document_id: "019f7328-4b66-7613-9729-e3570fc41525".to_owned(),
+            document_title: "408 规划".to_owned(),
+            document_kind: "pdf".to_owned(),
+            page_number: Some(12),
+            excerpt: "第二阶段复习操作系统".to_owned(),
+            match_kind: ResourceSearchMatchKind::PageText,
+        });
+
+        let value = serde_json::to_value(dto).expect("search DTO should serialize");
+
+        assert!(value.get("chunkId").is_none());
+        assert!(value.get("contentHash").is_none());
+        assert!(value.get("databasePath").is_none());
+        assert_eq!(value["pageNumber"], 12);
     }
 
     #[test]

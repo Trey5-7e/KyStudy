@@ -14,34 +14,16 @@ fn initialize_application(app: &mut tauri::App) -> Result<(), Box<dyn std::error
     if let Err(error) = state.resources.recover_and_list() {
         eprintln!("KYSTUDY_IMPORT_RECOVERY_FAILED: {}", error.code());
     }
+    if let Err(error) = state.search.recover_interrupted() {
+        eprintln!("KYSTUDY_INDEX_RECOVERY_FAILED: {}", error.code());
+    }
     app.manage(state);
     Ok(())
 }
 
-/// Starts the `KyStudy` desktop runtime and registers its controlled command boundary.
-pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
-        .register_uri_scheme_protocol("kystudy-pdf", |context, request| {
-            context
-                .app_handle()
-                .try_state::<bootstrap::AppState>()
-                .map_or_else(
-                    || tauri::http::Response::new(b"RESOURCE_UNAVAILABLE".to_vec()),
-                    |state| infrastructure::respond_pdf(&state.resources, &request),
-                )
-        })
-        .register_uri_scheme_protocol("kystudy-image", |context, request| {
-            context
-                .app_handle()
-                .try_state::<bootstrap::AppState>()
-                .map_or_else(
-                    || tauri::http::Response::new(b"RESOURCE_UNAVAILABLE".to_vec()),
-                    |state| infrastructure::respond_image(&state.resources, &request),
-                )
-        })
-        .setup(initialize_application)
-        .invoke_handler(tauri::generate_handler![
+macro_rules! kystudy_command_handler {
+    () => {
+        tauri::generate_handler![
             commands::get_runtime_status,
             commands::get_workspace_status,
             commands::initialize_default_workspace,
@@ -66,6 +48,14 @@ pub fn run() {
             commands::get_resource_reader_descriptor,
             commands::update_resource_role,
             commands::save_resource_reading_progress,
+            commands::list_resource_index_statuses,
+            commands::begin_resource_index,
+            commands::store_resource_page_text,
+            commands::complete_resource_index,
+            commands::interrupt_resource_index,
+            commands::fail_resource_index,
+            commands::clear_resource_index,
+            commands::search_resources,
             commands::list_study_plans,
             commands::save_study_plan,
             commands::set_study_plan_status,
@@ -111,7 +101,34 @@ pub fn run() {
             commands::cancel_resource_import,
             commands::create_workspace_backup,
             commands::restore_workspace_backup
-        ])
+        ]
+    };
+}
+
+/// Starts the `KyStudy` desktop runtime and registers its controlled command boundary.
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .register_uri_scheme_protocol("kystudy-pdf", |context, request| {
+            context
+                .app_handle()
+                .try_state::<bootstrap::AppState>()
+                .map_or_else(
+                    || tauri::http::Response::new(b"RESOURCE_UNAVAILABLE".to_vec()),
+                    |state| infrastructure::respond_pdf(&state.resources, &request),
+                )
+        })
+        .register_uri_scheme_protocol("kystudy-image", |context, request| {
+            context
+                .app_handle()
+                .try_state::<bootstrap::AppState>()
+                .map_or_else(
+                    || tauri::http::Response::new(b"RESOURCE_UNAVAILABLE".to_vec()),
+                    |state| infrastructure::respond_image(&state.resources, &request),
+                )
+        })
+        .setup(initialize_application)
+        .invoke_handler(kystudy_command_handler!())
         .run(tauri::generate_context!())
         .unwrap_or_else(|error| {
             eprintln!("KYSTUDY_RUNTIME_START_FAILED: {error}");

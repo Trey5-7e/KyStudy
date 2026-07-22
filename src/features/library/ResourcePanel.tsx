@@ -22,6 +22,7 @@ import {
   type ResourceDocument,
   type ResourceReaderDescriptor,
 } from "../../shared/tauri/resourceClient";
+import { ResourceSearchPanel } from "./ResourceSearchPanel";
 
 const PdfReader = lazy(() =>
   import("./pdf/PdfReader").then((module) => ({ default: module.PdfReader })),
@@ -357,6 +358,8 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
           )}
         </div>
       )}
+
+      <ResourceSearchPanel resources={resources} onOpen={requestReader} />
 
       {loading ? (
         <p className="empty-state">正在读取本地资料…</p>
