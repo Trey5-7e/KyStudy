@@ -13,6 +13,9 @@ const BUSY_TIMEOUT: Duration = Duration::from_secs(2);
 pub(crate) const DATABASE_FILE_NAME: &str = "kystudy.sqlite3";
 const DEFAULT_WORKSPACE_DIRECTORY: &str = "default";
 const MINIMUM_SAFE_SQLITE_VERSION: i32 = 3_051_003;
+// The M10 acceptance build used equivalent v13 SQL before that migration file was frozen.
+const MIGRATION_013_LEGACY_CHECKSUMS: &[&str] =
+    &["E0DFA397DC05C5404FD7F4B7AC68C9E1A4ADF8C02EEDB6E10AC135B6C0DFBCD2"];
 
 #[derive(Debug, Clone, Copy)]
 struct Migration {
@@ -379,7 +382,7 @@ fn validate_migration_history(
             .ok_or(PersistenceError::MigrationHistoryInconsistent)?;
         if *version != expected.version
             || name != expected.name
-            || checksum != &migration_checksum(expected)
+            || !migration_checksum_is_accepted(expected, checksum)
         {
             return Err(PersistenceError::MigrationHistoryInconsistent);
         }
@@ -445,6 +448,12 @@ fn migration_checksum(migration: &Migration) -> String {
     format!("{digest:X}")
 }
 
+fn migration_checksum_is_accepted(migration: &Migration, checksum: &str) -> bool {
+    checksum == migration_checksum(migration)
+        || (migration.version == MIGRATION_013.version
+            && MIGRATION_013_LEGACY_CHECKSUMS.contains(&checksum))
+}
+
 fn storage_error(source: std::io::Error) -> PersistenceError {
     PersistenceError::StorageUnavailable {
         source: Box::new(source),
@@ -480,9 +489,9 @@ mod tests {
 
     use super::{
         APPLICATION_ID, MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004, MIGRATION_005,
-        MIGRATION_006, MIGRATION_007, MIGRATION_008, MIGRATION_009, MIGRATION_013, MIGRATION_014,
-        Migration, SqliteWorkspaceRepository, apply_migrations, configure_connection,
-        migration_checksum,
+        MIGRATION_006, MIGRATION_007, MIGRATION_008, MIGRATION_009, MIGRATION_013,
+        MIGRATION_013_LEGACY_CHECKSUMS, MIGRATION_014, MIGRATIONS, Migration,
+        SqliteWorkspaceRepository, apply_migrations, configure_connection, migration_checksum,
     };
     use crate::application::{PersistenceError, WorkspaceRepository};
     use crate::domain::{LATEST_SCHEMA_VERSION, NewWorkspace};
@@ -572,6 +581,83 @@ mod tests {
         let error = repository
             .find_default()
             .expect_err("checksum drift must be rejected");
+
+        assert!(matches!(
+            error,
+            PersistenceError::MigrationHistoryInconsistent
+        ));
+    }
+
+    #[test]
+    fn find_default_upgrades_the_accepted_m10_v13_history_to_latest() {
+        let directory = tempdir().expect("temporary directory should exist");
+        let repository = SqliteWorkspaceRepository::new(directory.path());
+        std::fs::create_dir_all(repository.workspace_directory())
+            .expect("workspace directory should exist");
+        let mut connection =
+            Connection::open(repository.database_path()).expect("workspace database should open");
+        configure_connection(&connection).expect("connection should configure");
+        apply_migrations(&mut connection, &MIGRATIONS[..13]).expect("v13 schema should be created");
+        connection
+            .execute(
+                "UPDATE schema_migration SET checksum = ?1 WHERE version = 13",
+                [MIGRATION_013_LEGACY_CHECKSUMS[0]],
+            )
+            .expect("fixture should use the M10 acceptance checksum");
+        drop(connection);
+
+        repository
+            .find_default()
+            .expect("the accepted M10 schema should upgrade");
+        let connection =
+            Connection::open(repository.database_path()).expect("upgraded database should reopen");
+        let version: u32 = connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .expect("schema version should be readable");
+        let plan_stage_task_exists: bool = connection
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM sqlite_schema
+                    WHERE type = 'table' AND name = 'plan_stage_task'
+                 )",
+                [],
+                |row| row.get(0),
+            )
+            .expect("v14 table should be queryable");
+        let stored_v13_checksum: String = connection
+            .query_row(
+                "SELECT checksum FROM schema_migration WHERE version = 13",
+                [],
+                |row| row.get(0),
+            )
+            .expect("v13 history should remain readable");
+
+        assert_eq!(version, LATEST_SCHEMA_VERSION);
+        assert!(plan_stage_task_exists);
+        assert_eq!(stored_v13_checksum, MIGRATION_013_LEGACY_CHECKSUMS[0]);
+    }
+
+    #[test]
+    fn find_default_rejects_an_unknown_v13_checksum() {
+        let directory = tempdir().expect("temporary directory should exist");
+        let repository = SqliteWorkspaceRepository::new(directory.path());
+        std::fs::create_dir_all(repository.workspace_directory())
+            .expect("workspace directory should exist");
+        let mut connection =
+            Connection::open(repository.database_path()).expect("workspace database should open");
+        configure_connection(&connection).expect("connection should configure");
+        apply_migrations(&mut connection, &MIGRATIONS[..13]).expect("v13 schema should be created");
+        connection
+            .execute(
+                "UPDATE schema_migration SET checksum = 'unknown' WHERE version = 13",
+                [],
+            )
+            .expect("fixture should change only the v13 checksum");
+        drop(connection);
+
+        let error = repository
+            .find_default()
+            .expect_err("an unknown v13 checksum must remain rejected");
 
         assert!(matches!(
             error,

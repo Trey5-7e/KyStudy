@@ -12,7 +12,7 @@
 | 检查项                           | 结果                                                                    |
 | -------------------------------- | ----------------------------------------------------------------------- |
 | 前端 Vitest                      | 93 passed；含预览 DTO、计数一致性和正式任务 DTO 脱敏校验                 |
-| Rust tests                       | 174 passed；含日期生成、幂等事务、当前计划限制和阶段删除保留任务         |
+| Rust tests                       | 176 passed；含日期生成、幂等事务、当前计划限制、阶段删除保留任务和 M10 v13 历史兼容 |
 | Prettier / ESLint / TypeScript   | passed，零警告                                                          |
 | Cargo fmt / Clippy `-D warnings` | passed，零警告                                                          |
 | Vite production build            | passed；主 JS 200.17 kB，规划页独立按需包 30.52 kB                       |
@@ -22,8 +22,8 @@
 
 ```text
 F:\develop\KyStudy\src-tauri\target\release\kystudy.exe
-大小：22,829,056 bytes
-SHA-256：115B6CF2CF7909A813A3C517D33E12EAD3897F1228AFAC23474ED7F58B265157
+大小：22,837,760 bytes
+SHA-256：FC9C695868A6CC63D31654AF53CA037FA29816BCDAECA2A80A310A9561218357
 签名：NotSigned（内部验收构建，符合当前阶段边界）
 ```
 
@@ -41,7 +41,7 @@ SHA-256：115B6CF2CF7909A813A3C517D33E12EAD3897F1228AFAC23474ED7F58B265157
 ### A. 启动、迁移与离线边界
 
 1. 启动应用，确认运行状态显示 `Schema v14`；
-2. 确认原有日程、规划、资料、思维导图、题目、错题、OCR、Provider 和分析数据仍存在；
+2. 确认不再出现 `MIGRATION_HISTORY_INCONSISTENT`，导入、索引和 AI 恢复正常，原有日程、规划、资料、思维导图、题目、错题、OCR、Provider 和分析数据仍存在；
 3. 断开网络后进入“个人规划”，确认页面可正常加载，不弹出 AI 外发预览；
 4. 确认“展开到日程”位于当前计划的阶段编辑区之后，页面原有计划、阶段、引用和 AI 对话功能仍可使用。
 
