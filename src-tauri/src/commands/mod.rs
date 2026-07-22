@@ -48,13 +48,54 @@ pub(crate) async fn get_ai_overview(
 }
 
 #[tauri::command]
-pub(crate) async fn save_ai_provider(
+pub(crate) async fn create_ai_provider(
     request: SaveAiProviderRequestDto,
     state: State<'_, AppState>,
 ) -> Result<AiOverviewDto, AppErrorDto> {
     let use_cases = state.ai.clone();
     let input = request.into();
-    tauri::async_runtime::spawn_blocking(move || use_cases.save_provider(&input))
+    tauri::async_runtime::spawn_blocking(move || use_cases.create_provider(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn update_ai_provider(
+    provider_id: String,
+    request: SaveAiProviderRequestDto,
+    state: State<'_, AppState>,
+) -> Result<AiOverviewDto, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.update_provider(&provider_id, &input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn activate_ai_provider(
+    provider_id: String,
+    state: State<'_, AppState>,
+) -> Result<AiOverviewDto, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.activate_provider(&provider_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn delete_ai_provider(
+    provider_id: String,
+    state: State<'_, AppState>,
+) -> Result<AiOverviewDto, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.delete_provider(&provider_id))
         .await
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)
@@ -81,19 +122,22 @@ pub(crate) async fn save_ai_secret(
     state: State<'_, AppState>,
 ) -> Result<AiOverviewDto, AppErrorDto> {
     let use_cases = state.ai.clone();
-    tauri::async_runtime::spawn_blocking(move || use_cases.set_secret(&request.secret))
-        .await
-        .map_err(|_| AppErrorDto::task_failed())?
-        .map(Into::into)
-        .map_err(|error| AppErrorDto::from_ai(&error))
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.set_secret(&request.provider_id, &request.secret)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(Into::into)
+    .map_err(|error| AppErrorDto::from_ai(&error))
 }
 
 #[tauri::command]
 pub(crate) async fn delete_ai_secret(
+    provider_id: String,
     state: State<'_, AppState>,
 ) -> Result<AiOverviewDto, AppErrorDto> {
     let use_cases = state.ai.clone();
-    tauri::async_runtime::spawn_blocking(move || use_cases.delete_secret())
+    tauri::async_runtime::spawn_blocking(move || use_cases.delete_secret(&provider_id))
         .await
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)
@@ -1923,12 +1967,14 @@ impl From<AiPreviewRequestDto> for AiPreviewInput {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct SaveAiSecretRequestDto {
+    provider_id: String,
     secret: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AiProviderDto {
+    id: String,
     provider_type: &'static str,
     display_name: String,
     base_url: Option<String>,
@@ -1936,6 +1982,7 @@ pub(crate) struct AiProviderDto {
     context_limit: u32,
     max_output_tokens: u32,
     has_secret: bool,
+    active: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1972,7 +2019,8 @@ pub(crate) struct AiCallSummaryDto {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AiOverviewDto {
-    provider: AiProviderDto,
+    providers: Vec<AiProviderDto>,
+    active_provider_id: String,
     budget: AiBudgetDto,
     usage: AiUsageDto,
     calls: Vec<AiCallSummaryDto>,
@@ -1981,15 +2029,22 @@ pub(crate) struct AiOverviewDto {
 impl From<AiOverview> for AiOverviewDto {
     fn from(overview: AiOverview) -> Self {
         Self {
-            provider: AiProviderDto {
-                provider_type: overview.provider.provider_type.as_str(),
-                display_name: overview.provider.display_name,
-                base_url: overview.provider.base_url,
-                model_name: overview.model.model_name,
-                context_limit: overview.model.context_limit,
-                max_output_tokens: overview.model.max_output_tokens,
-                has_secret: overview.has_secret,
-            },
+            providers: overview
+                .providers
+                .into_iter()
+                .map(|entry| AiProviderDto {
+                    id: entry.provider.id,
+                    provider_type: entry.provider.provider_type.as_str(),
+                    display_name: entry.provider.display_name,
+                    base_url: entry.provider.base_url,
+                    model_name: entry.model.model_name,
+                    context_limit: entry.model.context_limit,
+                    max_output_tokens: entry.model.max_output_tokens,
+                    has_secret: entry.has_secret,
+                    active: entry.provider.enabled,
+                })
+                .collect(),
+            active_provider_id: overview.active_provider_id,
             budget: AiBudgetDto {
                 single_call_limit: overview.budget.single_call_limit,
                 daily_token_limit: overview.budget.daily_token_limit,
@@ -2208,6 +2263,10 @@ impl AppErrorDto {
             AiError::InvalidInput => (
                 "AI 配置、上下文或 Token 上限无效。",
                 "检查模型名称、地址、文字长度和 Token 数值后重试。",
+            ),
+            AiError::ProviderLimitReached => (
+                "AI Provider 已达到 20 个本地配置上限。",
+                "删除不再使用的 Provider 后重试。",
             ),
             AiError::BudgetBlocked => (
                 "本次调用已被 Token 硬预算阻止。",
@@ -3677,8 +3736,8 @@ mod tests {
         SubjectDto, TaskChangeDto, TaskDto, UpdateTaskDetailsRequestDto, get_runtime_status,
     };
     use crate::application::{
-        AiOverview, BackupReport, PersistenceError, ResourceDocument, ScheduleError,
-        default_provider,
+        AiOverview, AiProviderOverview, BackupReport, PersistenceError, ResourceDocument,
+        ScheduleError, default_provider,
     };
     use crate::domain::{
         AttemptResult, KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource,
@@ -3712,11 +3771,14 @@ mod tests {
         let (mut provider, model, budget) = default_provider(1_700_000_000_000);
         provider.secret_ref = Some("private-secret-reference".to_owned());
         let dto = AiOverviewDto::from(AiOverview {
-            provider,
-            model,
+            active_provider_id: provider.id.clone(),
+            providers: vec![AiProviderOverview {
+                provider,
+                model,
+                has_secret: true,
+            }],
             budget,
             usage: crate::domain::AiUsageSummary::default(),
-            has_secret: true,
             calls: Vec::new(),
         });
 

@@ -7,16 +7,21 @@ import {
 } from "./aiClient";
 
 const OVERVIEW = {
-  provider: {
-    providerType: "offline_test",
-    displayName: "离线测试 Provider",
-    baseUrl: null,
-    modelName: "kystudy-offline-test-v1",
-    contextLimit: 128000,
-    maxOutputTokens: 800,
-    hasSecret: false,
-    secretRef: "private-reference",
-  },
+  providers: [
+    {
+      id: "provider-id",
+      providerType: "offline_test",
+      displayName: "离线测试 Provider",
+      baseUrl: null,
+      modelName: "kystudy-offline-test-v1",
+      contextLimit: 128000,
+      maxOutputTokens: 800,
+      hasSecret: false,
+      active: true,
+      secretRef: "private-reference",
+    },
+  ],
+  activeProviderId: "provider-id",
   budget: {
     singleCallLimit: 8000,
     dailyTokenLimit: 50000,
@@ -47,7 +52,7 @@ describe("parseAiOverview", () => {
     const overview = parseAiOverview(OVERVIEW);
     const serialized = JSON.stringify(overview);
 
-    expect(overview.provider.providerType).toBe("offline_test");
+    expect(overview.providers[0]?.providerType).toBe("offline_test");
     expect(serialized).not.toContain("secretRef");
     expect(serialized).not.toContain("requestFingerprint");
     expect(serialized).not.toContain("databasePath");
@@ -60,6 +65,34 @@ describe("parseAiOverview", () => {
         calls: [{ ...OVERVIEW.calls[0], state: "streaming" }],
       }),
     ).toThrowError("AI_CALL_INVALID");
+  });
+
+  it("rejects an overview without exactly one active provider", () => {
+    expect(() =>
+      parseAiOverview({
+        ...OVERVIEW,
+        providers: OVERVIEW.providers.map((provider) => ({
+          ...provider,
+          active: false,
+        })),
+      }),
+    ).toThrowError("AI_OVERVIEW_INVALID");
+  });
+
+  it("rejects an active id that points at an inactive provider", () => {
+    expect(() =>
+      parseAiOverview({
+        ...OVERVIEW,
+        providers: [
+          { ...OVERVIEW.providers[0], active: false },
+          {
+            ...OVERVIEW.providers[0],
+            id: "another-provider",
+            active: true,
+          },
+        ],
+      }),
+    ).toThrowError("AI_OVERVIEW_INVALID");
   });
 });
 

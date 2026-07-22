@@ -13,6 +13,8 @@ mod schedule;
 mod search;
 mod workspace;
 
+#[cfg(test)]
+pub(crate) use ai::AiProviderOverview;
 pub(crate) use ai::{
     AiCachedResponse, AiCallPreview, AiCallResult, AiError, AiOverview, AiPreviewInput,
     AiProviderGateway, AiProviderResponse, AiRepository, AiUseCases, BeginAiCall,

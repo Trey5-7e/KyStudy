@@ -67,30 +67,84 @@ impl AiRepository for SqliteAiRepository {
             .ok_or(AiError::WorkspaceNotInitialized)?;
         let exists = transaction
             .query_row(
-                "SELECT EXISTS(SELECT 1 FROM ai_provider_config WHERE workspace_id = ?1 AND enabled = 1)",
+                "SELECT EXISTS(
+                    SELECT 1 FROM ai_provider_config
+                    WHERE workspace_id = ?1 AND enabled = 1 AND deleted_at IS NULL
+                 )",
                 [&workspace_id],
                 |row| row.get::<_, bool>(0),
             )
             .map_err(database_error)?;
-        if exists {
-            transaction
-                .execute(
-                    "INSERT INTO ai_budget(
-                        workspace_id, single_call_limit, daily_token_limit,
-                        monthly_token_limit, limit_mode, updated_at
-                     ) VALUES (?1, 8000, 50000, 1000000, 'block', ?2)
-                     ON CONFLICT(workspace_id) DO NOTHING",
-                    params![workspace_id, now],
+        transaction
+            .execute(
+                "INSERT INTO ai_budget(
+                    workspace_id, single_call_limit, daily_token_limit,
+                    monthly_token_limit, limit_mode, updated_at
+                 ) VALUES (?1, 8000, 50000, 1000000, 'block', ?2)
+                 ON CONFLICT(workspace_id) DO NOTHING",
+                params![workspace_id, now],
+            )
+            .map_err(database_error)?;
+        if !exists {
+            let fallback = transaction
+                .query_row(
+                    "SELECT id FROM ai_provider_config
+                     WHERE workspace_id = ?1 AND deleted_at IS NULL
+                     ORDER BY created_at, id LIMIT 1",
+                    [&workspace_id],
+                    |row| row.get::<_, String>(0),
                 )
+                .optional()
                 .map_err(database_error)?;
-        } else {
-            let (provider, model, budget) = default_provider(now);
-            insert_provider(&transaction, &workspace_id, &provider, now)?;
-            insert_model(&transaction, &model, now)?;
-            insert_budget(&transaction, &workspace_id, &budget)?;
+            if let Some(provider_id) = fallback {
+                transaction
+                    .execute(
+                        "UPDATE ai_provider_config
+                         SET enabled = 1, updated_at = ?2 WHERE id = ?1",
+                        params![provider_id, now],
+                    )
+                    .map_err(database_error)?;
+            } else {
+                let (provider, model, _) = default_provider(now);
+                insert_provider(&transaction, &workspace_id, &provider, now)?;
+                insert_model(&transaction, &model, now)?;
+            }
         }
         transaction.commit().map_err(database_error)?;
         Ok(())
+    }
+
+    fn count_providers(&self) -> Result<u64, AiError> {
+        let connection = self.open()?;
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM ai_provider_config WHERE deleted_at IS NULL",
+                [],
+                |row| read_u64(row, 0),
+            )
+            .map_err(database_error)
+            .map_err(AiError::from)
+    }
+
+    fn list_configurations(&self) -> Result<Vec<(AiProviderConfig, AiModelProfile)>, AiError> {
+        let connection = self.open()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT p.id, p.provider_type, p.display_name, p.base_url, p.secret_ref,
+                        p.enabled, p.updated_at, m.id, m.model_name, m.context_limit,
+                        m.max_output_tokens, m.updated_at
+                 FROM ai_provider_config p
+                 JOIN ai_model_profile m ON m.provider_config_id = p.id
+                 WHERE p.deleted_at IS NULL
+                 ORDER BY p.enabled DESC, p.updated_at DESC, p.id",
+            )
+            .map_err(database_error)?;
+        let rows = statement
+            .query_map([], configuration_from_row)
+            .map_err(database_error)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(database_error)
+            .map_err(AiError::from)
     }
 
     fn load_configuration(&self) -> Result<(AiProviderConfig, AiModelProfile, AiBudget), AiError> {
@@ -104,7 +158,7 @@ impl AiRepository for SqliteAiRepository {
                  FROM ai_provider_config p
                  JOIN ai_model_profile m ON m.provider_config_id = p.id
                  JOIN ai_budget b ON b.workspace_id = p.workspace_id
-                 WHERE p.enabled = 1",
+                 WHERE p.enabled = 1 AND p.deleted_at IS NULL",
                 [],
                 |row| {
                     let provider_type = row.get::<_, String>(1)?;
@@ -143,7 +197,52 @@ impl AiRepository for SqliteAiRepository {
             .ok_or(AiError::ConfigurationNotFound)
     }
 
-    fn save_provider(
+    fn load_provider(
+        &self,
+        provider_id: &str,
+    ) -> Result<(AiProviderConfig, AiModelProfile), AiError> {
+        let connection = self.open()?;
+        connection
+            .query_row(
+                "SELECT p.id, p.provider_type, p.display_name, p.base_url, p.secret_ref,
+                        p.enabled, p.updated_at, m.id, m.model_name, m.context_limit,
+                        m.max_output_tokens, m.updated_at
+                 FROM ai_provider_config p
+                 JOIN ai_model_profile m ON m.provider_config_id = p.id
+                 WHERE p.id = ?1 AND p.deleted_at IS NULL",
+                [provider_id],
+                configuration_from_row,
+            )
+            .optional()
+            .map_err(database_error)?
+            .ok_or(AiError::ConfigurationNotFound)
+    }
+
+    fn create_provider(
+        &self,
+        provider: &AiProviderConfig,
+        model: &AiModelProfile,
+    ) -> Result<(), AiError> {
+        let mut connection = self.open()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(database_error)?;
+        let workspace_id = transaction
+            .query_row(
+                "SELECT id FROM workspace WHERE singleton_key = 1",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(database_error)?
+            .ok_or(AiError::WorkspaceNotInitialized)?;
+        insert_provider(&transaction, &workspace_id, provider, provider.updated_at)?;
+        insert_model(&transaction, model, model.updated_at)?;
+        transaction.commit().map_err(database_error)?;
+        Ok(())
+    }
+
+    fn update_provider(
         &self,
         provider: &AiProviderConfig,
         model: &AiModelProfile,
@@ -157,7 +256,7 @@ impl AiRepository for SqliteAiRepository {
                 "UPDATE ai_provider_config
                  SET provider_type = ?2, display_name = ?3, base_url = ?4, secret_ref = ?5,
                      enabled = ?6, updated_at = ?7
-                 WHERE id = ?1",
+                 WHERE id = ?1 AND deleted_at IS NULL",
                 params![
                     provider.id,
                     provider.provider_type.as_str(),
@@ -189,6 +288,56 @@ impl AiRepository for SqliteAiRepository {
             .map_err(database_error)?;
         transaction.commit().map_err(database_error)?;
         Ok(())
+    }
+
+    fn activate_provider(&self, provider_id: &str, updated_at: i64) -> Result<(), AiError> {
+        let mut connection = self.open()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(database_error)?;
+        let workspace_id = transaction
+            .query_row(
+                "SELECT workspace_id FROM ai_provider_config
+                 WHERE id = ?1 AND deleted_at IS NULL",
+                [provider_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(database_error)?
+            .ok_or(AiError::ConfigurationNotFound)?;
+        transaction
+            .execute(
+                "UPDATE ai_provider_config SET enabled = 0
+                 WHERE workspace_id = ?1 AND enabled = 1",
+                [&workspace_id],
+            )
+            .map_err(database_error)?;
+        transaction
+            .execute(
+                "UPDATE ai_provider_config SET enabled = 1, updated_at = ?2
+                 WHERE id = ?1 AND deleted_at IS NULL",
+                params![provider_id, updated_at],
+            )
+            .map_err(database_error)?;
+        transaction.commit().map_err(database_error)?;
+        Ok(())
+    }
+
+    fn delete_provider(&self, provider_id: &str, deleted_at: i64) -> Result<(), AiError> {
+        let connection = self.open()?;
+        let changed = connection
+            .execute(
+                "UPDATE ai_provider_config
+                 SET enabled = 0, deleted_at = ?2, updated_at = ?2
+                 WHERE id = ?1 AND deleted_at IS NULL",
+                params![provider_id, deleted_at],
+            )
+            .map_err(database_error)?;
+        if changed == 1 {
+            Ok(())
+        } else {
+            Err(AiError::ConfigurationNotFound)
+        }
     }
 
     fn save_budget(&self, budget: &AiBudget) -> Result<(), AiError> {
@@ -389,6 +538,33 @@ impl AiRepository for SqliteAiRepository {
     }
 }
 
+fn configuration_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<(AiProviderConfig, AiModelProfile)> {
+    let provider_type = row.get::<_, String>(1)?;
+    let provider_type =
+        AiProviderType::parse(&provider_type).ok_or_else(|| rusqlite::Error::InvalidQuery)?;
+    Ok((
+        AiProviderConfig {
+            id: row.get(0)?,
+            provider_type,
+            display_name: row.get(2)?,
+            base_url: row.get(3)?,
+            secret_ref: row.get(4)?,
+            enabled: row.get(5)?,
+            updated_at: row.get(6)?,
+        },
+        AiModelProfile {
+            id: row.get(7)?,
+            provider_config_id: row.get(0)?,
+            model_name: row.get(8)?,
+            context_limit: read_u32(row, 9)?,
+            max_output_tokens: read_u32(row, 10)?,
+            updated_at: row.get(11)?,
+        },
+    ))
+}
+
 fn insert_provider(
     connection: &Connection,
     workspace_id: &str,
@@ -442,30 +618,6 @@ fn insert_model(
     Ok(())
 }
 
-fn insert_budget(
-    connection: &Connection,
-    workspace_id: &str,
-    budget: &AiBudget,
-) -> Result<(), AiError> {
-    connection
-        .execute(
-            "INSERT INTO ai_budget(
-                workspace_id, single_call_limit, daily_token_limit,
-                monthly_token_limit, limit_mode, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![
-                workspace_id,
-                to_i64(budget.single_call_limit)?,
-                to_i64(budget.daily_token_limit)?,
-                to_i64(budget.monthly_token_limit)?,
-                budget.limit_mode,
-                budget.updated_at,
-            ],
-        )
-        .map_err(database_error)?;
-    Ok(())
-}
-
 fn read_u32(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<u32> {
     let value = row.get::<_, i64>(index)?;
     u32::try_from(value).map_err(|error| {
@@ -501,8 +653,8 @@ mod tests {
 
     use super::SqliteAiRepository;
     use crate::application::{
-        AiError, AiPreviewInput, AiRepository, AiUseCases, SaveAiBudgetInput, SecretStore,
-        WorkspaceRepository,
+        AiError, AiPreviewInput, AiRepository, AiUseCases, SaveAiBudgetInput, SaveAiProviderInput,
+        SecretStore, WorkspaceRepository,
     };
     use crate::domain::NewWorkspace;
     use crate::infrastructure::{ProviderRouter, SqliteWorkspaceRepository};
@@ -565,6 +717,82 @@ mod tests {
 
         assert_eq!(provider.secret_ref, None);
         assert_eq!(budget.limit_mode, "block");
+    }
+
+    #[test]
+    fn providers_can_be_created_activated_and_soft_deleted() {
+        let directory = tempdir().expect("temporary directory should exist");
+        SqliteWorkspaceRepository::new(directory.path())
+            .initialize_default(&NewWorkspace::default_at(1_700_000_000_000))
+            .expect("workspace should initialize");
+        let repository = SqliteAiRepository::new(directory.path());
+        let secrets = MemorySecretStore::default();
+        let use_cases = AiUseCases::new(repository.clone(), secrets.clone(), ProviderRouter);
+
+        let initial = use_cases.overview().expect("defaults should load");
+        let initial_provider_id = initial.active_provider_id;
+        let created = use_cases
+            .create_provider(&SaveAiProviderInput {
+                provider_type: "openai_responses".to_owned(),
+                display_name: "本地兼容接口".to_owned(),
+                base_url: Some("http://localhost:11434/v1/".to_owned()),
+                model_name: "test-model".to_owned(),
+                context_limit: 32_768,
+                max_output_tokens: 1_024,
+            })
+            .expect("provider should be created");
+        assert_eq!(created.providers.len(), 2);
+        assert_eq!(created.active_provider_id, initial_provider_id);
+        let new_provider = created
+            .providers
+            .iter()
+            .find(|entry| entry.provider.display_name == "本地兼容接口")
+            .expect("created provider should be listed");
+        let new_provider_id = new_provider.provider.id.clone();
+
+        let activated = use_cases
+            .activate_provider(&new_provider_id)
+            .expect("provider should activate");
+        assert_eq!(activated.active_provider_id, new_provider_id);
+        assert_eq!(
+            activated
+                .providers
+                .iter()
+                .filter(|entry| entry.provider.enabled)
+                .count(),
+            1
+        );
+
+        use_cases
+            .set_secret(&new_provider_id, "test-secret")
+            .expect("provider secret should save");
+        let secret_reference = repository
+            .load_provider(&new_provider_id)
+            .expect("provider should load")
+            .0
+            .secret_ref
+            .expect("remote provider should have a secret reference");
+        assert!(
+            secrets
+                .has(&secret_reference)
+                .expect("secret state should load")
+        );
+
+        let deleted = use_cases
+            .delete_provider(&new_provider_id)
+            .expect("provider should be soft deleted");
+        assert_eq!(deleted.providers.len(), 1);
+        assert_eq!(deleted.active_provider_id, initial_provider_id);
+        assert_eq!(repository.count_providers().expect("count should load"), 1);
+        assert!(matches!(
+            repository.load_provider(&new_provider_id),
+            Err(AiError::ConfigurationNotFound)
+        ));
+        assert!(
+            !secrets
+                .has(&secret_reference)
+                .expect("secret state should load")
+        );
     }
 
     #[test]

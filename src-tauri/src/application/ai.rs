@@ -14,6 +14,7 @@ const DEFAULT_DAILY_LIMIT: u64 = 50_000;
 const DEFAULT_MONTHLY_LIMIT: u64 = 1_000_000;
 const CHINA_OFFSET_MILLIS: i64 = 8 * 60 * 60 * 1_000;
 const DAY_MILLIS: i64 = 24 * 60 * 60 * 1_000;
+const MAXIMUM_PROVIDERS: u64 = 20;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SaveAiProviderInput {
@@ -41,12 +42,18 @@ pub(crate) struct AiPreviewInput {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AiOverview {
-    pub(crate) provider: AiProviderConfig,
-    pub(crate) model: AiModelProfile,
+    pub(crate) providers: Vec<AiProviderOverview>,
+    pub(crate) active_provider_id: String,
     pub(crate) budget: AiBudget,
     pub(crate) usage: AiUsageSummary,
-    pub(crate) has_secret: bool,
     pub(crate) calls: Vec<AiCallSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AiProviderOverview {
+    pub(crate) provider: AiProviderConfig,
+    pub(crate) model: AiModelProfile,
+    pub(crate) has_secret: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -114,6 +121,8 @@ pub(crate) enum AiError {
     ConfigurationNotFound,
     #[error("AI input is invalid")]
     InvalidInput,
+    #[error("AI provider limit was reached")]
+    ProviderLimitReached,
     #[error("AI token budget blocks this call")]
     BudgetBlocked,
     #[error("AI secret is missing")]
@@ -140,6 +149,7 @@ impl AiError {
             Self::WorkspaceNotInitialized => "WORKSPACE_NOT_INITIALIZED",
             Self::ConfigurationNotFound => "AI_CONFIGURATION_NOT_FOUND",
             Self::InvalidInput => "AI_INPUT_INVALID",
+            Self::ProviderLimitReached => "AI_PROVIDER_LIMIT_REACHED",
             Self::BudgetBlocked => "AI_BUDGET_BLOCKED",
             Self::SecretMissing => "AI_SECRET_MISSING",
             Self::SecretStoreUnavailable => "AI_SECRET_STORE_UNAVAILABLE",
@@ -156,12 +166,25 @@ impl AiError {
 pub(crate) trait AiRepository: Clone + Send + Sync + 'static {
     fn recover_pending(&self, finished_at: i64) -> Result<u64, AiError>;
     fn ensure_defaults(&self, now: i64) -> Result<(), AiError>;
+    fn count_providers(&self) -> Result<u64, AiError>;
+    fn list_configurations(&self) -> Result<Vec<(AiProviderConfig, AiModelProfile)>, AiError>;
     fn load_configuration(&self) -> Result<(AiProviderConfig, AiModelProfile, AiBudget), AiError>;
-    fn save_provider(
+    fn load_provider(
+        &self,
+        provider_id: &str,
+    ) -> Result<(AiProviderConfig, AiModelProfile), AiError>;
+    fn create_provider(
         &self,
         provider: &AiProviderConfig,
         model: &AiModelProfile,
     ) -> Result<(), AiError>;
+    fn update_provider(
+        &self,
+        provider: &AiProviderConfig,
+        model: &AiModelProfile,
+    ) -> Result<(), AiError>;
+    fn activate_provider(&self, provider_id: &str, updated_at: i64) -> Result<(), AiError>;
+    fn delete_provider(&self, provider_id: &str, deleted_at: i64) -> Result<(), AiError>;
     fn save_budget(&self, budget: &AiBudget) -> Result<(), AiError>;
     fn aggregate_usage(&self, day_start: i64, month_start: i64) -> Result<AiUsageSummary, AiError>;
     fn list_calls(&self, limit: u32) -> Result<Vec<AiCallSummary>, AiError>;
@@ -219,67 +242,93 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
     pub(crate) fn overview(&self) -> Result<AiOverview, AiError> {
         let now = current_utc_millis()?;
         self.repository.ensure_defaults(now)?;
-        let (provider, model, budget) = self.repository.load_configuration()?;
+        let (provider, _, budget) = self.repository.load_configuration()?;
         let (day_start, month_start) = usage_period_starts(now);
         let usage = self.repository.aggregate_usage(day_start, month_start)?;
-        let has_secret = match provider.secret_ref.as_deref() {
-            Some(reference) => self.secrets.has(reference)?,
-            None => false,
-        };
+        let providers = self
+            .repository
+            .list_configurations()?
+            .into_iter()
+            .map(|(provider, model)| {
+                let has_secret = match provider.secret_ref.as_deref() {
+                    Some(reference) => self.secrets.has(reference)?,
+                    None => false,
+                };
+                Ok(AiProviderOverview {
+                    provider,
+                    model,
+                    has_secret,
+                })
+            })
+            .collect::<Result<Vec<_>, AiError>>()?;
         Ok(AiOverview {
-            provider,
-            model,
+            providers,
+            active_provider_id: provider.id,
             budget,
             usage,
-            has_secret,
             calls: self.repository.list_calls(20)?,
         })
     }
 
-    pub(crate) fn save_provider(&self, input: &SaveAiProviderInput) -> Result<AiOverview, AiError> {
-        let provider_type =
-            AiProviderType::parse(input.provider_type.trim()).ok_or(AiError::InvalidInput)?;
-        let display_name = input.display_name.trim();
-        let model_name = input.model_name.trim();
-        if display_name.is_empty()
-            || display_name.chars().count() > 80
-            || model_name.is_empty()
-            || model_name.chars().count() > 120
-            || !(1_024..=2_000_000).contains(&input.context_limit)
-            || !(1..=131_072).contains(&input.max_output_tokens)
-            || input.max_output_tokens >= input.context_limit
-        {
-            return Err(AiError::InvalidInput);
-        }
+    pub(crate) fn create_provider(
+        &self,
+        input: &SaveAiProviderInput,
+    ) -> Result<AiOverview, AiError> {
         let now = current_utc_millis()?;
         self.repository.ensure_defaults(now)?;
-        let (existing, existing_model, _) = self.repository.load_configuration()?;
-        let (base_url, secret_ref) = match provider_type {
-            AiProviderType::OfflineTest => (None, None),
-            AiProviderType::OpenAiResponses => {
-                let base_url = normalize_base_url(input.base_url.as_deref())?;
-                let reference = existing.secret_ref.unwrap_or_else(|| existing.id.clone());
-                (Some(base_url), Some(reference))
-            }
-        };
-        let provider = AiProviderConfig {
-            id: existing.id,
-            provider_type,
-            display_name: display_name.to_owned(),
-            base_url,
-            secret_ref,
-            enabled: true,
-            updated_at: now,
-        };
-        let model = AiModelProfile {
-            id: existing_model.id,
-            provider_config_id: provider.id.clone(),
-            model_name: model_name.to_owned(),
-            context_limit: input.context_limit,
-            max_output_tokens: input.max_output_tokens,
-            updated_at: now,
-        };
-        self.repository.save_provider(&provider, &model)?;
+        if self.repository.count_providers()? >= MAXIMUM_PROVIDERS {
+            return Err(AiError::ProviderLimitReached);
+        }
+        let provider_id = Uuid::now_v7().to_string();
+        let model_id = Uuid::now_v7().to_string();
+        let (provider, model) = validated_provider(input, provider_id, model_id, false, None, now)?;
+        self.repository.create_provider(&provider, &model)?;
+        self.overview()
+    }
+
+    pub(crate) fn update_provider(
+        &self,
+        provider_id: &str,
+        input: &SaveAiProviderInput,
+    ) -> Result<AiOverview, AiError> {
+        validate_identifier(provider_id)?;
+        self.repository.ensure_defaults(current_utc_millis()?)?;
+        let (existing, existing_model) = self.repository.load_provider(provider_id)?;
+        let now = current_utc_millis()?;
+        let previous_secret_ref = existing.secret_ref.clone();
+        let (provider, model) = validated_provider(
+            input,
+            existing.id,
+            existing_model.id,
+            existing.enabled,
+            previous_secret_ref.clone(),
+            now,
+        )?;
+        if provider.secret_ref.is_none()
+            && let Some(reference) = previous_secret_ref
+        {
+            self.secrets.delete(&reference)?;
+        }
+        self.repository.update_provider(&provider, &model)?;
+        self.overview()
+    }
+
+    pub(crate) fn activate_provider(&self, provider_id: &str) -> Result<AiOverview, AiError> {
+        validate_identifier(provider_id)?;
+        self.repository
+            .activate_provider(provider_id, current_utc_millis()?)?;
+        self.overview()
+    }
+
+    pub(crate) fn delete_provider(&self, provider_id: &str) -> Result<AiOverview, AiError> {
+        validate_identifier(provider_id)?;
+        let (provider, _) = self.repository.load_provider(provider_id)?;
+        if let Some(reference) = provider.secret_ref {
+            self.secrets.delete(&reference)?;
+        }
+        let now = current_utc_millis()?;
+        self.repository.delete_provider(provider_id, now)?;
+        self.repository.ensure_defaults(now)?;
         self.overview()
     }
 
@@ -305,21 +354,27 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
         self.overview()
     }
 
-    pub(crate) fn set_secret(&self, secret: &str) -> Result<AiOverview, AiError> {
+    pub(crate) fn set_secret(
+        &self,
+        provider_id: &str,
+        secret: &str,
+    ) -> Result<AiOverview, AiError> {
+        validate_identifier(provider_id)?;
         let secret = secret.trim();
         if secret.is_empty() || secret.chars().count() > 4_096 {
             return Err(AiError::InvalidInput);
         }
         self.repository.ensure_defaults(current_utc_millis()?)?;
-        let (provider, _, _) = self.repository.load_configuration()?;
+        let (provider, _) = self.repository.load_provider(provider_id)?;
         let reference = provider.secret_ref.ok_or(AiError::InvalidInput)?;
         self.secrets.set(&reference, secret)?;
         self.overview()
     }
 
-    pub(crate) fn delete_secret(&self) -> Result<AiOverview, AiError> {
+    pub(crate) fn delete_secret(&self, provider_id: &str) -> Result<AiOverview, AiError> {
+        validate_identifier(provider_id)?;
         self.repository.ensure_defaults(current_utc_millis()?)?;
-        let (provider, _, _) = self.repository.load_configuration()?;
+        let (provider, _) = self.repository.load_provider(provider_id)?;
         if let Some(reference) = provider.secret_ref {
             self.secrets.delete(&reference)?;
         }
@@ -451,6 +506,62 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
             }
         }
     }
+}
+
+fn validated_provider(
+    input: &SaveAiProviderInput,
+    provider_id: String,
+    model_id: String,
+    enabled: bool,
+    existing_secret_ref: Option<String>,
+    updated_at: i64,
+) -> Result<(AiProviderConfig, AiModelProfile), AiError> {
+    let provider_type =
+        AiProviderType::parse(input.provider_type.trim()).ok_or(AiError::InvalidInput)?;
+    let display_name = input.display_name.trim();
+    let model_name = input.model_name.trim();
+    if display_name.is_empty()
+        || display_name.chars().count() > 80
+        || model_name.is_empty()
+        || model_name.chars().count() > 120
+        || !(1_024..=2_000_000).contains(&input.context_limit)
+        || !(1..=131_072).contains(&input.max_output_tokens)
+        || input.max_output_tokens >= input.context_limit
+    {
+        return Err(AiError::InvalidInput);
+    }
+    let (base_url, secret_ref) = match provider_type {
+        AiProviderType::OfflineTest => (None, None),
+        AiProviderType::OpenAiResponses => (
+            Some(normalize_base_url(input.base_url.as_deref())?),
+            Some(existing_secret_ref.unwrap_or_else(|| provider_id.clone())),
+        ),
+    };
+    Ok((
+        AiProviderConfig {
+            id: provider_id.clone(),
+            provider_type,
+            display_name: display_name.to_owned(),
+            base_url,
+            secret_ref,
+            enabled,
+            updated_at,
+        },
+        AiModelProfile {
+            id: model_id,
+            provider_config_id: provider_id,
+            model_name: model_name.to_owned(),
+            context_limit: input.context_limit,
+            max_output_tokens: input.max_output_tokens,
+            updated_at,
+        },
+    ))
+}
+
+fn validate_identifier(value: &str) -> Result<(), AiError> {
+    Uuid::parse_str(value)
+        .map(|_| ())
+        .map_err(|_| AiError::InvalidInput)
 }
 
 fn result_from_response(

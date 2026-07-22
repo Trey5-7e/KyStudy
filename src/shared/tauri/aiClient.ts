@@ -5,6 +5,7 @@ export type AiLimitMode = "warn" | "block";
 export type AiCallState = "pending" | "succeeded" | "failed";
 
 export interface AiProviderConfig {
+  id: string;
   providerType: AiProviderType;
   displayName: string;
   baseUrl?: string;
@@ -12,6 +13,7 @@ export interface AiProviderConfig {
   contextLimit: number;
   maxOutputTokens: number;
   hasSecret: boolean;
+  active: boolean;
 }
 
 export interface AiBudget {
@@ -40,7 +42,8 @@ export interface AiCallSummary {
 }
 
 export interface AiOverview {
-  provider: AiProviderConfig;
+  providers: AiProviderConfig[];
+  activeProviderId: string;
   budget: AiBudget;
   usage: AiUsage;
   calls: AiCallSummary[];
@@ -110,6 +113,10 @@ const ERROR_COPY: Record<string, { message: string; action: string }> = {
     message: "AI 配置、文本或 Token 上限无效。",
     action: "检查输入内容与数值后重新预览。",
   },
+  AI_PROVIDER_LIMIT_REACHED: {
+    message: "AI Provider 已达到 20 个本地配置上限。",
+    action: "删除不再使用的 Provider 后重试。",
+  },
   AI_BUDGET_BLOCKED: {
     message: "本次调用已被 Token 硬预算阻止。",
     action: "减少发送内容或输出上限，或明确调整预算。",
@@ -152,15 +159,40 @@ export async function getAiOverview(): Promise<AiOverview> {
   return parseAiOverview(await invoke("get_ai_overview"));
 }
 
-export async function saveAiProvider(request: {
+export interface SaveAiProviderRequest {
   providerType: AiProviderType;
   displayName: string;
   baseUrl?: string;
   modelName: string;
   contextLimit: number;
   maxOutputTokens: number;
-}): Promise<AiOverview> {
-  return parseAiOverview(await invoke("save_ai_provider", { request }));
+}
+
+export async function createAiProvider(
+  request: SaveAiProviderRequest,
+): Promise<AiOverview> {
+  return parseAiOverview(await invoke("create_ai_provider", { request }));
+}
+
+export async function updateAiProvider(
+  providerId: string,
+  request: SaveAiProviderRequest,
+): Promise<AiOverview> {
+  return parseAiOverview(
+    await invoke("update_ai_provider", { providerId, request }),
+  );
+}
+
+export async function activateAiProvider(
+  providerId: string,
+): Promise<AiOverview> {
+  return parseAiOverview(await invoke("activate_ai_provider", { providerId }));
+}
+
+export async function deleteAiProvider(
+  providerId: string,
+): Promise<AiOverview> {
+  return parseAiOverview(await invoke("delete_ai_provider", { providerId }));
 }
 
 export async function saveAiBudget(request: {
@@ -172,14 +204,17 @@ export async function saveAiBudget(request: {
   return parseAiOverview(await invoke("save_ai_budget", { request }));
 }
 
-export async function saveAiSecret(secret: string): Promise<AiOverview> {
+export async function saveAiSecret(
+  providerId: string,
+  secret: string,
+): Promise<AiOverview> {
   return parseAiOverview(
-    await invoke("save_ai_secret", { request: { secret } }),
+    await invoke("save_ai_secret", { request: { providerId, secret } }),
   );
 }
 
-export async function deleteAiSecret(): Promise<AiOverview> {
-  return parseAiOverview(await invoke("delete_ai_secret"));
+export async function deleteAiSecret(providerId: string): Promise<AiOverview> {
+  return parseAiOverview(await invoke("delete_ai_secret", { providerId }));
 }
 
 export async function previewAiCall(request: {
@@ -197,11 +232,27 @@ export async function executeAiCall(request: {
 }
 
 export function parseAiOverview(value: unknown): AiOverview {
-  if (!isRecord(value) || !Array.isArray(value.calls)) {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.providers) ||
+    typeof value.activeProviderId !== "string" ||
+    !Array.isArray(value.calls)
+  ) {
+    throw new Error("AI_OVERVIEW_INVALID");
+  }
+  const providers = value.providers.map(parseProvider);
+  if (
+    providers.length === 0 ||
+    providers.filter((provider) => provider.active).length !== 1 ||
+    !providers.some(
+      (provider) => provider.id === value.activeProviderId && provider.active,
+    )
+  ) {
     throw new Error("AI_OVERVIEW_INVALID");
   }
   return {
-    provider: parseProvider(value.provider),
+    providers,
+    activeProviderId: value.activeProviderId,
     budget: parseBudget(value.budget),
     usage: parseUsage(value.usage),
     calls: value.calls.map(parseCallSummary),
@@ -300,17 +351,20 @@ export function normalizeAiError(error: unknown): AiCommandError {
 function parseProvider(value: unknown): AiProviderConfig {
   if (
     !isRecord(value) ||
+    typeof value.id !== "string" ||
     !isEnum(value.providerType, PROVIDER_TYPES) ||
     typeof value.displayName !== "string" ||
     !optionalString(value.baseUrl) ||
     typeof value.modelName !== "string" ||
     !positiveInteger(value.contextLimit) ||
     !positiveInteger(value.maxOutputTokens) ||
-    typeof value.hasSecret !== "boolean"
+    typeof value.hasSecret !== "boolean" ||
+    typeof value.active !== "boolean"
   ) {
     throw new Error("AI_PROVIDER_INVALID");
   }
   return {
+    id: value.id,
     providerType: value.providerType,
     displayName: value.displayName,
     baseUrl: value.baseUrl,
@@ -318,6 +372,7 @@ function parseProvider(value: unknown): AiProviderConfig {
     contextLimit: value.contextLimit,
     maxOutputTokens: value.maxOutputTokens,
     hasSecret: value.hasSecret,
+    active: value.active,
   };
 }
 

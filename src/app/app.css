@@ -14,18 +14,12 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    radial-gradient(
-      circle at 15% 10%,
-      rgb(217 232 216 / 80%),
-      transparent 34rem
-    ),
-    #f4f1e8;
+  background: #f4f1e8;
 }
 
 button {
   border: 0;
-  border-radius: 999px;
+  border-radius: 0.7rem;
   padding: 0.75rem 1.1rem;
   color: #fff;
   background: #1e5b42;
@@ -43,6 +37,152 @@ button:focus-visible {
   width: min(100% - 2rem, 72rem);
   margin: 0 auto;
   padding: clamp(2rem, 6vw, 5rem) 0;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.app-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  height: 100vh;
+  flex-direction: column;
+  border-right: 1px solid rgb(30 91 66 / 14%);
+  padding: 1.25rem 0.9rem;
+  background: #e8eee6;
+}
+
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.55rem 1.2rem;
+}
+
+.app-brand > span {
+  display: grid;
+  width: 2.45rem;
+  height: 2.45rem;
+  border-radius: 0.65rem;
+  place-items: center;
+  color: #fff;
+  background: #1e5b42;
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.app-brand > div {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.app-brand strong {
+  font-size: 1.05rem;
+}
+
+.app-brand small {
+  color: #657269;
+  font-size: 0.7rem;
+}
+
+.app-navigation {
+  display: grid;
+  gap: 0.2rem;
+  overflow-y: auto;
+}
+
+.app-navigation > button {
+  display: grid;
+  gap: 0.12rem;
+  border-left: 3px solid transparent;
+  border-radius: 0.45rem;
+  padding: 0.6rem 0.7rem;
+  color: #354b40;
+  text-align: left;
+  background: transparent;
+}
+
+.app-navigation > button:hover {
+  background: rgb(255 255 255 / 58%);
+}
+
+.app-navigation > .app-nav-active {
+  border-left-color: #d08a35;
+  color: #17382b;
+  background: #fff;
+}
+
+.app-navigation span {
+  color: #718078;
+  font-size: 0.67rem;
+  font-weight: 600;
+}
+
+.app-core-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: auto;
+  border-top: 1px solid rgb(30 91 66 / 14%);
+  border-radius: 0;
+  padding: 0.85rem 0.55rem 0.2rem;
+  color: #52625a;
+  background: transparent;
+  font-size: 0.72rem;
+  text-align: left;
+}
+
+.app-core-status > span {
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #c58b3c;
+}
+
+.app-core-status > .core-online {
+  background: #3f8b64;
+}
+
+.app-content {
+  width: min(100% - 2rem, 82rem);
+  min-width: 0;
+  margin: 0 auto;
+  padding: 1.5rem 0 4rem;
+}
+
+.app-page-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid rgb(30 91 66 / 14%);
+  padding: 0.5rem 0 1rem;
+}
+
+.app-page-header h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 4vw, 2.7rem);
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+}
+
+.app-page-header p:last-child {
+  margin: 0;
+  color: #657269;
+  font-size: 0.82rem;
+}
+
+.app-loading {
+  padding: 3rem 0;
+  color: #657269;
+  text-align: center;
 }
 
 .hero {
@@ -99,7 +239,7 @@ h2 {
 .backup-card,
 .boundary-card {
   border: 1px solid rgb(30 91 66 / 16%);
-  border-radius: 1.5rem;
+  border-radius: 0.9rem;
   padding: clamp(1.4rem, 4vw, 2.5rem);
   background: rgb(255 255 255 / 72%);
   box-shadow: 0 1.25rem 3rem rgb(40 58 48 / 8%);
@@ -2766,6 +2906,146 @@ button:disabled {
   font-weight: 800;
 }
 
+.ai-provider-manager,
+.ai-provider-editor,
+.ai-budget-form {
+  margin-top: 1.2rem;
+  border-top: 1px solid rgb(30 91 66 / 16%);
+  padding-top: 1rem;
+}
+
+.ai-provider-toolbar,
+.ai-provider-toolbar > div,
+.ai-provider-main > div,
+.ai-provider-actions,
+.ai-delete-confirmation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.ai-provider-toolbar {
+  justify-content: space-between;
+}
+
+.ai-provider-toolbar h3,
+.ai-budget-form h3 {
+  margin: 0;
+}
+
+.ai-provider-toolbar span,
+.ai-budget-form > div span {
+  color: #657269;
+  font-size: 0.76rem;
+}
+
+.ai-provider-list {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ai-provider-list > li {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 5.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  border: 1px solid rgb(30 91 66 / 14%);
+  border-left: 3px solid transparent;
+  border-radius: 0.65rem;
+  padding: 0.8rem;
+  background: rgb(255 255 255 / 68%);
+}
+
+.ai-provider-list > .ai-provider-active {
+  border-left-color: #d08a35;
+  background: #fff;
+}
+
+.ai-provider-main {
+  min-width: 0;
+}
+
+.ai-provider-main strong,
+.ai-provider-main p,
+.ai-provider-main small {
+  overflow-wrap: anywhere;
+}
+
+.ai-provider-main p {
+  margin: 0.25rem 0;
+  color: #354b40;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.ai-provider-main small {
+  color: #657269;
+  font-size: 0.72rem;
+}
+
+.ai-active-tag {
+  border-radius: 0.4rem;
+  padding: 0.2rem 0.4rem;
+  color: #245a43;
+  background: #dfeee4;
+  font-size: 0.67rem;
+  font-weight: 900;
+}
+
+.ai-provider-actions {
+  justify-content: flex-end;
+}
+
+.ai-provider-actions button,
+.ai-provider-toolbar button,
+.ai-delete-confirmation button {
+  padding: 0.48rem 0.68rem;
+  font-size: 0.74rem;
+}
+
+.ai-delete-confirmation {
+  flex: 1 1 100%;
+  justify-content: flex-end;
+  color: #773b32;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.ai-provider-editor {
+  background: rgb(245 239 228 / 58%);
+  padding: 1rem;
+}
+
+.ai-budget-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(7rem, 1fr)) auto;
+  align-items: end;
+  gap: 0.7rem;
+}
+
+.ai-budget-form > div {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.ai-budget-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: #52625a;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
 .ai-settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2800,7 +3080,8 @@ button:disabled {
 
 .ai-settings label,
 .ai-secret-form label,
-.ai-preview-form label {
+.ai-preview-form label,
+.ai-budget-form label {
   display: grid;
   gap: 0.35rem;
   color: #52625a;
@@ -2988,6 +3269,47 @@ button:disabled {
 }
 
 @media (max-width: 64rem) {
+  .app-shell {
+    display: block;
+  }
+
+  .app-sidebar {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid rgb(30 91 66 / 14%);
+    padding: 0.75rem 1rem;
+  }
+
+  .app-brand {
+    padding-bottom: 0.7rem;
+  }
+
+  .app-navigation {
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 0.35rem;
+  }
+
+  .app-navigation > button {
+    min-width: 7.5rem;
+    flex: 0 0 auto;
+    border-bottom: 3px solid transparent;
+    border-left: 0;
+  }
+
+  .app-navigation > .app-nav-active {
+    border-bottom-color: #d08a35;
+  }
+
+  .app-core-status {
+    display: none;
+  }
+
+  .app-content {
+    width: min(100% - 2rem, 72rem);
+  }
+
   .task-workspace-with-details {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -3044,12 +3366,29 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .ai-budget-form {
+    grid-template-columns: repeat(2, minmax(8rem, 1fr));
+  }
+
+  .ai-budget-form > button {
+    justify-self: start;
+  }
+
   .active-mistake-item {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 42rem) {
+  .app-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .app-navigation > button {
+    min-width: 6.5rem;
+  }
+
   .today-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3269,8 +3608,18 @@ button:disabled {
 
   .ai-settings,
   .ai-preview-form,
-  .ai-token-grid {
+  .ai-token-grid,
+  .ai-budget-form {
     grid-template-columns: 1fr;
+  }
+
+  .ai-provider-list > li {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-provider-actions,
+  .ai-delete-confirmation {
+    justify-content: flex-start;
   }
 
   .ai-settings h3,
