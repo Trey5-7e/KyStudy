@@ -3,7 +3,9 @@ use std::collections::HashSet;
 use uuid::Uuid;
 
 use super::{PersistenceError, current_utc_millis};
-use crate::domain::{AttemptResult, Question, QuestionAttempt, QuestionBundle, QuestionRegion};
+use crate::domain::{
+    AttemptResult, LocalDate, Question, QuestionAttempt, QuestionBundle, QuestionRegion,
+};
 
 const MIN_REGION_SPAN: f64 = 0.002;
 const MAX_KNOWLEDGE_LINKS: usize = 20;
@@ -50,6 +52,7 @@ pub(crate) struct AddQuestionRegionInput {
 pub(crate) struct AddQuestionAttemptInput {
     pub(crate) question_id: String,
     pub(crate) result: String,
+    pub(crate) attempted_on: String,
     pub(crate) duration_seconds: Option<u32>,
     pub(crate) answer_note: Option<String>,
 }
@@ -125,7 +128,11 @@ pub(crate) trait QuestionRepository: Clone + Send + Sync + 'static {
         region_id: &str,
         updated_at: i64,
     ) -> Result<QuestionBundle, QuestionError>;
-    fn add_attempt(&self, attempt: QuestionAttempt) -> Result<QuestionBundle, QuestionError>;
+    fn add_attempt(
+        &self,
+        attempt: QuestionAttempt,
+        attempted_on: &LocalDate,
+    ) -> Result<QuestionBundle, QuestionError>;
     fn trash_question(&self, question_id: &str, deleted_at: i64) -> Result<(), QuestionError>;
     fn restore_question(
         &self,
@@ -238,6 +245,8 @@ impl<R: QuestionRepository> QuestionUseCases<R> {
     ) -> Result<QuestionBundle, QuestionError> {
         validate_id(&input.question_id)?;
         let result = AttemptResult::parse(&input.result).ok_or(QuestionError::InvalidInput)?;
+        let attempted_on =
+            LocalDate::parse(input.attempted_on.trim()).map_err(|_| QuestionError::InvalidInput)?;
         if input
             .duration_seconds
             .is_some_and(|seconds| !(1..=86_400).contains(&seconds))
@@ -245,15 +254,18 @@ impl<R: QuestionRepository> QuestionUseCases<R> {
             return Err(QuestionError::InvalidInput);
         }
         let now = current_utc_millis()?;
-        self.repository.add_attempt(QuestionAttempt {
-            id: Uuid::now_v7().to_string(),
-            question_id: input.question_id,
-            result,
-            attempted_at: now,
-            duration_seconds: input.duration_seconds,
-            answer_note: optional_text(input.answer_note, 10_000)?,
-            created_at: now,
-        })
+        self.repository.add_attempt(
+            QuestionAttempt {
+                id: Uuid::now_v7().to_string(),
+                question_id: input.question_id,
+                result,
+                attempted_at: now,
+                duration_seconds: input.duration_seconds,
+                answer_note: optional_text(input.answer_note, 10_000)?,
+                created_at: now,
+            },
+            &attempted_on,
+        )
     }
 
     pub(crate) fn trash_question(&self, question_id: &str) -> Result<(), QuestionError> {

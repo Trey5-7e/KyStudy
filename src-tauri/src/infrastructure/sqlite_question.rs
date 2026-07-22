@@ -195,7 +195,11 @@ impl QuestionRepository for SqliteQuestionRepository {
         load_bundle(&connection, &question_id)
     }
 
-    fn add_attempt(&self, attempt: QuestionAttempt) -> Result<QuestionBundle, QuestionError> {
+    fn add_attempt(
+        &self,
+        attempt: QuestionAttempt,
+        attempted_on: &crate::domain::LocalDate,
+    ) -> Result<QuestionBundle, QuestionError> {
         let mut connection = self.open()?;
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -218,6 +222,14 @@ impl QuestionRepository for SqliteQuestionRepository {
                 ],
             )
             .map_err(database_error)?;
+        if attempt.result == AttemptResult::Incorrect {
+            activate_incorrect_attempt(
+                &transaction,
+                &attempt.question_id,
+                attempted_on,
+                attempt.attempted_at,
+            )?;
+        }
         touch_question(&transaction, &attempt.question_id, attempt.created_at)?;
         transaction.commit().map_err(database_error)?;
         load_bundle(&connection, &attempt.question_id)
@@ -271,6 +283,46 @@ impl QuestionRepository for SqliteQuestionRepository {
         transaction.commit().map_err(database_error)?;
         load_bundle(&connection, question_id)
     }
+}
+
+fn activate_incorrect_attempt(
+    transaction: &Transaction<'_>,
+    question_id: &str,
+    attempted_on: &crate::domain::LocalDate,
+    attempted_at: i64,
+) -> Result<(), QuestionError> {
+    transaction
+        .execute(
+            "INSERT INTO mistake_profile(
+                question_id, first_mistake_at, last_mistake_at, mistake_count,
+                consecutive_failure_count, active, user_priority, created_at, updated_at
+             ) VALUES (?1, ?2, ?2, 1, 0, 1, 3, ?2, ?2)
+             ON CONFLICT(question_id) DO UPDATE SET
+                first_mistake_at = COALESCE(mistake_profile.first_mistake_at, excluded.first_mistake_at),
+                last_mistake_at = excluded.last_mistake_at,
+                mistake_count = mistake_profile.mistake_count + 1,
+                active = 1,
+                updated_at = excluded.updated_at",
+            params![question_id, attempted_at],
+        )
+        .map_err(database_error)?;
+    transaction
+        .execute(
+            "INSERT INTO review_state(
+                question_id, policy_version, mastery_level, due_date,
+                last_reviewed_at, successful_streak, manual_pin_date, suspended_at,
+                created_at, updated_at
+             ) VALUES (?1, 1, 'learning', ?2, NULL, 0, NULL, NULL, ?3, ?3)
+             ON CONFLICT(question_id) DO UPDATE SET
+                mastery_level = 'learning',
+                due_date = MIN(review_state.due_date, excluded.due_date),
+                successful_streak = 0,
+                suspended_at = NULL,
+                updated_at = excluded.updated_at",
+            params![question_id, attempted_on.as_str(), attempted_at],
+        )
+        .map_err(database_error)?;
+    Ok(())
 }
 
 fn list_question_ids(
@@ -513,7 +565,7 @@ fn normalize_regions(
     Ok(())
 }
 
-fn load_bundle(
+pub(super) fn load_bundle(
     connection: &Connection,
     question_id: &str,
 ) -> Result<QuestionBundle, QuestionError> {
@@ -694,6 +746,16 @@ mod tests {
         }
     }
 
+    fn incorrect_attempt(question_id: &str) -> AddQuestionAttemptInput {
+        AddQuestionAttemptInput {
+            question_id: question_id.to_owned(),
+            result: "incorrect".to_owned(),
+            attempted_on: "2026-07-19".to_owned(),
+            duration_seconds: Some(300),
+            answer_note: Some("边界条件遗漏".to_owned()),
+        }
+    }
+
     #[test]
     fn question_regions_attempts_and_trash_round_trip() {
         let directory = tempdir().expect("temporary directory should exist");
@@ -751,12 +813,7 @@ mod tests {
             })
             .expect("second region should create");
         let practiced = use_cases
-            .add_attempt(AddQuestionAttemptInput {
-                question_id: created.question.id.clone(),
-                result: "incorrect".to_owned(),
-                duration_seconds: Some(300),
-                answer_note: Some("边界条件遗漏".to_owned()),
-            })
+            .add_attempt(incorrect_attempt(&created.question.id))
             .expect("attempt should create");
         let out_of_bounds = use_cases.add_region(AddQuestionRegionInput {
             question_id: created.question.id.clone(),

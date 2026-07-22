@@ -3,6 +3,7 @@
 mod mindmap;
 mod planning;
 mod question;
+mod review;
 mod schedule;
 mod workspace;
 
@@ -13,6 +14,11 @@ pub(crate) use mindmap::{
 pub(crate) use planning::{PlanReference, PlanStage, PlanStatus, StudyPlan, StudyPlanBundle};
 pub(crate) use question::{
     AttemptResult, Question, QuestionAttempt, QuestionBundle, QuestionKnowledgeLink, QuestionRegion,
+};
+pub(crate) use review::{
+    DailyReviewItem, DailyReviewQueue, MistakeProfile, ReviewBacklog, ReviewDashboard, ReviewEvent,
+    ReviewItemState, ReviewMastery, ReviewPreferences, ReviewQuestion, ReviewRating, ReviewReason,
+    ReviewSelectionKind, ReviewState,
 };
 pub(crate) use schedule::{
     DateRange, LocalDate, NewStudySession, NewSubject, NewTask, RescheduleDraft,

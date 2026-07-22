@@ -8,6 +8,16 @@ mod infrastructure;
 
 use tauri::Manager;
 
+fn initialize_application(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let application_data_directory = app.path().app_data_dir()?;
+    let state = bootstrap::AppState::new(&application_data_directory);
+    if let Err(error) = state.resources.recover_and_list() {
+        eprintln!("KYSTUDY_IMPORT_RECOVERY_FAILED: {}", error.code());
+    }
+    app.manage(state);
+    Ok(())
+}
+
 /// Starts the `KyStudy` desktop runtime and registers its controlled command boundary.
 pub fn run() {
     tauri::Builder::default()
@@ -30,15 +40,7 @@ pub fn run() {
                     |state| infrastructure::respond_image(&state.resources, &request),
                 )
         })
-        .setup(|app| {
-            let application_data_directory = app.path().app_data_dir()?;
-            let state = bootstrap::AppState::new(&application_data_directory);
-            if let Err(error) = state.resources.recover_and_list() {
-                eprintln!("KYSTUDY_IMPORT_RECOVERY_FAILED: {}", error.code());
-            }
-            app.manage(state);
-            Ok(())
-        })
+        .setup(initialize_application)
         .invoke_handler(tauri::generate_handler![
             commands::get_runtime_status,
             commands::get_workspace_status,
@@ -98,6 +100,13 @@ pub fn run() {
             commands::add_question_attempt,
             commands::trash_question,
             commands::restore_question,
+            commands::get_review_dashboard,
+            commands::update_review_preferences,
+            commands::set_question_review,
+            commands::pin_question_review,
+            commands::generate_daily_review_queue,
+            commands::insert_daily_review_item,
+            commands::submit_review_result,
             commands::start_resource_import,
             commands::cancel_resource_import,
             commands::create_workspace_backup,

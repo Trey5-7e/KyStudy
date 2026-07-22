@@ -91,6 +91,7 @@ export interface UpdateQuestionInput {
 export interface AddQuestionAttemptInput {
   questionId: string;
   result: AttemptResult;
+  attemptedOn: string;
   durationSeconds?: number;
   answerNote?: string;
 }

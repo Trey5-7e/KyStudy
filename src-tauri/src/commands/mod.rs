@@ -8,20 +8,25 @@ use uuid::Uuid;
 use crate::application::{
     AddNodeResourceInput, AddPlanReferenceInput, AddQuestionAttemptInput, AddQuestionRegionInput,
     BackupError, BackupReport, CreateKnowledgeMapInput, CreateQuestionInput,
-    CreateStudySessionInput, CreateSubjectInput, CreateTaskInput, ImportError, ImportProgress,
-    KnowledgeError, MoveKnowledgeNodeInput, PlanningError, QuestionError, QuestionRegionInput,
-    RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor, RestoreReport, RuntimeStatus,
-    SavePlanInput, SavePlanStageInput, ScheduleError, SplitChildInput, SplitTaskInput,
-    UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput, UpdateQuestionInput, UpdateTaskDetailsInput,
+    CreateStudySessionInput, CreateSubjectInput, CreateTaskInput, GenerateReviewQueueInput,
+    ImportError, ImportProgress, InsertReviewQueueItemInput, KnowledgeError,
+    MoveKnowledgeNodeInput, PinQuestionReviewInput, PlanningError, QuestionError,
+    QuestionRegionInput, RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor,
+    RestoreReport, ReviewError, RuntimeStatus, SavePlanInput, SavePlanStageInput, ScheduleError,
+    SetQuestionReviewInput, SplitChildInput, SplitTaskInput, SubmitReviewInput,
+    UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput, UpdateQuestionInput,
+    UpdateReviewPreferencesInput, UpdateTaskDetailsInput,
     get_runtime_status as load_runtime_status,
 };
 use crate::bootstrap::AppState;
 use crate::domain::{
-    KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource, MindMapDraftNode,
-    MindMapImportDraft, PlanReference, PlanStage, Question, QuestionAttempt, QuestionBundle,
-    QuestionKnowledgeLink, QuestionRegion, StudyPlan, StudyPlanBundle, StudySession,
-    StudyStatistics, Subject, SubjectStatistics, Task, TaskChange, TaskChangeSnapshot, TaskSplit,
-    TaskTransition, TrashedTask, Workspace,
+    DailyReviewItem, DailyReviewQueue, KnowledgeMap, KnowledgeMapBundle, KnowledgeNode,
+    KnowledgeNodeResource, MindMapDraftNode, MindMapImportDraft, MistakeProfile, PlanReference,
+    PlanStage, Question, QuestionAttempt, QuestionBundle, QuestionKnowledgeLink, QuestionRegion,
+    ReviewBacklog, ReviewDashboard, ReviewEvent, ReviewPreferences, ReviewQuestion, ReviewReason,
+    ReviewState, StudyPlan, StudyPlanBundle, StudySession, StudyStatistics, Subject,
+    SubjectStatistics, Task, TaskChange, TaskChangeSnapshot, TaskSplit, TaskTransition,
+    TrashedTask, Workspace,
 };
 
 #[tauri::command]
@@ -993,6 +998,7 @@ impl From<AddQuestionRegionRequestDto> for AddQuestionRegionInput {
 pub(crate) struct AddQuestionAttemptRequestDto {
     question_id: String,
     result: String,
+    attempted_on: String,
     duration_seconds: Option<u32>,
     answer_note: Option<String>,
 }
@@ -1002,6 +1008,7 @@ impl From<AddQuestionAttemptRequestDto> for AddQuestionAttemptInput {
         Self {
             question_id: request.question_id,
             result: request.result,
+            attempted_on: request.attempted_on,
             duration_seconds: request.duration_seconds,
             answer_note: request.answer_note,
         }
@@ -1138,6 +1145,374 @@ impl From<QuestionBundle> for QuestionBundleDto {
             regions: bundle.regions.into_iter().map(Into::into).collect(),
             attempts: bundle.attempts.into_iter().map(Into::into).collect(),
             knowledge_links: bundle.knowledge_links.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UpdateReviewPreferencesRequestDto {
+    daily_quota: u32,
+    early_fill_enabled: bool,
+    today: String,
+}
+
+impl From<UpdateReviewPreferencesRequestDto> for UpdateReviewPreferencesInput {
+    fn from(request: UpdateReviewPreferencesRequestDto) -> Self {
+        Self {
+            daily_quota: request.daily_quota,
+            early_fill_enabled: request.early_fill_enabled,
+            today: request.today,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SetQuestionReviewRequestDto {
+    question_id: String,
+    active: bool,
+    user_priority: u8,
+    today: String,
+}
+
+impl From<SetQuestionReviewRequestDto> for SetQuestionReviewInput {
+    fn from(request: SetQuestionReviewRequestDto) -> Self {
+        Self {
+            question_id: request.question_id,
+            active: request.active,
+            user_priority: request.user_priority,
+            today: request.today,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PinQuestionReviewRequestDto {
+    question_id: String,
+    pin_date: Option<String>,
+    today: String,
+}
+
+impl From<PinQuestionReviewRequestDto> for PinQuestionReviewInput {
+    fn from(request: PinQuestionReviewRequestDto) -> Self {
+        Self {
+            question_id: request.question_id,
+            pin_date: request.pin_date,
+            today: request.today,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct GenerateReviewQueueRequestDto {
+    queue_date: String,
+    quota: Option<u32>,
+}
+
+impl From<GenerateReviewQueueRequestDto> for GenerateReviewQueueInput {
+    fn from(request: GenerateReviewQueueRequestDto) -> Self {
+        Self {
+            queue_date: request.queue_date,
+            quota: request.quota,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct InsertReviewQueueItemRequestDto {
+    queue_date: String,
+    question_id: String,
+}
+
+impl From<InsertReviewQueueItemRequestDto> for InsertReviewQueueItemInput {
+    fn from(request: InsertReviewQueueItemRequestDto) -> Self {
+        Self {
+            queue_date: request.queue_date,
+            question_id: request.question_id,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SubmitReviewRequestDto {
+    queue_id: String,
+    question_id: String,
+    rating: String,
+    today: String,
+    duration_seconds: Option<u32>,
+    answer_note: Option<String>,
+}
+
+impl From<SubmitReviewRequestDto> for SubmitReviewInput {
+    fn from(request: SubmitReviewRequestDto) -> Self {
+        Self {
+            queue_id: request.queue_id,
+            question_id: request.question_id,
+            rating: request.rating,
+            today: request.today,
+            duration_seconds: request.duration_seconds,
+            answer_note: request.answer_note,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReviewPreferencesDto {
+    daily_quota: u32,
+    early_fill_enabled: bool,
+}
+
+impl From<ReviewPreferences> for ReviewPreferencesDto {
+    fn from(preferences: ReviewPreferences) -> Self {
+        Self {
+            daily_quota: preferences.daily_quota,
+            early_fill_enabled: preferences.early_fill_enabled,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MistakeProfileDto {
+    question_id: String,
+    first_mistake_at: Option<i64>,
+    last_mistake_at: Option<i64>,
+    mistake_count: u32,
+    consecutive_failure_count: u32,
+    active: bool,
+    user_priority: u8,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<MistakeProfile> for MistakeProfileDto {
+    fn from(profile: MistakeProfile) -> Self {
+        Self {
+            question_id: profile.question_id,
+            first_mistake_at: profile.first_mistake_at,
+            last_mistake_at: profile.last_mistake_at,
+            mistake_count: profile.mistake_count,
+            consecutive_failure_count: profile.consecutive_failure_count,
+            active: profile.active,
+            user_priority: profile.user_priority,
+            created_at: profile.created_at,
+            updated_at: profile.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReviewStateDto {
+    question_id: String,
+    policy_version: u32,
+    mastery: &'static str,
+    due_date: String,
+    last_reviewed_at: Option<i64>,
+    successful_streak: u32,
+    manual_pin_date: Option<String>,
+    suspended_at: Option<i64>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<ReviewState> for ReviewStateDto {
+    fn from(state: ReviewState) -> Self {
+        Self {
+            question_id: state.question_id,
+            policy_version: state.policy_version,
+            mastery: state.mastery.as_str(),
+            due_date: state.due_date.as_str().to_owned(),
+            last_reviewed_at: state.last_reviewed_at,
+            successful_streak: state.successful_streak,
+            manual_pin_date: state.manual_pin_date.map(|date| date.as_str().to_owned()),
+            suspended_at: state.suspended_at,
+            created_at: state.created_at,
+            updated_at: state.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReviewEventDto {
+    id: String,
+    question_id: String,
+    attempt_id: Option<String>,
+    rating: &'static str,
+    previous_due_date: String,
+    next_due_date: String,
+    interval_days: u32,
+    policy_version: u32,
+    created_at: i64,
+}
+
+impl From<ReviewEvent> for ReviewEventDto {
+    fn from(event: ReviewEvent) -> Self {
+        Self {
+            id: event.id,
+            question_id: event.question_id,
+            attempt_id: event.attempt_id,
+            rating: event.rating.as_str(),
+            previous_due_date: event.previous_due_date.as_str().to_owned(),
+            next_due_date: event.next_due_date.as_str().to_owned(),
+            interval_days: event.interval_days,
+            policy_version: event.policy_version,
+            created_at: event.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReviewReasonDto {
+    selection: &'static str,
+    overdue_days: u32,
+    failure_streak: u32,
+    mistake_count: u32,
+    user_priority: u8,
+    knowledge_weakness: u8,
+    days_since_attempt: u32,
+    is_early: bool,
+}
+
+impl From<ReviewReason> for ReviewReasonDto {
+    fn from(reason: ReviewReason) -> Self {
+        Self {
+            selection: reason.selection.as_str(),
+            overdue_days: reason.overdue_days,
+            failure_streak: reason.failure_streak,
+            mistake_count: reason.mistake_count,
+            user_priority: reason.user_priority,
+            knowledge_weakness: reason.knowledge_weakness,
+            days_since_attempt: reason.days_since_attempt,
+            is_early: reason.is_early,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReviewQuestionDto {
+    question: QuestionBundleDto,
+    profile: MistakeProfileDto,
+    state: ReviewStateDto,
+    recent_events: Vec<ReviewEventDto>,
+}
+
+impl From<ReviewQuestion> for ReviewQuestionDto {
+    fn from(question: ReviewQuestion) -> Self {
+        Self {
+            question: question.question.into(),
+            profile: question.profile.into(),
+            state: question.state.into(),
+            recent_events: question.recent_events.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DailyReviewItemDto {
+    question: QuestionBundleDto,
+    available: bool,
+    position: u32,
+    priority_score: u32,
+    reason: ReviewReasonDto,
+    state: &'static str,
+    review_event: Option<ReviewEventDto>,
+    inserted_at: i64,
+    completed_at: Option<i64>,
+}
+
+impl From<DailyReviewItem> for DailyReviewItemDto {
+    fn from(item: DailyReviewItem) -> Self {
+        Self {
+            question: item.question.into(),
+            available: item.available,
+            position: item.position,
+            priority_score: item.priority_score,
+            reason: item.reason.into(),
+            state: item.state.as_str(),
+            review_event: item.review_event.map(Into::into),
+            inserted_at: item.inserted_at,
+            completed_at: item.completed_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DailyReviewQueueDto {
+    id: String,
+    queue_date: String,
+    quota: u32,
+    generated_at: i64,
+    completed_count: u32,
+    items: Vec<DailyReviewItemDto>,
+}
+
+impl From<DailyReviewQueue> for DailyReviewQueueDto {
+    fn from(queue: DailyReviewQueue) -> Self {
+        Self {
+            id: queue.id,
+            queue_date: queue.queue_date.as_str().to_owned(),
+            quota: queue.quota,
+            generated_at: queue.generated_at,
+            completed_count: queue.completed_count,
+            items: queue.items.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReviewBacklogDto {
+    active_count: u32,
+    due_count: u32,
+    overdue_count: u32,
+    queued_remaining: u32,
+    estimated_clear_days: u32,
+}
+
+impl From<ReviewBacklog> for ReviewBacklogDto {
+    fn from(backlog: ReviewBacklog) -> Self {
+        Self {
+            active_count: backlog.active_count,
+            due_count: backlog.due_count,
+            overdue_count: backlog.overdue_count,
+            queued_remaining: backlog.queued_remaining,
+            estimated_clear_days: backlog.estimated_clear_days,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReviewDashboardDto {
+    preferences: ReviewPreferencesDto,
+    backlog: ReviewBacklogDto,
+    queue: Option<DailyReviewQueueDto>,
+    active_questions: Vec<ReviewQuestionDto>,
+}
+
+impl From<ReviewDashboard> for ReviewDashboardDto {
+    fn from(dashboard: ReviewDashboard) -> Self {
+        Self {
+            preferences: dashboard.preferences.into(),
+            backlog: dashboard.backlog.into(),
+            queue: dashboard.queue.map(Into::into),
+            active_questions: dashboard
+                .active_questions
+                .into_iter()
+                .map(Into::into)
+                .collect(),
         }
     }
 }
@@ -1485,6 +1860,48 @@ impl AppErrorDto {
                 ("关联的知识节点无效。", "刷新思维导图后重新选择知识节点。")
             }
             QuestionError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    fn from_review(error: &ReviewError) -> Self {
+        let (message, action) = match error {
+            ReviewError::WorkspaceNotInitialized => {
+                ("尚未创建本地工作区。", "先创建本地工作区，再使用错题复习。")
+            }
+            ReviewError::QuestionNotFound => (
+                "找不到可复习的题目。",
+                "确认题目仍在有效习题册中，然后刷新复习页。",
+            ),
+            ReviewError::MistakeNotFound => (
+                "这道题当前不在错题复习中。",
+                "刷新错题列表，或先把题目加入复习。",
+            ),
+            ReviewError::QueueNotFound => (
+                "今天的复习队列尚未生成。",
+                "先生成今日队列，再追加或完成题目。",
+            ),
+            ReviewError::QueueItemNotFound => {
+                ("今日队列中找不到这道题。", "刷新复习页后重新选择。")
+            }
+            ReviewError::QueueItemCompleted => (
+                "这道题今天已经完成复习。",
+                "查看复习历史，不要重复提交同一队列项。",
+            ),
+            ReviewError::QueueItemAlreadyExists => (
+                "这道题已经在今日复习队列中。",
+                "直接在今日队列中完成它，无需重复追加。",
+            ),
+            ReviewError::InvalidInput => (
+                "复习设置、日期或反馈格式无效。",
+                "检查配额、重要度、耗时和日期后重试。",
+            ),
+            ReviewError::Persistence(error) => return Self::from_persistence(error),
         };
         Self {
             code: error.code(),
@@ -2357,6 +2774,102 @@ pub(crate) async fn restore_question(
 }
 
 #[tauri::command]
+pub(crate) async fn get_review_dashboard(
+    today: String,
+    state: State<'_, AppState>,
+) -> Result<ReviewDashboardDto, AppErrorDto> {
+    let use_cases = state.reviews.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.dashboard(&today))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_review(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn update_review_preferences(
+    request: UpdateReviewPreferencesRequestDto,
+    state: State<'_, AppState>,
+) -> Result<ReviewDashboardDto, AppErrorDto> {
+    let use_cases = state.reviews.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.update_preferences(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_review(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn set_question_review(
+    request: SetQuestionReviewRequestDto,
+    state: State<'_, AppState>,
+) -> Result<ReviewDashboardDto, AppErrorDto> {
+    let use_cases = state.reviews.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.set_question_review(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_review(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn pin_question_review(
+    request: PinQuestionReviewRequestDto,
+    state: State<'_, AppState>,
+) -> Result<ReviewDashboardDto, AppErrorDto> {
+    let use_cases = state.reviews.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.pin_question(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_review(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn generate_daily_review_queue(
+    request: GenerateReviewQueueRequestDto,
+    state: State<'_, AppState>,
+) -> Result<ReviewDashboardDto, AppErrorDto> {
+    let use_cases = state.reviews.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.generate_queue(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_review(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn insert_daily_review_item(
+    request: InsertReviewQueueItemRequestDto,
+    state: State<'_, AppState>,
+) -> Result<ReviewDashboardDto, AppErrorDto> {
+    let use_cases = state.reviews.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.insert_queue_item(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_review(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn submit_review_result(
+    request: SubmitReviewRequestDto,
+    state: State<'_, AppState>,
+) -> Result<ReviewDashboardDto, AppErrorDto> {
+    let use_cases = state.reviews.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.submit_review(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_review(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn start_resource_import(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -2523,15 +3036,15 @@ fn emit_import_event(app: &AppHandle, event: ImportEventDto) {
 mod tests {
     use super::{
         AppErrorDto, BackupReportDto, KnowledgeMapBundleDto, QuestionBundleDto,
-        RescheduleTaskRequestDto, ResourceDocumentDto, SubjectDto, TaskChangeDto, TaskDto,
-        UpdateTaskDetailsRequestDto, get_runtime_status,
+        RescheduleTaskRequestDto, ResourceDocumentDto, ReviewReasonDto, SubjectDto, TaskChangeDto,
+        TaskDto, UpdateTaskDetailsRequestDto, get_runtime_status,
     };
     use crate::application::{BackupReport, PersistenceError, ResourceDocument, ScheduleError};
     use crate::domain::{
         AttemptResult, KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource,
         LocalDate, MasteryState, Question, QuestionAttempt, QuestionBundle, QuestionRegion,
-        Subject, SubjectColor, Task, TaskChange, TaskChangeSnapshot, TaskChangeType, TaskPriority,
-        TaskStatus,
+        ReviewReason, ReviewSelectionKind, Subject, SubjectColor, Task, TaskChange,
+        TaskChangeSnapshot, TaskChangeType, TaskPriority, TaskStatus,
     };
 
     #[test]
@@ -2723,6 +3236,27 @@ mod tests {
         assert!(value.get("databasePath").is_none());
         assert!(value["regions"][0].get("canvasPixels").is_none());
         assert!(value["regions"][0].get("storageKey").is_none());
+    }
+
+    #[test]
+    fn review_reason_dto_exposes_typed_factors_without_internal_payloads() {
+        let dto = ReviewReasonDto::from(ReviewReason {
+            selection: ReviewSelectionKind::Overdue,
+            overdue_days: 4,
+            failure_streak: 2,
+            mistake_count: 3,
+            user_priority: 5,
+            knowledge_weakness: 2,
+            days_since_attempt: 8,
+            is_early: false,
+        });
+
+        let value = serde_json::to_value(dto).expect("review reason DTO should serialize");
+
+        assert_eq!(value["selection"], "overdue");
+        assert!(value.get("reasonJson").is_none());
+        assert!(value.get("sql").is_none());
+        assert!(value.get("databasePath").is_none());
     }
 
     #[test]

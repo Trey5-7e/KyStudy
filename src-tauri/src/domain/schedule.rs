@@ -62,6 +62,52 @@ impl LocalDate {
     pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Returns the signed number of calendar days from `earlier` to this date.
+    pub(crate) fn days_since(&self, earlier: &Self) -> i64 {
+        days_from_civil(self.components()) - days_from_civil(earlier.components())
+    }
+
+    /// Moves this date forward by a bounded number of calendar days.
+    pub(crate) fn add_days(&self, days: u32) -> Result<Self, ScheduleValidationError> {
+        let target = days_from_civil(self.components()) + i64::from(days);
+        let (year, month, day) = civil_from_days(target).ok_or(ScheduleValidationError::Date)?;
+        Self::parse(&format!("{year:04}-{month:02}-{day:02}"))
+    }
+
+    fn components(&self) -> (i64, i64, i64) {
+        let bytes = self.0.as_bytes();
+        (
+            i64::from(parse_digits(&bytes[0..4]).unwrap_or_default()),
+            i64::from(parse_digits(&bytes[5..7]).unwrap_or_default()),
+            i64::from(parse_digits(&bytes[8..10]).unwrap_or_default()),
+        )
+    }
+}
+
+fn days_from_civil((mut year, month, day): (i64, i64, i64)) -> i64 {
+    year -= i64::from(month <= 2);
+    let era = if year >= 0 { year } else { year - 399 } / 400;
+    let year_of_era = year - era * 400;
+    let adjusted_month = month + if month > 2 { -3 } else { 9 };
+    let day_of_year = (153 * adjusted_month + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+fn civil_from_days(mut days: i64) -> Option<(i64, i64, i64)> {
+    days += 719_468;
+    let era = if days >= 0 { days } else { days - 146_096 } / 146_097;
+    let day_of_era = days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let mut year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
+    year += i64::from(month <= 2);
+    (1..=9_999).contains(&year).then_some((year, month, day))
 }
 
 /// Inclusive validated date range used by list queries.
@@ -851,6 +897,22 @@ mod tests {
         let error = LocalDate::parse("2026-02-29").expect_err("invalid day must be rejected");
 
         assert_eq!(error, ScheduleValidationError::Date);
+    }
+
+    #[test]
+    fn local_date_arithmetic_crosses_leap_day_and_year_boundary() {
+        let start = LocalDate::parse("2024-02-28").expect("fixture date should parse");
+        let result = start.add_days(308).expect("date should remain supported");
+
+        assert_eq!(result.as_str(), "2025-01-01");
+    }
+
+    #[test]
+    fn local_date_days_since_is_signed_and_calendar_based() {
+        let earlier = LocalDate::parse("2024-02-28").expect("fixture date should parse");
+        let later = LocalDate::parse("2024-03-01").expect("fixture date should parse");
+
+        assert_eq!(later.days_since(&earlier), 2);
     }
 
     #[test]

@@ -6,6 +6,7 @@ mod mindmap_import;
 mod planning;
 mod question;
 mod resource;
+mod review;
 mod runtime;
 mod schedule;
 mod workspace;
@@ -30,6 +31,12 @@ pub(crate) use question::{
 pub(crate) use resource::{
     ImportError, ImportProgress, ImportRequest, MindMapSource, ReadableResource, RecoveryReport,
     ResourceDocument, ResourceReaderDescriptor, ResourceRepository, ResourceUseCases,
+};
+pub(crate) use review::{
+    GenerateReviewQueueInput, InsertReviewQueueItemInput, PinQuestionReviewInput,
+    REVIEW_POLICY_VERSION, ReviewCandidateFacts, ReviewDecision, ReviewError, ReviewRepository,
+    ReviewUseCases, ScoredReviewCandidate, SetQuestionReviewInput, SubmitReviewInput,
+    UpdateReviewPreferencesInput, ValidatedReviewSubmission, apply_rating, score_candidate,
 };
 pub(crate) use runtime::{RuntimeStatus, get_runtime_status};
 pub(crate) use schedule::{

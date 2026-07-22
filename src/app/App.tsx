@@ -8,6 +8,7 @@ import { PersonalPlanPanel } from "../features/planning/PersonalPlanPanel";
 import { BackupPanel } from "../features/backup/BackupPanel";
 import { MindMapPanel } from "../features/mindmap/MindMapPanel";
 import { WorkbookPanel } from "../features/workbook/WorkbookPanel";
+import { ReviewPanel } from "../features/review/ReviewPanel";
 import { TodayTaskPanel } from "../features/schedule/TodayTaskPanel";
 import { ScheduleOverviewPanel } from "../features/schedule/ScheduleOverviewPanel";
 import { WorkspacePanel } from "../features/workspace/WorkspacePanel";
@@ -81,11 +82,10 @@ export function App() {
   return (
     <main className="shell">
       <section className="hero" aria-labelledby="page-title">
-        <p className="eyebrow">KyStudy · M5 PDF 习题闭环</p>
-        <h1 id="page-title">从原始习题册直接留下题目与作答</h1>
+        <p className="eyebrow">KyStudy · M6 错题复习闭环</p>
+        <h1 id="page-title">让该复习的错题准时出现</h1>
         <p className="lead">
-          在本地 PDF
-          上框选题目区域，关联知识结构，并在同一道题下持续记录真实作答与复盘。
+          根据真实错误与复习反馈生成稳定、可解释的每日队列，同时保留全部积压和调度历史。
         </p>
       </section>
 
@@ -143,6 +143,8 @@ export function App() {
       />
 
       <WorkbookPanel />
+
+      <ReviewPanel />
 
       <ResourcePanel openRequest={resourceOpenRequest} />
 

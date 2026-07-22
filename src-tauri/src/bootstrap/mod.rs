@@ -7,11 +7,12 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crate::application::{
     BackupUseCases, KnowledgeUseCases, PlanningUseCases, QuestionUseCases, ResourceUseCases,
-    ScheduleUseCases, WorkspaceUseCases,
+    ReviewUseCases, ScheduleUseCases, WorkspaceUseCases,
 };
 use crate::infrastructure::{
     SqliteBackupStore, SqliteBlobStore, SqliteKnowledgeRepository, SqlitePlanningRepository,
-    SqliteQuestionRepository, SqliteScheduleRepository, SqliteWorkspaceRepository,
+    SqliteQuestionRepository, SqliteReviewRepository, SqliteScheduleRepository,
+    SqliteWorkspaceRepository,
 };
 
 /// Tracks cancel flags without sharing `SQLite` connections across threads.
@@ -70,6 +71,7 @@ pub(crate) struct AppState {
     pub(crate) planning: PlanningUseCases<SqlitePlanningRepository>,
     pub(crate) knowledge: KnowledgeUseCases<SqliteKnowledgeRepository, SqliteBlobStore>,
     pub(crate) questions: QuestionUseCases<SqliteQuestionRepository>,
+    pub(crate) reviews: ReviewUseCases<SqliteReviewRepository>,
     pub(crate) backups: BackupUseCases<SqliteBackupStore>,
     pub(crate) imports: ImportCoordinator,
     pub(crate) operations: WorkspaceOperationGate,
@@ -84,6 +86,7 @@ impl AppState {
         let planning_repository = SqlitePlanningRepository::new(application_data_directory);
         let knowledge_repository = SqliteKnowledgeRepository::new(application_data_directory);
         let question_repository = SqliteQuestionRepository::new(application_data_directory);
+        let review_repository = SqliteReviewRepository::new(application_data_directory);
         let backup_store = SqliteBackupStore::new(application_data_directory);
         Self {
             workspace: WorkspaceUseCases::new(workspace_repository),
@@ -95,6 +98,7 @@ impl AppState {
                 ResourceUseCases::new(blob_store),
             ),
             questions: QuestionUseCases::new(question_repository),
+            reviews: ReviewUseCases::new(review_repository),
             backups: BackupUseCases::new(backup_store),
             imports: ImportCoordinator::default(),
             operations: WorkspaceOperationGate::default(),

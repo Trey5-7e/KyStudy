@@ -36,6 +36,12 @@ import {
   type ResourceReaderDescriptor,
 } from "../../shared/tauri/resourceClient";
 import type { PdfRegionOverlay } from "../library/pdf/PdfReader";
+import { localDateForTimezone } from "../../shared/tauri/scheduleClient";
+import { getWorkspaceStatus } from "../../shared/tauri/workspaceClient";
+import {
+  normalizeReviewError,
+  setQuestionReview,
+} from "../../shared/tauri/reviewClient";
 
 const PdfReader = lazy(() =>
   import("../library/pdf/PdfReader").then((module) => ({
@@ -69,6 +75,7 @@ interface QuestionEditorProps {
     durationSeconds: number | undefined,
     answerNote: string | undefined,
   ): Promise<boolean>;
+  onActivateReview(userPriority: number): Promise<boolean>;
   onTrash(): void;
 }
 
@@ -79,6 +86,7 @@ export function WorkbookPanel() {
   const [knowledgeOptions, setKnowledgeOptions] = useState<KnowledgeOption[]>(
     [],
   );
+  const [timezone, setTimezone] = useState("Asia/Shanghai");
   const [selectedWorkbookId, setSelectedWorkbookId] = useState<string>();
   const [selectedQuestionId, setSelectedQuestionId] = useState<string>();
   const [reader, setReader] = useState<ResourceReaderDescriptor>();
@@ -120,8 +128,9 @@ export function WorkbookPanel() {
       listResources(),
       listKnowledgeMaps(),
       listTrashedQuestions(),
+      getWorkspaceStatus(),
     ]).then(
-      ([loadedResources, maps, loadedTrashed]) => {
+      ([loadedResources, maps, loadedTrashed, workspace]) => {
         if (!active) {
           return;
         }
@@ -135,6 +144,7 @@ export function WorkbookPanel() {
           ),
         );
         setTrashed(loadedTrashed);
+        setTimezone(workspace?.timezone ?? "Asia/Shanghai");
         setSelectedWorkbookId(
           loadedResources.find(
             (resource) =>
@@ -191,11 +201,13 @@ export function WorkbookPanel() {
     setBusy(true);
     setError(undefined);
     try {
-      const [loadedResources, maps, loadedTrashed] = await Promise.all([
-        listResources(),
-        listKnowledgeMaps(),
-        listTrashedQuestions(),
-      ]);
+      const [loadedResources, maps, loadedTrashed, workspace] =
+        await Promise.all([
+          listResources(),
+          listKnowledgeMaps(),
+          listTrashedQuestions(),
+          getWorkspaceStatus(),
+        ]);
       const nextWorkbooks = loadedResources.filter(
         (resource) => resource.kind === "pdf" && resource.role === "workbook",
       );
@@ -221,6 +233,7 @@ export function WorkbookPanel() {
         ),
       );
       setTrashed(loadedTrashed);
+      setTimezone(workspace?.timezone ?? "Asia/Shanghai");
       setSelectedWorkbookId(nextWorkbookId);
       setReader(descriptor);
       setQuestions(loadedQuestions);
@@ -324,6 +337,28 @@ export function WorkbookPanel() {
       setCaptureTarget("new");
     } catch (trashError: unknown) {
       setError(normalizeQuestionError(trashError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const activateReview = async (
+    questionId: string,
+    userPriority: number,
+  ): Promise<boolean> => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await setQuestionReview({
+        questionId,
+        active: true,
+        userPriority,
+        today: localDateForTimezone(new Date(), timezone),
+      });
+      return true;
+    } catch (reviewError: unknown) {
+      setError(normalizeReviewError(reviewError));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -516,10 +551,14 @@ export function WorkbookPanel() {
                     addQuestionAttempt({
                       questionId: selectedQuestion.question.id,
                       result,
+                      attemptedOn: localDateForTimezone(new Date(), timezone),
                       durationSeconds,
                       answerNote,
                     }),
                   )
+                }
+                onActivateReview={(userPriority) =>
+                  activateReview(selectedQuestion.question.id, userPriority)
                 }
                 onTrash={() => void removeQuestion()}
               />
@@ -629,6 +668,7 @@ function QuestionEditor({
   onOpenRegion,
   onDeleteRegion,
   onAddAttempt,
+  onActivateReview,
   onTrash,
 }: QuestionEditorProps) {
   const question = bundle.question;
@@ -649,6 +689,8 @@ function QuestionEditor({
   const [durationMinutes, setDurationMinutes] = useState("");
   const [answerNote, setAnswerNote] = useState("");
   const [confirmTrash, setConfirmTrash] = useState(false);
+  const [reviewPriority, setReviewPriority] = useState("3");
+  const [reviewActivated, setReviewActivated] = useState(false);
 
   const submitDetails = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -731,6 +773,39 @@ function QuestionEditor({
           )}
         </div>
       </form>
+
+      <section className="question-review-entry">
+        <div>
+          <h4>错题复习</h4>
+          <p>错误作答会自动加入；也可以不新增错误记录，直接手动加入复习。</p>
+        </div>
+        <label>
+          重要度
+          <select
+            value={reviewPriority}
+            onChange={(event) => setReviewPriority(event.target.value)}
+          >
+            {[1, 2, 3, 4, 5].map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={busy}
+          onClick={() => {
+            void onActivateReview(Number(reviewPriority)).then(
+              setReviewActivated,
+            );
+          }}
+        >
+          加入或更新错题复习
+        </button>
+        {reviewActivated ? <span role="status">已加入错题复习</span> : null}
+      </section>
 
       <section
         className="question-regions"

@@ -507,9 +507,9 @@ mod tests {
         read_manifest,
     };
     use crate::application::{
-        BackupRepository, CreateQuestionInput, ImportRequest, KnowledgeRepository,
-        QuestionRegionInput, QuestionUseCases, ResourceRepository, ScheduleRepository,
-        WorkspaceRepository,
+        BackupRepository, CreateQuestionInput, GenerateReviewQueueInput, ImportRequest,
+        KnowledgeRepository, QuestionRegionInput, QuestionUseCases, ResourceRepository,
+        ReviewUseCases, ScheduleRepository, SubmitReviewInput, WorkspaceRepository,
     };
     use crate::domain::{
         KnowledgeMap, KnowledgeNode, LATEST_SCHEMA_VERSION, LocalDate, MasteryState,
@@ -517,7 +517,7 @@ mod tests {
     };
     use crate::infrastructure::{
         SqliteBlobStore, SqliteKnowledgeRepository, SqliteQuestionRepository,
-        SqliteScheduleRepository, SqliteWorkspaceRepository,
+        SqliteReviewRepository, SqliteScheduleRepository, SqliteWorkspaceRepository,
     };
 
     struct Fixture {
@@ -781,7 +781,7 @@ mod tests {
     }
 
     #[test]
-    fn complete_backup_restores_questions_regions_and_attempts() {
+    fn complete_backup_restores_questions_attempts_and_review_state() {
         let fixture = initialized_fixture();
         let resources = SqliteBlobStore::new(fixture.application_data.path());
         resources
@@ -808,14 +808,34 @@ mod tests {
                 knowledge_node_ids: Vec::new(),
             })
             .expect("question should persist");
+        let question_id = created.question.id;
         questions
             .add_attempt(crate::application::AddQuestionAttemptInput {
-                question_id: created.question.id,
+                question_id: question_id.clone(),
                 result: "incorrect".to_owned(),
+                attempted_on: "2026-07-19".to_owned(),
                 duration_seconds: Some(180),
                 answer_note: Some("漏写条件".to_owned()),
             })
             .expect("attempt should persist");
+        let reviews =
+            ReviewUseCases::new(SqliteReviewRepository::new(fixture.application_data.path()));
+        let generated = reviews
+            .generate_queue(&GenerateReviewQueueInput {
+                queue_date: "2026-07-19".to_owned(),
+                quota: Some(1),
+            })
+            .expect("review queue should persist");
+        reviews
+            .submit_review(SubmitReviewInput {
+                queue_id: generated.queue.expect("queue should exist").id,
+                question_id,
+                rating: "mastered".to_owned(),
+                today: "2026-07-19".to_owned(),
+                duration_seconds: None,
+                answer_note: None,
+            })
+            .expect("review event should persist");
         let output = tempdir().expect("output directory should exist");
         let backup = create_backup(&fixture, &output);
         let destination = output.path().join("restored-question-data");
@@ -826,7 +846,7 @@ mod tests {
             .expect("question data should restore");
         let connection = Connection::open(destination.join("kystudy.sqlite3"))
             .expect("restored database should open");
-        let counts: (i64, i64, i64) = (
+        let counts: (i64, i64, i64, i64, i64, i64, i64, i64) = (
             connection
                 .query_row("SELECT COUNT(*) FROM question", [], |row| row.get(0))
                 .expect("questions should count"),
@@ -838,9 +858,28 @@ mod tests {
                     row.get(0)
                 })
                 .expect("attempts should count"),
+            connection
+                .query_row("SELECT COUNT(*) FROM mistake_profile", [], |row| row.get(0))
+                .expect("mistake profiles should count"),
+            connection
+                .query_row("SELECT COUNT(*) FROM review_state", [], |row| row.get(0))
+                .expect("review states should count"),
+            connection
+                .query_row("SELECT COUNT(*) FROM review_event", [], |row| row.get(0))
+                .expect("review events should count"),
+            connection
+                .query_row("SELECT COUNT(*) FROM daily_review_queue", [], |row| {
+                    row.get(0)
+                })
+                .expect("review queues should count"),
+            connection
+                .query_row("SELECT COUNT(*) FROM daily_review_item", [], |row| {
+                    row.get(0)
+                })
+                .expect("review items should count"),
         );
 
-        assert_eq!(counts, (1, 1, 1));
+        assert_eq!(counts, (1, 1, 2, 1, 1, 1, 1, 1));
     }
 
     #[test]
@@ -933,7 +972,12 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE question_knowledge_node;
+                "DROP TABLE daily_review_item;
+                 DROP TABLE daily_review_queue;
+                 DROP TABLE review_event;
+                 DROP TABLE review_state;
+                 DROP TABLE mistake_profile;
+                 DROP TABLE question_knowledge_node;
                  DROP TABLE question_attempt;
                  DROP TABLE question_region;
                  DROP TABLE question;
@@ -949,7 +993,7 @@ mod tests {
                  ALTER TABLE resource_document DROP COLUMN page_count;
                  ALTER TABLE resource_document DROP COLUMN role;
                  DROP TABLE study_session;
-                 DELETE FROM schema_migration WHERE version IN (4, 5, 6, 7);
+                 DELETE FROM schema_migration WHERE version IN (4, 5, 6, 7, 8);
                  PRAGMA user_version = 3;",
             )
             .expect("fixture should represent a v3 backup");
@@ -999,7 +1043,12 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE question_knowledge_node;
+                "DROP TABLE daily_review_item;
+                 DROP TABLE daily_review_queue;
+                 DROP TABLE review_event;
+                 DROP TABLE review_state;
+                 DROP TABLE mistake_profile;
+                 DROP TABLE question_knowledge_node;
                  DROP TABLE question_attempt;
                  DROP TABLE question_region;
                  DROP TABLE question;
@@ -1018,7 +1067,7 @@ mod tests {
                  DROP TABLE task_change;
                  DROP TABLE task;
                  DROP TABLE subject;
-                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6, 7);
+                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6, 7, 8);
                  PRAGMA user_version = 2;",
             )
             .expect("fixture should represent a v2 backup");

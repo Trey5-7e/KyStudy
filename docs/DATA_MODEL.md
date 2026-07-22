@@ -5,12 +5,12 @@
 | 文档版本   | 0.1                                    |
 | 对应 PRD   | 0.1                                    |
 | 更新日期   | 2026-07-19                             |
-| 状态       | 概念模型；M1-M5 子集已落地至 schema v7 |
+| 状态       | 概念模型；M1-M6 子集已落地至 schema v8 |
 | 数据库方向 | SQLite，本地单工作区优先               |
 
 ## 1. 设计目标
 
-> 实现说明：schema v7 已在 v6 知识结构表之上落地 `question`、`question_region`、`question_knowledge_node` 与 `question_attempt`。完整 AI 规划版本、解析索引、OCR、错题复习和派生题目模型仍按本文概念边界后续实现。
+> 实现说明：schema v8 已在 v7 题目模型之上落地 `mistake_profile`、`review_state`、`review_event`、`daily_review_queue` 与 `daily_review_item`。AI 规划版本、解析索引、OCR 和派生题目模型仍按本文概念边界后续实现。
 
 数据模型需要同时支持日程、资料、思维导图、PDF 题目、错题复习和 AI 用量，又不能把这些功能堆进一个难以演进的通用表。
 
@@ -473,7 +473,7 @@ schema v7 不单独创建 `workbook` 表：首版直接把 `resource_document.ro
 
 ### 10.4 `question_attempt`
 
-schema v7 的作答记录采用追加写入，不提供编辑或删除入口。需要纠错时先追加新的真实记录；正式 `voided_at` 机制留到 M6 与复习历史一起设计。
+schema v7 起的作答记录采用追加写入，不提供编辑或删除入口。M6 的复习反馈继续追加真实 Attempt 和不可变 ReviewEvent；需要纠错时先追加新的真实记录，正式 `voided_at` 机制等长期使用反馈明确后再设计。
 
 | 字段               | 说明                                |
 | ------------------ | ----------------------------------- |
@@ -485,7 +485,7 @@ schema v7 的作答记录采用追加写入，不提供编辑或删除入口。�
 | `answer_note`      | 本次答案或复盘                      |
 | `created_at`       | 创建时间                            |
 
-schema v7 的作答记录不可编辑或删除。错误原因、信心、来源和作废机制将在 M6 复习模型中一并设计，避免过早固化枚举。
+schema v8 的作答记录仍不可编辑或删除；复习反馈通过 `review_event.rating` 表达掌握、不确定、未掌握和跳过。更细的错误原因、信心、来源和作废机制保留到后续打磨，避免过早固化枚举。
 
 ### 10.5 `question_knowledge_node`
 
@@ -507,7 +507,7 @@ schema v7 使用 `(question_id, node_id)` 复合主键保存题目到知识节�
 | `active`                    | 是否当前处于错题复习体系 |
 | `user_priority`             | 用户手动重要度           |
 
-这些聚合值由用例层在事务内更新，也可以从有效 Attempt 重建。
+这些聚合值由用例层和 Repository 在同一事务内更新，也可以从有效 Attempt 重建。schema v8 会把历史 `incorrect` Attempt 回填为激活错题；用户手动激活但尚未做错时，首次/最近错误时间允许为空且错误次数为 0。
 
 ### 11.2 `review_state`
 
@@ -534,7 +534,7 @@ schema v7 使用 `(question_id, node_id)` 复合主键保存题目到知识节�
 | `rating`                              | `mastered`、`uncertain`、`failed`、`skipped` |
 | `previous_due_date` / `next_due_date` | 调度前后日期                                 |
 | `policy_version`                      | 使用规则                                     |
-| `reason_json`                         | 调度解释                                     |
+| `interval_days`                       | 本次规则给出的明确间隔                       |
 | `created_at`                          | 反馈时间                                     |
 
 ### 11.4 `daily_review_queue` 与 `daily_review_item`
@@ -544,9 +544,9 @@ schema v7 使用 `(question_id, node_id)` 复合主键保存题目到知识节�
 | 对象                 | 关键字段                                                                                    |
 | -------------------- | ------------------------------------------------------------------------------------------- |
 | `daily_review_queue` | `id`、`workspace_id`、`queue_date`、`quota`、`generated_at`、`completed_count`              |
-| `daily_review_item`  | `queue_id`、`question_id`、`position`、`priority_score`、`reason_json`、`is_early`、`state` |
+| `daily_review_item`  | `queue_id`、`question_id`、`position`、`priority_score`、结构化原因因子、`is_early`、`state` |
 
-同一工作区同一天只允许一个正式队列。新错题可以由用户手动插入，插入行为需要记录原因。
+同一工作区同一天只允许一个正式队列。schema v8 把选择类型、逾期天数、连续未掌握、错误次数、用户重要度、知识薄弱度和距上次作答天数保存为类型化快照；前端不接收内部 JSON。新错题可以由用户手动插入，插入项明确标记为 `manual`。
 
 ## 12. AI、上下文与 Token
 

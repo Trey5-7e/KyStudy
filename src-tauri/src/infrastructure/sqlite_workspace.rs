@@ -56,6 +56,11 @@ const MIGRATION_007: Migration = Migration {
     name: "workbook_question",
     sql: include_str!("../../migrations/0007_workbook_question.sql"),
 };
+const MIGRATION_008: Migration = Migration {
+    version: 8,
+    name: "mistake_review",
+    sql: include_str!("../../migrations/0008_mistake_review.sql"),
+};
 const MIGRATIONS: &[Migration] = &[
     MIGRATION_001,
     MIGRATION_002,
@@ -64,6 +69,7 @@ const MIGRATIONS: &[Migration] = &[
     MIGRATION_005,
     MIGRATION_006,
     MIGRATION_007,
+    MIGRATION_008,
 ];
 
 /// `rusqlite` adapter for the single local workspace used in M1.
@@ -438,8 +444,8 @@ mod tests {
 
     use super::{
         APPLICATION_ID, MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004, MIGRATION_005,
-        MIGRATION_006, MIGRATION_007, Migration, SqliteWorkspaceRepository, apply_migrations,
-        configure_connection, migration_checksum,
+        MIGRATION_006, MIGRATION_007, MIGRATION_008, Migration, SqliteWorkspaceRepository,
+        apply_migrations, configure_connection, migration_checksum,
     };
     use crate::application::{PersistenceError, WorkspaceRepository};
     use crate::domain::{LATEST_SCHEMA_VERSION, NewWorkspace};
@@ -623,6 +629,7 @@ mod tests {
         assert!(MIGRATION_005.sql.contains("CREATE TABLE study_plan"));
         assert!(MIGRATION_006.sql.contains("CREATE TABLE knowledge_map"));
         assert!(MIGRATION_007.sql.contains("CREATE TABLE question"));
+        assert!(MIGRATION_008.sql.contains("CREATE TABLE mistake_profile"));
     }
 
     #[test]
