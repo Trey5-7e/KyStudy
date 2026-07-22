@@ -68,6 +68,11 @@ impl LocalDate {
         days_from_civil(self.components()) - days_from_civil(earlier.components())
     }
 
+    /// Returns Monday as zero through Sunday as six.
+    pub(crate) fn weekday_from_monday(&self) -> u8 {
+        u8::try_from((days_from_civil(self.components()) + 3).rem_euclid(7)).unwrap_or_default()
+    }
+
     /// Moves this date forward by a bounded number of calendar days.
     pub(crate) fn add_days(&self, days: u32) -> Result<Self, ScheduleValidationError> {
         let target = days_from_civil(self.components()) + i64::from(days);
@@ -920,6 +925,15 @@ mod tests {
         let later = LocalDate::parse("2024-03-01").expect("fixture date should parse");
 
         assert_eq!(later.days_since(&earlier), 2);
+    }
+
+    #[test]
+    fn local_date_weekday_uses_monday_as_zero() {
+        let monday = LocalDate::parse("2026-07-20").expect("date should parse");
+        let sunday = LocalDate::parse("2026-07-26").expect("date should parse");
+
+        assert_eq!(monday.weekday_from_monday(), 0);
+        assert_eq!(sunday.weekday_from_monday(), 6);
     }
 
     #[test]

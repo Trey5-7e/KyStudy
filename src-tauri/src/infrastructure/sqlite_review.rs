@@ -1516,9 +1516,10 @@ mod tests {
                  DROP TABLE review_event;
                  DROP TABLE review_state;
                  DROP TABLE mistake_profile;
+                 DROP TABLE plan_stage_task;
                  DROP TABLE question_region_ocr_line;
                  DROP TABLE question_region_ocr;
-                 DELETE FROM schema_migration WHERE version IN (8, 9, 10, 11, 12, 13);
+                 DELETE FROM schema_migration WHERE version IN (8, 9, 10, 11, 12, 13, 14);
                  PRAGMA user_version = 7;",
             )
             .expect("fixture should become schema v7");

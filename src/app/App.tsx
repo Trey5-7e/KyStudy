@@ -189,7 +189,12 @@ function PageContent({
     case "schedule":
       return <ScheduleOverviewPanel />;
     case "planning":
-      return <PersonalPlanPanel onOpenReference={onOpenResource} />;
+      return (
+        <PersonalPlanPanel
+          onOpenReference={onOpenResource}
+          onOpenSchedule={() => onNavigate("schedule")}
+        />
+      );
     case "library":
       return <ResourcePanel openRequest={resourceOpenRequest} />;
     case "mindmap":

@@ -17,10 +17,16 @@ import {
   type ResourceCommandError,
   type ResourceDocument,
 } from "../../shared/tauri/resourceClient";
+import {
+  listSubjects,
+  type StudySubject,
+} from "../../shared/tauri/scheduleClient";
+import { PlanSchedulePanel } from "./PlanSchedulePanel";
 import { PlanningChatPanel } from "./PlanningChatPanel";
 
 interface PersonalPlanPanelProps {
   onOpenReference(documentId: string, page: number): void;
+  onOpenSchedule(): void;
 }
 
 interface PlanForm {
@@ -52,9 +58,13 @@ const EMPTY_STAGE: StageForm = {
   focus: "",
 };
 
-export function PersonalPlanPanel({ onOpenReference }: PersonalPlanPanelProps) {
+export function PersonalPlanPanel({
+  onOpenReference,
+  onOpenSchedule,
+}: PersonalPlanPanelProps) {
   const [plans, setPlans] = useState<StudyPlanBundle[]>([]);
   const [pdfResources, setPdfResources] = useState<ResourceDocument[]>([]);
+  const [subjects, setSubjects] = useState<StudySubject[]>([]);
   const [selectedId, setSelectedId] = useState<string>();
   const [planForm, setPlanForm] = useState<PlanForm>(EMPTY_PLAN);
   const [stageForm, setStageForm] = useState<StageForm>(EMPTY_STAGE);
@@ -70,8 +80,8 @@ export function PersonalPlanPanel({ onOpenReference }: PersonalPlanPanelProps) {
 
   useEffect(() => {
     let active = true;
-    void Promise.all([listStudyPlans(), listResources()]).then(
-      ([loadedPlans, resources]) => {
+    void Promise.all([listStudyPlans(), listResources(), listSubjects()]).then(
+      ([loadedPlans, resources, loadedSubjects]) => {
         if (!active) {
           return;
         }
@@ -79,6 +89,7 @@ export function PersonalPlanPanel({ onOpenReference }: PersonalPlanPanelProps) {
         setPdfResources(
           resources.filter((resource) => resource.kind === "pdf"),
         );
+        setSubjects(loadedSubjects);
         const initial = loadedPlans[0];
         if (initial !== undefined) {
           selectBundle(initial, setSelectedId, setPlanForm);
@@ -496,6 +507,16 @@ export function PersonalPlanPanel({ onOpenReference }: PersonalPlanPanelProps) {
                     </div>
                   </form>
                 </section>
+
+                <PlanSchedulePanel
+                  key={`${selected.plan.id}:${selected.plan.status}:${selected.stages
+                    .map((stage) => `${stage.id}:${stage.updatedAt}`)
+                    .join(",")}`}
+                  plan={selected.plan}
+                  stages={selected.stages}
+                  subjects={subjects}
+                  onOpenSchedule={onOpenSchedule}
+                />
 
                 <section
                   className="plan-subsection"

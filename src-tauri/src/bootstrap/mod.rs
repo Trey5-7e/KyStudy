@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crate::application::{
     AiUseCases, AnalyticsUseCases, BackupUseCases, KnowledgeUseCases, OcrUseCases,
-    PlanningChatUseCases, PlanningUseCases, QuestionUseCases, ResourceUseCases, ReviewUseCases,
-    ScheduleUseCases, SearchUseCases, WorkspaceUseCases,
+    PlanScheduleUseCases, PlanningChatUseCases, PlanningUseCases, QuestionUseCases,
+    ResourceUseCases, ReviewUseCases, ScheduleUseCases, SearchUseCases, WorkspaceUseCases,
 };
 use crate::infrastructure::{
     LocalOcrWorker, ProviderRouter, SqliteAiRepository, SqliteAnalyticsRepository,
@@ -108,6 +108,7 @@ pub(crate) struct AppState {
     pub(crate) workspace: WorkspaceUseCases<SqliteWorkspaceRepository>,
     pub(crate) resources: ResourceUseCases<SqliteBlobStore>,
     pub(crate) schedule: ScheduleUseCases<SqliteScheduleRepository>,
+    pub(crate) plan_schedule: PlanScheduleUseCases<SqliteScheduleRepository>,
     pub(crate) planning: PlanningUseCases<SqlitePlanningRepository>,
     pub(crate) knowledge: KnowledgeUseCases<SqliteKnowledgeRepository, SqliteBlobStore>,
     pub(crate) questions: QuestionUseCases<SqliteQuestionRepository>,
@@ -149,7 +150,8 @@ impl AppState {
         Self {
             workspace: WorkspaceUseCases::new(workspace_repository),
             resources: ResourceUseCases::new(blob_store.clone()),
-            schedule: ScheduleUseCases::new(schedule_repository),
+            schedule: ScheduleUseCases::new(schedule_repository.clone()),
+            plan_schedule: PlanScheduleUseCases::new(schedule_repository),
             planning: PlanningUseCases::new(planning_repository),
             knowledge: KnowledgeUseCases::new(
                 knowledge_repository,

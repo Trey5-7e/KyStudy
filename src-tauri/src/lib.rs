@@ -82,6 +82,8 @@ macro_rules! kystudy_command_handler {
             commands::delete_plan_stage,
             commands::add_plan_reference,
             commands::delete_plan_reference,
+            commands::preview_plan_stage_tasks,
+            commands::confirm_plan_stage_tasks,
             commands::list_knowledge_maps,
             commands::create_knowledge_map,
             commands::update_knowledge_map,

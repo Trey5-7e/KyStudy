@@ -6,6 +6,7 @@ mod backup;
 mod mindmap;
 mod mindmap_import;
 mod ocr;
+mod plan_schedule;
 mod planning;
 mod planning_chat;
 mod question;
@@ -40,6 +41,10 @@ pub(crate) use ocr::{
     ConfirmQuestionRegionOcrInput, OCR_ENGINE_NAME, OcrComponentState, OcrComponentStatus,
     OcrEngine, OcrEngineLine, OcrEngineOutput, OcrError, OcrRegionSource, OcrRepository,
     OcrUseCases, RecognizeQuestionRegionInput,
+};
+pub(crate) use plan_schedule::{
+    PlanScheduleContext, PlanScheduleError, PlanScheduleRepository, PlanScheduleUseCases,
+    PlanTaskCreation, PlanTaskPreview, PlanTaskPreviewItem, PlanTaskScheduleInput,
 };
 pub(crate) use planning::{
     AddPlanReferenceInput, PlanningError, PlanningRepository, PlanningUseCases, SavePlanInput,

@@ -86,6 +86,11 @@ const MIGRATION_013: Migration = Migration {
     name: "question_region_ocr",
     sql: include_str!("../../migrations/0013_question_region_ocr.sql"),
 };
+const MIGRATION_014: Migration = Migration {
+    version: 14,
+    name: "plan_stage_tasks",
+    sql: include_str!("../../migrations/0014_plan_stage_tasks.sql"),
+};
 const MIGRATIONS: &[Migration] = &[
     MIGRATION_001,
     MIGRATION_002,
@@ -100,6 +105,7 @@ const MIGRATIONS: &[Migration] = &[
     MIGRATION_011,
     MIGRATION_012,
     MIGRATION_013,
+    MIGRATION_014,
 ];
 
 /// `rusqlite` adapter for the single local workspace used in M1.
@@ -474,8 +480,9 @@ mod tests {
 
     use super::{
         APPLICATION_ID, MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004, MIGRATION_005,
-        MIGRATION_006, MIGRATION_007, MIGRATION_008, MIGRATION_009, MIGRATION_013, Migration,
-        SqliteWorkspaceRepository, apply_migrations, configure_connection, migration_checksum,
+        MIGRATION_006, MIGRATION_007, MIGRATION_008, MIGRATION_009, MIGRATION_013, MIGRATION_014,
+        Migration, SqliteWorkspaceRepository, apply_migrations, configure_connection,
+        migration_checksum,
     };
     use crate::application::{PersistenceError, WorkspaceRepository};
     use crate::domain::{LATEST_SCHEMA_VERSION, NewWorkspace};
@@ -675,6 +682,7 @@ mod tests {
                 .sql
                 .contains("CREATE TABLE question_region_ocr_line")
         );
+        assert!(MIGRATION_014.sql.contains("CREATE TABLE plan_stage_task"));
     }
 
     #[test]

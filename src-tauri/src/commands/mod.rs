@@ -13,16 +13,18 @@ use crate::application::{
     CreateKnowledgeMapInput, CreateQuestionInput, CreateStudySessionInput, CreateSubjectInput,
     CreateTaskInput, DailyAnalyticsPoint, GenerateReviewQueueInput, ImportError, ImportProgress,
     InsertReviewQueueItemInput, KnowledgeAnalytics, KnowledgeError, MoveKnowledgeNodeInput,
-    OcrComponentStatus, OcrError, PinQuestionReviewInput, PlanningChatError, PlanningChatInput,
-    PlanningChatPreview, PlanningChatReply, PlanningContextSelection, PlanningConversation,
-    PlanningError, PlanningMessage, PlanningSource, QuestionError, QuestionRegionInput,
-    RecognizeQuestionRegionInput, RepeatedMistakeAnalytics, RescheduleTaskInput, ResourceDocument,
-    ResourceReaderDescriptor, RestoreReport, ReviewError, RuntimeStatus, SaveAiBudgetInput,
-    SaveAiProviderInput, SavePlanInput, SavePlanStageInput, ScheduleError, SearchError,
-    SearchResourcesInput, SetQuestionReviewInput, SplitChildInput, SplitTaskInput,
-    StoreResourcePageTextInput, SubjectAnalytics, SubmitReviewInput, UpdateKnowledgeMapInput,
-    UpdateKnowledgeNodeInput, UpdateQuestionInput, UpdateReviewPreferencesInput,
-    UpdateTaskDetailsInput, get_runtime_status as load_runtime_status,
+    OcrComponentStatus, OcrError, PinQuestionReviewInput, PlanScheduleError, PlanTaskCreation,
+    PlanTaskPreview, PlanTaskPreviewItem, PlanTaskScheduleInput, PlanningChatError,
+    PlanningChatInput, PlanningChatPreview, PlanningChatReply, PlanningContextSelection,
+    PlanningConversation, PlanningError, PlanningMessage, PlanningSource, QuestionError,
+    QuestionRegionInput, RecognizeQuestionRegionInput, RepeatedMistakeAnalytics,
+    RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor, RestoreReport, ReviewError,
+    RuntimeStatus, SaveAiBudgetInput, SaveAiProviderInput, SavePlanInput, SavePlanStageInput,
+    ScheduleError, SearchError, SearchResourcesInput, SetQuestionReviewInput, SplitChildInput,
+    SplitTaskInput, StoreResourcePageTextInput, SubjectAnalytics, SubmitReviewInput,
+    UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput, UpdateQuestionInput,
+    UpdateReviewPreferencesInput, UpdateTaskDetailsInput,
+    get_runtime_status as load_runtime_status,
 };
 use crate::bootstrap::AppState;
 use crate::domain::{
@@ -1067,6 +1069,92 @@ pub(crate) struct StudyPlanBundleDto {
     plan: StudyPlanDto,
     stages: Vec<PlanStageDto>,
     references: Vec<PlanReferenceDto>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PlanTaskScheduleRequestDto {
+    stage_id: String,
+    subject_id: Option<String>,
+    start_date: String,
+    end_date: String,
+    weekdays: Vec<u8>,
+    title: String,
+    description: Option<String>,
+    estimated_minutes: Option<u32>,
+    priority: String,
+}
+
+impl From<PlanTaskScheduleRequestDto> for PlanTaskScheduleInput {
+    fn from(request: PlanTaskScheduleRequestDto) -> Self {
+        Self {
+            stage_id: request.stage_id,
+            subject_id: request.subject_id,
+            start_date: request.start_date,
+            end_date: request.end_date,
+            weekdays: request.weekdays,
+            title: request.title,
+            description: request.description,
+            estimated_minutes: request.estimated_minutes,
+            priority: request.priority,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlanTaskPreviewItemDto {
+    planned_date: String,
+    already_exists: bool,
+}
+
+impl From<PlanTaskPreviewItem> for PlanTaskPreviewItemDto {
+    fn from(item: PlanTaskPreviewItem) -> Self {
+        Self {
+            planned_date: item.planned_date.as_str().to_owned(),
+            already_exists: item.already_exists,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlanTaskPreviewDto {
+    stage_id: String,
+    plan_title: String,
+    stage_title: String,
+    items: Vec<PlanTaskPreviewItemDto>,
+    create_count: u32,
+    existing_count: u32,
+}
+
+impl From<PlanTaskPreview> for PlanTaskPreviewDto {
+    fn from(preview: PlanTaskPreview) -> Self {
+        Self {
+            stage_id: preview.stage_id,
+            plan_title: preview.plan_title,
+            stage_title: preview.stage_title,
+            items: preview.items.into_iter().map(Into::into).collect(),
+            create_count: preview.create_count,
+            existing_count: preview.existing_count,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlanTaskCreationDto {
+    created_tasks: Vec<TaskDto>,
+    skipped_existing: u32,
+}
+
+impl From<PlanTaskCreation> for PlanTaskCreationDto {
+    fn from(creation: PlanTaskCreation) -> Self {
+        Self {
+            created_tasks: creation.created_tasks.into_iter().map(Into::into).collect(),
+            skipped_existing: creation.skipped_existing,
+        }
+    }
 }
 
 impl From<StudyPlanBundle> for StudyPlanBundleDto {
@@ -3045,6 +3133,38 @@ impl AppErrorDto {
         }
     }
 
+    fn from_plan_schedule(error: &PlanScheduleError) -> Self {
+        let (message, action) = match error {
+            PlanScheduleError::InvalidInput | PlanScheduleError::Validation(_) => (
+                "阶段展开设置不完整或超出阶段日期。",
+                "检查日期范围、星期、标题、时长和优先级后重新预览。",
+            ),
+            PlanScheduleError::StageNotFound => {
+                ("找不到这个计划阶段。", "刷新个人计划后重新选择阶段。")
+            }
+            PlanScheduleError::PlanNotActive => (
+                "只有当前计划可以展开到日程。",
+                "先把这份计划确认为当前计划，再重新预览。",
+            ),
+            PlanScheduleError::TooManyTasks => (
+                "本次将创建的任务数量过多。",
+                "缩短日期范围或减少每周执行天数后重新预览。",
+            ),
+            PlanScheduleError::InvalidStoredData => (
+                "计划与日程的关联数据不完整。",
+                "先创建完整备份，不要手动修改数据库。",
+            ),
+            PlanScheduleError::Schedule(error) => return Self::from_schedule(error),
+            PlanScheduleError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
     fn from_knowledge(error: &KnowledgeError) -> Self {
         let (message, action) = match error {
             KnowledgeError::WorkspaceNotInitialized => {
@@ -3839,6 +3959,34 @@ pub(crate) async fn delete_plan_reference(
 }
 
 #[tauri::command]
+pub(crate) async fn preview_plan_stage_tasks(
+    request: PlanTaskScheduleRequestDto,
+    state: State<'_, AppState>,
+) -> Result<PlanTaskPreviewDto, AppErrorDto> {
+    let use_cases = state.plan_schedule.clone();
+    let input = PlanTaskScheduleInput::from(request);
+    tauri::async_runtime::spawn_blocking(move || use_cases.preview(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_plan_schedule(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn confirm_plan_stage_tasks(
+    request: PlanTaskScheduleRequestDto,
+    state: State<'_, AppState>,
+) -> Result<PlanTaskCreationDto, AppErrorDto> {
+    let use_cases = state.plan_schedule.clone();
+    let input = PlanTaskScheduleInput::from(request);
+    tauri::async_runtime::spawn_blocking(move || use_cases.confirm(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_plan_schedule(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn list_knowledge_maps(
     state: State<'_, AppState>,
 ) -> Result<Vec<KnowledgeMapBundleDto>, AppErrorDto> {
@@ -4542,9 +4690,9 @@ fn emit_import_event(app: &AppHandle, event: ImportEventDto) {
 mod tests {
     use super::{
         AiOverviewDto, AppErrorDto, BackupReportDto, KnowledgeMapBundleDto, OcrRecognitionDto,
-        QuestionBundleDto, RescheduleTaskRequestDto, ResourceDocumentDto, ResourceSearchResultDto,
-        ReviewReasonDto, SubjectDto, TaskChangeDto, TaskDto, UpdateTaskDetailsRequestDto,
-        get_runtime_status,
+        PlanTaskScheduleRequestDto, QuestionBundleDto, RescheduleTaskRequestDto,
+        ResourceDocumentDto, ResourceSearchResultDto, ReviewReasonDto, SubjectDto, TaskChangeDto,
+        TaskDto, UpdateTaskDetailsRequestDto, get_runtime_status,
     };
     use crate::application::{
         AiOverview, AiProviderOverview, BackupReport, PersistenceError, ResourceDocument,
@@ -4624,6 +4772,26 @@ mod tests {
         });
 
         let result = serde_json::from_value::<RescheduleTaskRequestDto>(value);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn plan_schedule_request_rejects_frontend_authored_tasks() {
+        let value = serde_json::json!({
+            "stageId": "019f7328-4b66-7613-9729-e3570fc41525",
+            "subjectId": null,
+            "startDate": "2026-07-20",
+            "endDate": "2026-07-26",
+            "weekdays": [0, 2, 4],
+            "title": "数据结构基础",
+            "description": null,
+            "estimatedMinutes": 90,
+            "priority": "normal",
+            "tasks": [{ "plannedDate": "2026-01-01" }]
+        });
+
+        let result = serde_json::from_value::<PlanTaskScheduleRequestDto>(value);
 
         assert!(result.is_err());
     }

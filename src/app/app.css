@@ -1615,6 +1615,140 @@ button:disabled {
   margin: 0 0 0.8rem;
 }
 
+.plan-schedule {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.plan-schedule-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.plan-schedule-heading h3 {
+  margin: 0;
+}
+
+.plan-schedule-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.plan-schedule-form > label {
+  display: grid;
+  gap: 0.4rem;
+  color: #52625a;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.plan-schedule-wide,
+.plan-schedule-weekdays {
+  grid-column: 1 / -1;
+}
+
+.plan-schedule-weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.8rem;
+  margin: 0;
+  border: 1px solid rgb(30 91 66 / 16%);
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.75rem 0.75rem;
+}
+
+.plan-schedule-weekdays legend {
+  padding: 0 0.25rem;
+  color: #52625a;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.plan-schedule-weekdays label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #33473d;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.plan-schedule-weekdays input {
+  width: 1rem;
+  height: 1rem;
+}
+
+.plan-schedule-form > button {
+  justify-self: start;
+}
+
+.plan-schedule .error-detail {
+  margin: 0;
+}
+
+.plan-schedule-success {
+  margin: 0;
+  color: #1e5b42;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.plan-schedule-preview {
+  display: grid;
+  gap: 0.7rem;
+  border: 1px solid rgb(30 91 66 / 18%);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  background: rgb(255 255 255 / 64%);
+}
+
+.plan-schedule-preview > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.plan-schedule-preview > div span {
+  color: #657269;
+  font-size: 0.8rem;
+}
+
+.plan-schedule-preview ol {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 17rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.plan-schedule-preview li {
+  content-visibility: auto;
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 1fr) auto auto;
+  gap: 0.65rem;
+  border-bottom: 1px solid rgb(30 91 66 / 10%);
+  padding: 0.45rem 0.2rem;
+  font-size: 0.8rem;
+}
+
+.plan-schedule-preview li span {
+  color: #657269;
+}
+
+.plan-schedule-preview li strong {
+  color: #245a43;
+}
+
+.plan-schedule-preview > button {
+  justify-self: start;
+}
+
 .plan-stage-list,
 .plan-reference-list {
   display: grid;
@@ -3528,7 +3662,8 @@ button:disabled {
 
   .plan-form-grid,
   .stage-form,
-  .reference-form {
+  .reference-form,
+  .plan-schedule-form {
     grid-template-columns: 1fr;
   }
 
@@ -3536,6 +3671,25 @@ button:disabled {
   .stage-focus-field,
   .reference-note-field {
     grid-column: auto;
+  }
+
+  .plan-schedule-wide,
+  .plan-schedule-weekdays {
+    grid-column: auto;
+  }
+
+  .plan-schedule-heading,
+  .plan-schedule-preview > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .plan-schedule-preview li {
+    grid-template-columns: 1fr auto;
+  }
+
+  .plan-schedule-preview li strong {
+    grid-column: 1 / -1;
   }
 
   .reader-toolbar [role="status"] {

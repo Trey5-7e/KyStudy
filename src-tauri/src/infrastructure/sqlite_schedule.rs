@@ -1,10 +1,14 @@
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::application::{ScheduleError, ScheduleRepository};
+use crate::application::{
+    PlanScheduleContext, PlanScheduleError, PlanScheduleRepository, ScheduleError,
+    ScheduleRepository,
+};
 use crate::domain::{
     DateRange, LocalDate, NewStudySession, NewSubject, NewTask, RescheduleDraft, SplitTaskDraft,
     StudySession, StudyStatistics, Subject, SubjectColor, SubjectStatistics, Task, TaskChange,
@@ -638,6 +642,150 @@ impl ScheduleRepository for SqliteScheduleRepository {
         let (connection, workspace_id) = self.open_current()?;
         calculate_statistics(&connection, &workspace_id, range, today)
     }
+}
+
+impl PlanScheduleRepository for SqliteScheduleRepository {
+    fn load_context(
+        &self,
+        stage_id: &str,
+        subject_id: Option<&str>,
+    ) -> Result<PlanScheduleContext, PlanScheduleError> {
+        let (connection, workspace_id) = self.open_current()?;
+        validate_subject(&connection, &workspace_id, subject_id)?;
+        load_plan_schedule_context(&connection, &workspace_id, stage_id)
+    }
+
+    fn generated_dates(
+        &self,
+        stage_id: &str,
+        range: &DateRange,
+    ) -> Result<Vec<LocalDate>, PlanScheduleError> {
+        let (connection, workspace_id) = self.open_current()?;
+        load_plan_schedule_context(&connection, &workspace_id, stage_id)?;
+        let mut statement = connection
+            .prepare(
+                "SELECT generated_date FROM plan_stage_task
+                 WHERE stage_id = ?1 AND generated_date BETWEEN ?2 AND ?3
+                 ORDER BY generated_date",
+            )
+            .map_err(database_error)?;
+        statement
+            .query_map(
+                params![stage_id, range.start.as_str(), range.end.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(database_error)?
+            .map(|row| {
+                let value = row.map_err(database_error)?;
+                LocalDate::parse(&value).map_err(|_| PlanScheduleError::InvalidStoredData)
+            })
+            .collect()
+    }
+
+    fn create_stage_tasks(
+        &self,
+        stage_id: &str,
+        tasks: &[NewTask],
+    ) -> Result<Vec<Task>, PlanScheduleError> {
+        let (mut connection, workspace_id) = self.open_current()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(database_error)?;
+        let context = load_plan_schedule_context(&transaction, &workspace_id, stage_id)?;
+        let subject_id = tasks
+            .first()
+            .and_then(|task| task.draft.subject_id.as_deref());
+        if tasks
+            .iter()
+            .any(|task| task.draft.subject_id.as_deref() != subject_id)
+        {
+            return Err(PlanScheduleError::InvalidStoredData);
+        }
+        validate_subject(&transaction, &workspace_id, subject_id)?;
+        let mut existing = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT generated_date FROM plan_stage_task
+                     WHERE stage_id = ?1 ORDER BY generated_date",
+                )
+                .map_err(database_error)?;
+            statement
+                .query_map([stage_id], |row| row.get::<_, String>(0))
+                .map_err(database_error)?
+                .map(|row| row.map_err(database_error))
+                .collect::<Result<BTreeSet<_>, _>>()?
+        };
+        let mut created_tasks = Vec::with_capacity(tasks.len());
+        for task in tasks {
+            if task.draft.planned_date < context.stage_start
+                || task.draft.planned_date > context.stage_end
+            {
+                return Err(PlanScheduleError::InvalidInput);
+            }
+            let generated_date = task.draft.planned_date.as_str();
+            if existing.contains(generated_date) {
+                continue;
+            }
+            let created = task_from_new(task);
+            insert_task(&transaction, &workspace_id, &created)?;
+            append_change(
+                &transaction,
+                &created,
+                None,
+                TaskChangeType::Created,
+                None,
+                created.created_at,
+            )?;
+            transaction
+                .execute(
+                    "INSERT INTO plan_stage_task(task_id, stage_id, generated_date, created_at)
+                     VALUES (?1, ?2, ?3, ?4)",
+                    params![created.id, stage_id, generated_date, created.created_at],
+                )
+                .map_err(database_error)?;
+            existing.insert(generated_date.to_owned());
+            created_tasks.push(created);
+        }
+        transaction.commit().map_err(database_error)?;
+        Ok(created_tasks)
+    }
+}
+
+fn load_plan_schedule_context(
+    connection: &Connection,
+    workspace_id: &str,
+    stage_id: &str,
+) -> Result<PlanScheduleContext, PlanScheduleError> {
+    let stored = connection
+        .query_row(
+            "SELECT p.title, p.status, s.title, s.start_date, s.end_date
+             FROM plan_stage s
+             JOIN study_plan p ON p.id = s.plan_id
+             WHERE s.id = ?1 AND p.workspace_id = ?2",
+            params![stage_id, workspace_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(database_error)?
+        .ok_or(PlanScheduleError::StageNotFound)?;
+    if stored.1 != "active" {
+        return Err(PlanScheduleError::PlanNotActive);
+    }
+    Ok(PlanScheduleContext {
+        plan_title: stored.0,
+        stage_title: stored.2,
+        stage_start: LocalDate::parse(&stored.3)
+            .map_err(|_| PlanScheduleError::InvalidStoredData)?,
+        stage_end: LocalDate::parse(&stored.4).map_err(|_| PlanScheduleError::InvalidStoredData)?,
+    })
 }
 
 #[derive(Debug)]
@@ -1327,16 +1475,19 @@ mod tests {
     use tempfile::{TempDir, tempdir};
 
     use super::SqliteScheduleRepository;
-    use crate::application::{ScheduleError, ScheduleRepository, WorkspaceRepository};
+    use crate::application::{
+        PlanScheduleError, PlanScheduleUseCases, PlanTaskScheduleInput, PlanningUseCases,
+        SavePlanInput, SavePlanStageInput, ScheduleError, ScheduleRepository, WorkspaceRepository,
+    };
     use crate::domain::{
         DateRange, LocalDate, NewStudySession, NewSubject, NewTask, NewWorkspace, RescheduleDraft,
         SplitChildDraft, SplitTaskDraft, SubjectColor, TaskChangeType, TaskDetailsDraft, TaskDraft,
         TaskPriority, TaskStatus, TaskTransition,
     };
-    use crate::infrastructure::SqliteWorkspaceRepository;
+    use crate::infrastructure::{SqlitePlanningRepository, SqliteWorkspaceRepository};
 
     struct Fixture {
-        _application_data: TempDir,
+        application_data: TempDir,
         workspace: SqliteWorkspaceRepository,
         schedule: SqliteScheduleRepository,
     }
@@ -1349,7 +1500,7 @@ mod tests {
             .expect("workspace should initialize");
         Fixture {
             schedule: SqliteScheduleRepository::new(application_data.path()),
-            _application_data: application_data,
+            application_data,
             workspace,
         }
     }
@@ -1383,6 +1534,139 @@ mod tests {
     fn one_day_range() -> DateRange {
         let date = LocalDate::parse("2026-07-18").expect("fixture date should parse");
         DateRange::new(date.clone(), date).expect("fixture range should be valid")
+    }
+
+    fn active_plan_stage(
+        fixture: &Fixture,
+    ) -> (PlanningUseCases<SqlitePlanningRepository>, String) {
+        let planning = PlanningUseCases::new(SqlitePlanningRepository::new(
+            fixture.application_data.path(),
+        ));
+        let plan = planning
+            .save_plan(SavePlanInput {
+                id: None,
+                title: "408 备考计划".to_owned(),
+                target_exam: None,
+                exam_date: Some("2026-12-20".to_owned()),
+                overview: None,
+            })
+            .expect("plan should persist");
+        let stage = planning
+            .save_stage(SavePlanStageInput {
+                id: None,
+                plan_id: plan.plan.id.clone(),
+                title: "基础阶段".to_owned(),
+                start_date: "2026-07-20".to_owned(),
+                end_date: "2026-07-26".to_owned(),
+                focus: Some("数据结构基础".to_owned()),
+                sort_order: 0,
+            })
+            .expect("stage should persist");
+        planning
+            .set_status(&plan.plan.id, "active")
+            .expect("plan should become active");
+        (planning, stage.id)
+    }
+
+    fn stage_schedule_input(stage_id: String) -> PlanTaskScheduleInput {
+        PlanTaskScheduleInput {
+            stage_id,
+            subject_id: None,
+            start_date: "2026-07-20".to_owned(),
+            end_date: "2026-07-26".to_owned(),
+            weekdays: vec![0, 2, 4],
+            title: "完成数据结构基础学习".to_owned(),
+            description: Some("按阶段重点执行".to_owned()),
+            estimated_minutes: Some(90),
+            priority: "high".to_owned(),
+        }
+    }
+
+    #[test]
+    fn plan_stage_confirmation_is_atomic_and_idempotent() {
+        let fixture = initialized_fixture();
+        let (_, stage_id) = active_plan_stage(&fixture);
+        let use_cases = PlanScheduleUseCases::new(fixture.schedule.clone());
+        let input = stage_schedule_input(stage_id);
+
+        let first = use_cases
+            .confirm(&input)
+            .expect("first confirmation should create tasks");
+        let second = use_cases
+            .confirm(&input)
+            .expect("repeated confirmation should be safe");
+        let connection =
+            Connection::open(fixture.workspace.database_path()).expect("database should reopen");
+        let created_history: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM task_change WHERE change_type = 'created'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("history should be readable");
+
+        assert_eq!(first.created_tasks.len(), 3);
+        assert!(second.created_tasks.is_empty());
+        assert_eq!(second.skipped_existing, 3);
+        assert_eq!(created_history, 3);
+    }
+
+    #[test]
+    fn deleting_a_stage_keeps_its_confirmed_tasks() {
+        let fixture = initialized_fixture();
+        let (planning, stage_id) = active_plan_stage(&fixture);
+        let use_cases = PlanScheduleUseCases::new(fixture.schedule.clone());
+        let mut input = stage_schedule_input(stage_id.clone());
+        input.weekdays = vec![0];
+        input.end_date = input.start_date.clone();
+        use_cases
+            .confirm(&input)
+            .expect("confirmation should create one task");
+
+        planning
+            .delete_stage(&stage_id)
+            .expect("stage should remain deletable");
+        let connection =
+            Connection::open(fixture.workspace.database_path()).expect("database should reopen");
+        let detached_links: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM plan_stage_task WHERE stage_id IS NULL",
+                [],
+                |row| row.get(0),
+            )
+            .expect("origin links should remain readable");
+
+        assert_eq!(detached_links, 1);
+        let generated_date = LocalDate::parse("2026-07-20").expect("date should parse");
+        assert_eq!(
+            fixture
+                .schedule
+                .list_tasks(
+                    &DateRange::new(generated_date.clone(), generated_date)
+                        .expect("range should be valid"),
+                )
+                .expect("generated task should remain")
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn draft_plan_stage_cannot_create_schedule_tasks() {
+        let fixture = initialized_fixture();
+        let (planning, stage_id) = active_plan_stage(&fixture);
+        let plan_id = planning.list().expect("plans should list")[0]
+            .plan
+            .id
+            .clone();
+        planning
+            .set_status(&plan_id, "draft")
+            .expect("plan should return to draft");
+        let use_cases = PlanScheduleUseCases::new(fixture.schedule.clone());
+
+        let result = use_cases.preview(&stage_schedule_input(stage_id));
+
+        assert!(matches!(result, Err(PlanScheduleError::PlanNotActive)));
     }
 
     #[test]
