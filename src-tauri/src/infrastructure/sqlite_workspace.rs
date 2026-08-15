@@ -17,11 +17,17 @@ const MINIMUM_SAFE_SQLITE_VERSION: i32 = 3_051_003;
 const MIGRATION_013_LEGACY_CHECKSUMS: &[&str] =
     &["E0DFA397DC05C5404FD7F4B7AC68C9E1A4ADF8C02EEDB6E10AC135B6C0DFBCD2"];
 // The v0.1.0 release candidate normalized line endings in these migration
-// files after some workspaces had already recorded the original bytes.
-const MIGRATION_015_LEGACY_CHECKSUMS: &[&str] =
-    &["2535352BA3F24A7291F9DBB7BA65A1A44F51CC5B4F242CDCBC3D8A447E3D321A"];
-const MIGRATION_017_LEGACY_CHECKSUMS: &[&str] =
-    &["B6C3C057B5A42BB1D8B1F678607BE7E1C06F3E23492BE67BA6DE44D6F07DB77C"];
+// files after some workspaces had already recorded the original bytes. The
+// second value for v15/v17 is the mixed-newline checksum produced by the
+// Windows worktree used to create those workspaces.
+const MIGRATION_015_LEGACY_CHECKSUMS: &[&str] = &[
+    "2535352BA3F24A7291F9DBB7BA65A1A44F51CC5B4F242CDCBC3D8A447E3D321A",
+    "EB4B6B1EAE66D7C7C31E1929956AE6364092C7131D0FE26D950E6B37B5F665C1",
+];
+const MIGRATION_017_LEGACY_CHECKSUMS: &[&str] = &[
+    "B6C3C057B5A42BB1D8B1F678607BE7E1C06F3E23492BE67BA6DE44D6F07DB77C",
+    "484ABC81FDDD41DC1C4325CC30A2389A6EE251A139886A828B54D63F95028CAE",
+];
 
 #[derive(Debug, Clone, Copy)]
 struct Migration {
@@ -949,6 +955,35 @@ mod tests {
         repository
             .find_default()
             .expect("known legacy migration checksums should remain readable");
+    }
+
+    #[test]
+    fn find_default_accepts_mixed_newline_worktree_histories() {
+        let directory = tempdir().expect("temporary directory should exist");
+        let repository = SqliteWorkspaceRepository::new(directory.path());
+        std::fs::create_dir_all(repository.workspace_directory())
+            .expect("workspace directory should exist");
+        let mut connection =
+            Connection::open(repository.database_path()).expect("workspace database should open");
+        configure_connection(&connection).expect("connection should configure");
+        apply_migrations(&mut connection, MIGRATIONS).expect("latest schema should be created");
+        connection
+            .execute(
+                "UPDATE schema_migration SET checksum = ?1 WHERE version = 15",
+                [MIGRATION_015_LEGACY_CHECKSUMS[1]],
+            )
+            .expect("fixture should use the mixed-newline v15 checksum");
+        connection
+            .execute(
+                "UPDATE schema_migration SET checksum = ?1 WHERE version = 17",
+                [MIGRATION_017_LEGACY_CHECKSUMS[1]],
+            )
+            .expect("fixture should use the mixed-newline v17 checksum");
+        drop(connection);
+
+        repository
+            .find_default()
+            .expect("mixed-newline migration checksums should remain readable");
     }
 
     #[test]
