@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import logoUrl from "../../assets/kystudy-icon.png";
 import {
@@ -21,6 +28,15 @@ const GITHUB_REPOSITORY_URL = "https://github.com/Trey5-7e/KyStudy";
 const AUTO_UPDATE_CHECK_KEY = "kystudy.settings.autoUpdateCheck";
 const LAST_UPDATE_CHECK_KEY = "kystudy.settings.lastUpdateCheck";
 const AUTO_UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+async function openRepository(event: MouseEvent<HTMLAnchorElement>) {
+  event.preventDefault();
+  try {
+    await openUrl(GITHUB_REPOSITORY_URL);
+  } catch {
+    window.open(GITHUB_REPOSITORY_URL, "_blank", "noopener,noreferrer");
+  }
+}
 
 type RuntimeState =
   | { kind: "loading" }
@@ -201,6 +217,7 @@ export function AboutSettings() {
             target="_blank"
             rel="noreferrer"
             className="settings-about-link"
+            onClick={(event) => void openRepository(event)}
           >
             GitHub 开源仓库
           </a>
