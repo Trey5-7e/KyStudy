@@ -4,7 +4,7 @@ R33 针对用户截图反馈的题目图片查看体验进行收敛：原来的 
 
 本文记录 R33 的交互契约、无障碍与资源生命周期边界、focused 验证证据、完整自动门禁和桌面人工验收。完整自动门禁已通过；用户在 R33 最终结果之后明确回复“验收通过，继续推进”，因此 R33 Release WebView 桌面人工验收与 R33 范围验收均已通过。R32 文档的历史状态不因 R33 反馈而改变。
 
-相关边界见 [R32 验收](R32_QUESTION_BANK_HOME_AND_DIALOG_REFINEMENT_ACCEPTANCE.md)、[R31 验收](R31_TOOL_CENTER_AND_WINDOW_NAVIGATION_ACCEPTANCE.md) 和 [PDF 渲染 ADR](adr/003-pdf-rendering.md)。
+相关边界见 [R32 验收](R32_QUESTION_BANK_HOME_AND_DIALOG_REFINEMENT_ACCEPTANCE.md)、[R31 验收](R31_TOOL_CENTER_AND_WINDOW_NAVIGATION_ACCEPTANCE.md) 和 [PDF 渲染 ADR](../../adr/003-pdf-rendering.md)。
 
 ## 1. 范围与不变边界
 

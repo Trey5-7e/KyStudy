@@ -124,7 +124,7 @@ Rust 核心是否承担 PDF 文字提取需要通过实验决定。首选让 PDF
 
 ### 4.3 可选 OCR Worker
 
-TV-07 已有条件通过并接受 [ADR-006](adr/006-ocr-deployment.md)。Windows 首批采用可选的
+TV-07 已有条件通过并接受 [ADR-006](../../adr/006-ocr-deployment.md)。Windows 首批采用可选的
 受控本地 sidecar，当前候选为 RapidOCR 3.9.2、PP-OCRv6 small 与 ONNX Runtime 1.27.0
 CPU。组件只在用户触发 OCR 时启动，批次结束后退出；模型随组件提供，不在首次识别时
 下载；当前 246.18 MiB 打包目录不进入最小安装包。
@@ -430,7 +430,7 @@ AI 调用前显示：提供商、模型、用途、文件、页码、图片数�
 
 **结果（2026-07-18）**
 
-TV-02 已通过，详见 [Spike 报告](spikes/TV-02-sqlite.md)。确认采用 Rust `rusqlite + bundled + backup`，SQLite 3.53.2 的外键、WAL、FTS5、迁移回滚、异常退出恢复和在线备份均满足标准；驱动与 Repository 边界见已接受的 [ADR-002](adr/002-sqlite-driver.md)。
+TV-02 已通过，详见 [Spike 报告](../../spikes/TV-02-sqlite.md)。确认采用 Rust `rusqlite + bundled + backup`，SQLite 3.53.2 的外键、WAL、FTS5、迁移回滚、异常退出恢复和在线备份均满足标准；驱动与 Repository 边界见已接受的 [ADR-002](../../adr/002-sqlite-driver.md)。
 
 ### TV-03：Blob 文件库
 
@@ -451,7 +451,7 @@ TV-02 已通过，详见 [Spike 报告](spikes/TV-02-sqlite.md)。确认采用 R
 
 **结果（2026-07-18）**
 
-TV-03 已通过，详见 [Spike 报告](spikes/TV-03-blob-store.md)。固定 1 MiB 缓冲区完成 10 MiB、300 MiB 和 1 GiB 流式导入；1 GiB 首次导入为 1,352 ms，测量进程峰值工作集为 7.46 MiB。同内容重复导入只复用原 Blob；持久化 `running` / `committing` Job 可处理异常退出与数据库提交失败。包含 SQLite 一致快照、Manifest 和 Blob 树的完整备份可在校验后恢复到不同绝对路径。文件存储与备份决策见已接受的 [ADR-004](adr/004-file-storage.md)。
+TV-03 已通过，详见 [Spike 报告](../../spikes/TV-03-blob-store.md)。固定 1 MiB 缓冲区完成 10 MiB、300 MiB 和 1 GiB 流式导入；1 GiB 首次导入为 1,352 ms，测量进程峰值工作集为 7.46 MiB。同内容重复导入只复用原 Blob；持久化 `running` / `committing` Job 可处理异常退出与数据库提交失败。包含 SQLite 一致快照、Manifest 和 Blob 树的完整备份可在校验后恢复到不同绝对路径。文件存储与备份决策见已接受的 [ADR-004](../../adr/004-file-storage.md)。
 
 ### TV-04：PDF 阅读与区域坐标
 
@@ -481,7 +481,7 @@ TV-03 已通过，详见 [Spike 报告](spikes/TV-03-blob-store.md)。固定 1 M
 
 **结果（2026-07-18）**
 
-TV-04 已通过，详见 [Spike 报告](spikes/TV-04-pdf-viewer.md)。PDF.js 6.1.200 使用本地 Worker 和受控 RangeSource 打开 25.58 MB、360 页样本，只传输 482,473 bytes；首页渲染 76.90 ms，216 次连续渲染均值 5.39 ms。四种旋转、多缩放和 DPR 2 的坐标最大误差约 `2.22e-16`，无文字层页仍能框选，旋转、放大和页面重载后覆盖框可恢复。第一次真实 Release WebView 测试发现并修复了 `convertFileSrc` 路由编码问题，项目维护者随后确认 `direct-id-v2` Release 正常加载；[ADR-001](adr/001-desktop-runtime.md) 和 [ADR-003](adr/003-pdf-rendering.md) 已接受。
+TV-04 已通过，详见 [Spike 报告](../../spikes/TV-04-pdf-viewer.md)。PDF.js 6.1.200 使用本地 Worker 和受控 RangeSource 打开 25.58 MB、360 页样本，只传输 482,473 bytes；首页渲染 76.90 ms，216 次连续渲染均值 5.39 ms。四种旋转、多缩放和 DPR 2 的坐标最大误差约 `2.22e-16`，无文字层页仍能框选，旋转、放大和页面重载后覆盖框可恢复。第一次真实 Release WebView 测试发现并修复了 `convertFileSrc` 路由编码问题，项目维护者随后确认 `direct-id-v2` Release 正常加载；[ADR-001](../../adr/001-desktop-runtime.md) 和 [ADR-003](../../adr/003-pdf-rendering.md) 已接受。
 
 ### TV-05：中文全文检索
 
@@ -545,12 +545,12 @@ TV-04 已通过，详见 [Spike 报告](spikes/TV-04-pdf-viewer.md)。PDF.js 6.1
 - OCR 不作为打开和手动标记 PDF 的前置条件；
 - 安装体积和首次模型下载对用户透明。
 
-TV-07 已有条件通过，详见 [Spike 报告](spikes/TV-07-ocr.md)。四类合成样本中三类普通
+TV-07 已有条件通过，详见 [Spike 报告](../../spikes/TV-07-ocr.md)。四类合成样本中三类普通
 中文 CER 为 0，公式表格页 CER 为 1.79%，所有关键词召回和归一化文字框检查通过；
 平均单页约 0.44–1.02 秒。模型共 30.28 MiB且可完全离线运行，打包 Worker 连续 12 次
 平均 694.88 ms，但目录为 246.18 MiB、峰值 RSS 为 728.88 MiB，因此必须按需启动并
 作为可选组件分发。首次 PyInstaller 产物暴露并修复了旧 VC Runtime 导致 ONNX Runtime
-加载失败的问题。部署边界见已接受的 [ADR-006](adr/006-ocr-deployment.md)。
+加载失败的问题。部署边界见已接受的 [ADR-006](../../adr/006-ocr-deployment.md)。
 
 ### TV-08：AI 适配器、引用与预算
 

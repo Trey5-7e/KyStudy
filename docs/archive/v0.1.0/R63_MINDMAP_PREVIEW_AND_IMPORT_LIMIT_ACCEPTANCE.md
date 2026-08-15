@@ -47,5 +47,5 @@ R63 针对思维导图大文件和浏览体验做了两项收敛：把生成导�
 
 验收前请始终使用这里记录的最新产物：
 
-- [kystudy.exe](../src-tauri/target/release/kystudy.exe)：26,096,128 bytes，SHA-256 `8C80E22AEA923F34A464E8F05B4384209CCDA4001798800C7B37CF555170DBA4`
+- [kystudy.exe](../../../src-tauri/target/release/kystudy.exe)：26,096,128 bytes，SHA-256 `8C80E22AEA923F34A464E8F05B4384209CCDA4001798800C7B37CF555170DBA4`
 - `kystudy.pdb`：13,815,808 bytes，SHA-256 `5FC5126B93BAD6E1FFC0DE2324921B8C57B68A4E07443C16C6CEEA0E69790D4F`

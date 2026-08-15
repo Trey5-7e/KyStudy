@@ -41,7 +41,7 @@ R61 修复思维导图页面在工作区或 SQLite 边界失败时显示通用�
 
 本批产物：
 
-- [kystudy.exe](../src-tauri/target/release/kystudy.exe)：26,092,032 bytes，SHA-256 `9E66CA75841276904307B35E44053D2A6824020E1959CF7BC7DAE16BADA171E`
+- [kystudy.exe](../../../src-tauri/target/release/kystudy.exe)：26,092,032 bytes，SHA-256 `9E66CA75841276904307B35E44053D2A6824020E1959CF7BC7DAE16BADA171E`
 - `kystudy.pdb`：13,815,808 bytes，SHA-256 `2111F940275360FB96A8F730D40BD1BFDFB934B35E58377C8054B442ACE241DF`
 
 验收前请使用本批最新 Release 产物。历史 R60 文档保持不变。

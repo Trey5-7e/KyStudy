@@ -5,7 +5,7 @@
 | 工作项 | M1-011 |
 | 日期 | 2026-07-18 |
 | 状态 | completed |
-| 依据 | [ADR-004](adr/004-file-storage.md)、[TV-03](spikes/TV-03-blob-store.md) |
+| 依据 | [ADR-004](../../adr/004-file-storage.md)、[TV-03](../../spikes/TV-03-blob-store.md) |
 
 ## 实现范围
 

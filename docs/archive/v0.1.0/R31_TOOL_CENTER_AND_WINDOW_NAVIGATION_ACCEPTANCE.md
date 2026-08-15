@@ -14,7 +14,7 @@ R31 只从官方 GitHub 项目中提炼信息架构层面的经验，不复制�
 | [Logseq](https://github.com/logseq/logseq) | 在深层工作流中保留当前上下文，并提供可预测的返回路径 | 只采用“从子流返回原上下文”的原则，不复制页面、主题或交互实现 |
 | [Stirling-PDF](https://github.com/Stirling-Tools/Stirling-PDF) | 将同类 PDF 操作集中到工具入口，执行后返回来源位置 | 只采用“工具中心 + 来源返回”的组织方式，不复制其工具卡片视觉或 PDF 功能 |
 
-这三项来源用于解释 R31 的分组、上下文和返回原则；KyStudy 仍遵循自己的 PRD、信息架构和 R30 窗口约束。参见 [PRD](PRD.md)、[信息架构](INFORMATION_ARCHITECTURE.md) 和 [R30 验收](R30_SEGMENT_REASSIGN_AND_WINDOWED_UI_ACCEPTANCE.md)。
+这三项来源用于解释 R31 的分组、上下文和返回原则；KyStudy 仍遵循自己的 PRD、信息架构和 R30 窗口约束。参见 [PRD](../../PRD.md)、[信息架构](../../INFORMATION_ARCHITECTURE.md) 和 [R30 验收](R30_SEGMENT_REASSIGN_AND_WINDOWED_UI_ACCEPTANCE.md)。
 
 ## 2. 入口收敛与工具中心
 

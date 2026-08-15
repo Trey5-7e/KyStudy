@@ -46,7 +46,7 @@ R60 已经在前端和 Rust 解析层支持 `xmind`，但历史工作区的 `map
 
 本批产物：
 
-- [kystudy.exe](../src-tauri/target/release/kystudy.exe)：26,092,032 bytes，SHA-256 `F07F0E6F1AB0D0E542A6785E0A327FF163B716A5D6828CB385D05F64994B9E20`
+- [kystudy.exe](../../../src-tauri/target/release/kystudy.exe)：26,092,032 bytes，SHA-256 `F07F0E6F1AB0D0E542A6785E0A327FF163B716A5D6828CB385D05F64994B9E20`
 - `kystudy.pdb`：13,815,808 bytes，SHA-256 `F4C9DBEFCA6D34CBF8BB392792AD7DB8EB0FF57654E3999B2B6C2B7DE2B20989`
 
 验收前请使用本批最新 Release 产物。历史 R60、R61 文档保持不变。

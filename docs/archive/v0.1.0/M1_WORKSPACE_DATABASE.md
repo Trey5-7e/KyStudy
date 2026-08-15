@@ -5,7 +5,7 @@
 | 工作项 | M1-010                                                                     |
 | 日期   | 2026-07-18                                                                 |
 | 状态   | completed                                                                  |
-| 依据   | [ADR-001](adr/001-desktop-runtime.md)、[ADR-002](adr/002-sqlite-driver.md) |
+| 依据   | [ADR-001](../../adr/001-desktop-runtime.md)、[ADR-002](../../adr/002-sqlite-driver.md) |
 
 > 本文记录 M1-010 完成时的 v1 快照。当前正式工程已由 M1-011 升级到 schema v2；最新 Blob 范围和 Release 信息见 [M1_BLOB_IMPORT.md](M1_BLOB_IMPORT.md)。
 

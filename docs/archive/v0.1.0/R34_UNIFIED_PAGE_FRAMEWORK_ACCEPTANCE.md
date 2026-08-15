@@ -6,7 +6,7 @@ R34 收敛一级页面重复标题、主操作层级和异步状态表达。应�
 
 前置状态：R33 的完整自动门禁和 Release WebView 桌面人工验收均已通过；用户在 R33 最终结果之后明确回复“验收通过，继续推进”。该结论是 R34 的历史基线，不替代 R34 修改后的新门禁与桌面回归。
 
-相关产品边界见 [PRD](PRD.md)、[信息架构](INFORMATION_ARCHITECTURE.md)、[R32 验收](R32_QUESTION_BANK_HOME_AND_DIALOG_REFINEMENT_ACCEPTANCE.md) 和 [R33 验收](R33_FULLSCREEN_QUESTION_IMAGE_VIEWER_ACCEPTANCE.md)。
+相关产品边界见 [PRD](../../PRD.md)、[信息架构](../../INFORMATION_ARCHITECTURE.md)、[R32 验收](R32_QUESTION_BANK_HOME_AND_DIALOG_REFINEMENT_ACCEPTANCE.md) 和 [R33 验收](R33_FULLSCREEN_QUESTION_IMAGE_VIEWER_ACCEPTANCE.md)。
 
 ## 1. 目标与非目标
 

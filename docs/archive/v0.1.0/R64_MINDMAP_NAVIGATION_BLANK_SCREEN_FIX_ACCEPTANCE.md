@@ -35,5 +35,5 @@ R64 修复了“选中节点后再次进入同一思维导图出现空白页”�
 
 验收前请使用这里记录的最新产物：
 
-- [kystudy.exe](../src-tauri/target/release/kystudy.exe)：26,096,128 bytes，SHA-256 `8DD3D48F63A1375FB90325D75FBEFAD0A23BB57172086006B5492696A8083089`
+- [kystudy.exe](../../../src-tauri/target/release/kystudy.exe)：26,096,128 bytes，SHA-256 `8DD3D48F63A1375FB90325D75FBEFAD0A23BB57172086006B5492696A8083089`
 - `kystudy.pdb`：13,815,808 bytes，SHA-256 `93653E59FDFF7002CB5800094A6FC224758D90324A8DA58A7434BC97B5F4D5E6`

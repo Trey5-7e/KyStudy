@@ -21,7 +21,7 @@ M1～M13 建立了可靠的本地文件、SQLite、PDF、OCR、AI、计划、导
 → 系统更新下一次安排和进度
 ```
 
-详细需求见 [PRD v0.2](PRD.md)，页面结构见 [信息架构 v0.2](INFORMATION_ARCHITECTURE.md)。
+详细需求见 [PRD v0.2](../../PRD.md)，页面结构见 [信息架构 v0.2](../../INFORMATION_ARCHITECTURE.md)。
 
 ## 2. 已确认的不可回退决策
 

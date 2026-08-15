@@ -108,7 +108,7 @@ pnpm tauri build --no-bundle
 
 ### 5.1 Windows CI
 
-`.github/workflows/windows-ci.yml` 在固定的 `windows-2025` GitHub 托管 Runner 上重复执行上述质量门槛和 Release 构建。`scripts/test-release-smoke.ps1` 随后在隔离 AppData 下验证主窗口启动、进程稳定性和“启动不自动创建工作区”，并将 EXE 与 JSON 报告上传为短期 Artifact。详细边界与首次验收步骤见 [M1 Windows CI 文档](M1_WINDOWS_CI.md)。
+`.github/workflows/windows-ci.yml` 在固定的 `windows-2025` GitHub 托管 Runner 上重复执行上述质量门槛和 Release 构建。`scripts/test-release-smoke.ps1` 随后在隔离 AppData 下验证主窗口启动、进程稳定性和“启动不自动创建工作区”，并将 EXE 与 JSON 报告上传为短期 Artifact。详细边界与首次验收步骤见 [M1 Windows CI 文档](archive/v0.1.0/M1_WINDOWS_CI.md)。
 
 ## 6. TV-01 实验依赖
 

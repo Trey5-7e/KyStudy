@@ -4,7 +4,7 @@ R32 在 R30 的 active-only 题库语义和 R31 的单一窗口导航之上，�
 
 本文记录当前实现的交互契约、可复核的前端定向证据、完整自动门禁实绩和仍待用户执行的桌面人工验收。定向证据来自本轮已有的 focused 验证；完整自动门禁已按一次性顺序执行，本次整理不重新执行测试、完整 `pnpm check`、Rust 门禁或 Tauri 构建，也不启动桌面应用。
 
-相关边界见 [PRD](PRD.md)、[信息架构](INFORMATION_ARCHITECTURE.md)、[R30 验收](R30_SEGMENT_REASSIGN_AND_WINDOWED_UI_ACCEPTANCE.md) 和 [R31 验收](R31_TOOL_CENTER_AND_WINDOW_NAVIGATION_ACCEPTANCE.md)。
+相关边界见 [PRD](../../PRD.md)、[信息架构](../../INFORMATION_ARCHITECTURE.md)、[R30 验收](R30_SEGMENT_REASSIGN_AND_WINDOWED_UI_ACCEPTANCE.md) 和 [R31 验收](R31_TOOL_CENTER_AND_WINDOW_NAVIGATION_ACCEPTANCE.md)。
 
 ## 1. 本轮范围与不变边界
 

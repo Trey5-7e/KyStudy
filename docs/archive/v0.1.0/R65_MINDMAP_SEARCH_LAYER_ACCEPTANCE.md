@@ -32,5 +32,5 @@ R65 修复了节点搜索结果被 MindElixir 预览画布覆盖、文字看似�
 
 验收前请使用这里记录的最新产物：
 
-- [kystudy.exe](../src-tauri/target/release/kystudy.exe)：26,096,128 bytes，SHA-256 `E6886C1D822B408D30790BAFEACF4D968DF85C7EE8B10E480A8F6FE62592CC59`
+- [kystudy.exe](../../../src-tauri/target/release/kystudy.exe)：26,096,128 bytes，SHA-256 `E6886C1D822B408D30790BAFEACF4D968DF85C7EE8B10E480A8F6FE62592CC59`
 - `kystudy.pdb`：13,815,808 bytes，SHA-256 `8FC429D71B442D028C358FEECCE6183034A789807D611141D9F2EB22B0872B58`

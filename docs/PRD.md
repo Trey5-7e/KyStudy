@@ -551,7 +551,7 @@ OCR 继续用于本地搜索和辅助分类，但不是 AI 解题的优先输入
 
 ## 15. 实施边界
 
-整改按 [产品简化整改实施方案](SIMPLIFICATION_REDESIGN_PLAN.md) 分阶段进行。每个阶段都必须：
+整改按 [产品简化整改实施方案](archive/v0.1.0/SIMPLIFICATION_REDESIGN_PLAN.md) 分阶段进行。每个阶段都必须：
 
 - 保持现有用户工作区可打开；
 - 不以删除数据作为界面简化手段；

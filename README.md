@@ -157,6 +157,7 @@ AI 只在用户主动触发时调用。规划结果先作为草案展示，确�
 
 ## 开发文档
 
+- [文档导航](docs/README.md)
 - [v0.1.0 开发交接文档](docs/V0_1_0_DEVELOPMENT_HANDOFF.md)
 - [v0.1.0 最终验收记录](docs/V0_1_0_FINAL_ACCEPTANCE.md)
 - [精简开发流程](docs/DEVELOPMENT_WORKFLOW.md)
@@ -167,7 +168,7 @@ AI 只在用户主动触发时调用。规划结果先作为草案展示，确�
 - [OCR 组件管理验收](docs/R50_OCR_COMPONENT_MANAGEMENT_ACCEPTANCE.md)
 - [OCR 在线下载与发布边界](docs/R52_OCR_COMPONENT_PACKAGING_ACCEPTANCE.md)
 
-历史里程碑与 R1–R65 验收记录继续保留在 docs/，用于追溯行为契约和测试证据。
+历史里程碑与 R1–R65 验收记录归档在 [docs/archive/v0.1.0/](docs/archive/v0.1.0/)，用于追溯行为契约和测试证据。
 
 ## 路线图
 

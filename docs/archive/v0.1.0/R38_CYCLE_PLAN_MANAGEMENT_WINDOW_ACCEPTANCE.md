@@ -37,7 +37,7 @@ R38 收敛周期计划卡片和维护入口：卡片只保留一个“查看计�
 
 ## 5. 完整自动门禁与产物核查
 
-门禁按 [开发流程](DEVELOPMENT_WORKFLOW.md) 固定顺序各执行一次，全部 exit 0；本轮未重跑任何命令，也未启动 EXE。
+门禁按 [开发流程](../../DEVELOPMENT_WORKFLOW.md) 固定顺序各执行一次，全部 exit 0；本轮未重跑任何命令，也未启动 EXE。
 
 门禁前只读预检时间为 `2026-08-10T17:55:39.8897136+08:00`：Node `v22.18.0`、pnpm `11.16.0`、cargo `1.97.1`、rustc `1.97.1`、Tauri CLI `2.11.4`；`cargo metadata --locked --no-deps` exit 0；未发现 `pnpm`、`cargo`、`rustc`、`tauri` 或 `kystudy` 残留进程；F 盘可用空间 `37,388,632,064` bytes。
 

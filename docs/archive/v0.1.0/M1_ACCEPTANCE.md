@@ -30,7 +30,7 @@ M1 的前端仍只能调用白名单 Tauri Command，不能获得任意路径、
 - TV-03 已对 10 MiB、300 MiB 和 1 GiB 样本完成固定缓冲流式验证；正式实现沿用 1 MiB 固定缓冲协议；
 - 导入、备份与恢复测试能够拒绝缺失或损坏 Blob；
 - ADR 索引已与四份 `accepted` 决策同步，Spike 与 ADR 可以双向追溯；
-- Node 与 Rust 依赖许可证快照、复核命令和正式发布边界已记录在 [依赖许可证审计](DEPENDENCY_LICENSES.md)。
+- Node 与 Rust 依赖许可证快照、复核命令和正式发布边界已记录在 [依赖许可证审计](../../DEPENDENCY_LICENSES.md)。
 
 ## 收尾决定
 
