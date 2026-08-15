@@ -1164,6 +1164,8 @@ mod tests {
                 .create_question(CreateQuestionInput {
                     document_id: self.document_id.clone(),
                     title: title.to_owned(),
+                    subject_id: None,
+                    question_type: Some("solution".to_owned()),
                     chapter: Some("数据结构".to_owned()),
                     question_number: None,
                     difficulty: 4,
@@ -1497,7 +1499,22 @@ mod tests {
         let connection = Connection::open(database_path).expect("database should open");
         connection
             .execute_batch(
-                "DROP TABLE ai_context_ref;
+                "DROP INDEX idx_resource_document_active;
+                 ALTER TABLE resource_document DROP COLUMN deleted_at;
+                 DROP TABLE review_scheme_undo;
+                 DROP TABLE question_gap_acknowledgement;
+                 DROP TABLE cycle_plan_shift_undo_item;
+                 DROP TABLE cycle_plan_shift_undo;
+                 DROP TABLE cycle_plan_item;
+                 DROP TABLE cycle_plan;
+                 DROP TABLE ai_context_ref;
+                 DROP TABLE review_scheme_queue_item;
+                 DROP TABLE review_scheme_queue;
+                 DROP TABLE review_scheme_type_quota;
+                 DROP TABLE review_scheme_document;
+                 DROP TABLE review_scheme;
+                 DROP TABLE workspace_rest_weekday;
+                 DROP TABLE workbook_profile;
                  DROP TABLE ai_message;
                  DROP TABLE ai_conversation;
                  ALTER TABLE study_plan DROP COLUMN source_ai_message_id;
@@ -1519,7 +1536,16 @@ mod tests {
                  DROP TABLE plan_stage_task;
                  DROP TABLE question_region_ocr_line;
                  DROP TABLE question_region_ocr;
-                 DELETE FROM schema_migration WHERE version IN (8, 9, 10, 11, 12, 13, 14);
+                 DROP TABLE workbook_segment_question_trash;
+                 DROP TABLE question_index_metadata;
+                 DROP TABLE workbook_document_segment;
+                 DROP TABLE workbook_category;
+                 DROP INDEX idx_question_effective_subject;
+                 ALTER TABLE question DROP COLUMN classification_confidence;
+                 ALTER TABLE question DROP COLUMN classification_source;
+                 ALTER TABLE question DROP COLUMN question_type;
+                 ALTER TABLE question DROP COLUMN subject_id;
+                 DELETE FROM schema_migration WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23);
                  PRAGMA user_version = 7;",
             )
             .expect("fixture should become schema v7");

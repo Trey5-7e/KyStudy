@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use uuid::Uuid;
@@ -55,6 +56,34 @@ pub(crate) struct OcrEngineOutput {
     pub(crate) lines: Vec<OcrEngineLine>,
 }
 
+/// One page image submitted for ephemeral OCR during PDF question indexing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RecognizePdfPageInput {
+    pub(crate) page_number: u32,
+    pub(crate) image_bytes: Vec<u8>,
+}
+
+/// One normalized text box returned by ephemeral page OCR.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct OcrPageLine {
+    pub(crate) text: String,
+    pub(crate) confidence: f64,
+    pub(crate) x: f64,
+    pub(crate) y: f64,
+    pub(crate) width: f64,
+    pub(crate) height: f64,
+    pub(crate) sort_order: u32,
+}
+
+/// Ephemeral OCR output for one PDF page; it is never persisted by this use case.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct OcrPageRecognition {
+    pub(crate) page_number: u32,
+    pub(crate) engine: String,
+    pub(crate) mean_confidence: f64,
+    pub(crate) lines: Vec<OcrPageLine>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RecognizeQuestionRegionInput {
     pub(crate) region_id: String,
@@ -95,6 +124,20 @@ pub(crate) enum OcrError {
     ComponentIncomplete,
     #[error("OCR component is incompatible")]
     ComponentIncompatible,
+    #[error("OCR component source is invalid")]
+    ComponentSourceInvalid,
+    #[error("OCR component installation failed")]
+    ComponentInstallFailed,
+    #[error("OCR component download is unavailable")]
+    ComponentDownloadUnavailable,
+    #[error("OCR component download failed")]
+    ComponentDownloadFailed,
+    #[error("OCR component download integrity check failed")]
+    ComponentDownloadIntegrity,
+    #[error("OCR component archive is invalid")]
+    ComponentArchiveInvalid,
+    #[error("OCR component removal failed")]
+    ComponentRemovalFailed,
     #[error("OCR operation was canceled")]
     Canceled,
     #[error("OCR operation timed out")]
@@ -121,6 +164,13 @@ impl OcrError {
             Self::ComponentMissing => "OCR_COMPONENT_MISSING",
             Self::ComponentIncomplete => "OCR_COMPONENT_INCOMPLETE",
             Self::ComponentIncompatible => "OCR_COMPONENT_INCOMPATIBLE",
+            Self::ComponentSourceInvalid => "OCR_COMPONENT_SOURCE_INVALID",
+            Self::ComponentInstallFailed => "OCR_COMPONENT_INSTALL_FAILED",
+            Self::ComponentDownloadUnavailable => "OCR_COMPONENT_DOWNLOAD_UNAVAILABLE",
+            Self::ComponentDownloadFailed => "OCR_COMPONENT_DOWNLOAD_FAILED",
+            Self::ComponentDownloadIntegrity => "OCR_COMPONENT_DOWNLOAD_INTEGRITY",
+            Self::ComponentArchiveInvalid => "OCR_COMPONENT_ARCHIVE_INVALID",
+            Self::ComponentRemovalFailed => "OCR_COMPONENT_REMOVAL_FAILED",
             Self::Canceled => "OCR_CANCELED",
             Self::Timeout => "OCR_TIMEOUT",
             Self::WorkerFailed => "OCR_WORKER_FAILED",
@@ -151,6 +201,20 @@ pub(crate) trait OcrEngine: Clone + Send + Sync + 'static {
         image_bytes: &[u8],
         canceled: &AtomicBool,
     ) -> Result<OcrEngineOutput, OcrError>;
+}
+
+pub(crate) trait OcrComponentManager {
+    fn install_component(&self, source: &Path) -> Result<OcrComponentStatus, OcrError>;
+    fn remove_component(&self) -> Result<OcrComponentStatus, OcrError>;
+}
+
+pub(crate) trait OcrComponentDownloader {
+    fn download_available(&self) -> bool;
+    fn download_component(
+        &self,
+        canceled: &AtomicBool,
+        observe: &mut dyn FnMut(u64, u64),
+    ) -> Result<OcrComponentStatus, OcrError>;
 }
 
 #[derive(Debug, Clone)]
@@ -239,6 +303,53 @@ impl<R: OcrRepository, E: OcrEngine> OcrUseCases<R, E> {
         })
     }
 
+    /// Recognizes one PDF page without writing a draft or changing any index.
+    pub(crate) fn recognize_page(
+        &self,
+        input: &RecognizePdfPageInput,
+        canceled: &AtomicBool,
+    ) -> Result<OcrPageRecognition, OcrError> {
+        if input.page_number == 0 {
+            return Err(OcrError::InvalidInput);
+        }
+        validate_image(&input.image_bytes)?;
+        if canceled.load(Ordering::Relaxed) {
+            return Err(OcrError::Canceled);
+        }
+        let output = validate_output(self.engine.recognize(&input.image_bytes, canceled)?)?;
+        if canceled.load(Ordering::Relaxed) {
+            return Err(OcrError::Canceled);
+        }
+        let line_count = u32::try_from(output.lines.len()).map_err(|_| OcrError::ResultInvalid)?;
+        let mean_confidence = if line_count == 0 {
+            0.0
+        } else {
+            output.lines.iter().map(|line| line.confidence).sum::<f64>() / f64::from(line_count)
+        };
+        let lines = output
+            .lines
+            .into_iter()
+            .enumerate()
+            .map(|(index, line)| {
+                Ok(OcrPageLine {
+                    text: line.text,
+                    confidence: line.confidence,
+                    x: line.x,
+                    y: line.y,
+                    width: line.width,
+                    height: line.height,
+                    sort_order: u32::try_from(index).map_err(|_| OcrError::ResultInvalid)?,
+                })
+            })
+            .collect::<Result<Vec<_>, OcrError>>()?;
+        Ok(OcrPageRecognition {
+            page_number: input.page_number,
+            engine: output.engine,
+            mean_confidence,
+            lines,
+        })
+    }
+
     pub(crate) fn confirm(
         &self,
         input: &ConfirmQuestionRegionOcrInput,
@@ -255,6 +366,30 @@ impl<R: OcrRepository, E: OcrEngine> OcrUseCases<R, E> {
     pub(crate) fn discard(&self, recognition_id: &str) -> Result<(), OcrError> {
         validate_id(recognition_id)?;
         self.repository.discard_draft(recognition_id)
+    }
+}
+
+impl<R: OcrRepository, E: OcrEngine + OcrComponentManager> OcrUseCases<R, E> {
+    pub(crate) fn install_component(&self, source: &Path) -> Result<OcrComponentStatus, OcrError> {
+        self.engine.install_component(source)
+    }
+
+    pub(crate) fn remove_component(&self) -> Result<OcrComponentStatus, OcrError> {
+        self.engine.remove_component()
+    }
+}
+
+impl<R: OcrRepository, E: OcrEngine + OcrComponentDownloader> OcrUseCases<R, E> {
+    pub(crate) fn download_available(&self) -> bool {
+        self.engine.download_available()
+    }
+
+    pub(crate) fn download_component(
+        &self,
+        canceled: &AtomicBool,
+        observe: &mut dyn FnMut(u64, u64),
+    ) -> Result<OcrComponentStatus, OcrError> {
+        self.engine.download_component(canceled, observe)
     }
 }
 
@@ -458,5 +593,94 @@ mod tests {
         );
 
         assert!(matches!(result, Err(OcrError::InvalidInput)));
+    }
+
+    #[test]
+    fn recognize_page_rejects_zero_page_number() {
+        let use_cases = OcrUseCases::new(
+            FakeRepository {
+                saved: Arc::new(Mutex::new(Vec::new())),
+            },
+            FakeEngine,
+        );
+
+        let result = use_cases.recognize_page(
+            &RecognizePdfPageInput {
+                page_number: 0,
+                image_bytes: png_bytes(),
+            },
+            &AtomicBool::new(false),
+        );
+
+        assert!(matches!(result, Err(OcrError::InvalidInput)));
+    }
+
+    #[test]
+    fn recognize_page_rejects_non_png_bytes() {
+        let use_cases = OcrUseCases::new(
+            FakeRepository {
+                saved: Arc::new(Mutex::new(Vec::new())),
+            },
+            FakeEngine,
+        );
+
+        let result = use_cases.recognize_page(
+            &RecognizePdfPageInput {
+                page_number: 2,
+                image_bytes: b"not-png".to_vec(),
+            },
+            &AtomicBool::new(false),
+        );
+
+        assert!(matches!(result, Err(OcrError::InvalidInput)));
+    }
+
+    #[test]
+    fn recognize_page_stops_before_the_engine_when_canceled() {
+        let use_cases = OcrUseCases::new(
+            FakeRepository {
+                saved: Arc::new(Mutex::new(Vec::new())),
+            },
+            FakeEngine,
+        );
+
+        let result = use_cases.recognize_page(
+            &RecognizePdfPageInput {
+                page_number: 2,
+                image_bytes: png_bytes(),
+            },
+            &AtomicBool::new(true),
+        );
+
+        assert!(matches!(result, Err(OcrError::Canceled)));
+    }
+
+    #[test]
+    fn recognize_page_returns_typed_lines_without_writing_a_repository_record() {
+        let repository = FakeRepository {
+            saved: Arc::new(Mutex::new(Vec::new())),
+        };
+        let saved = Arc::clone(&repository.saved);
+        let use_cases = OcrUseCases::new(repository, FakeEngine);
+
+        let recognition = use_cases
+            .recognize_page(
+                &RecognizePdfPageInput {
+                    page_number: 2,
+                    image_bytes: png_bytes(),
+                },
+                &AtomicBool::new(false),
+            )
+            .expect("valid OCR output should stay in memory");
+
+        assert_eq!(recognition.page_number, 2);
+        assert_eq!(recognition.engine, OCR_ENGINE_NAME);
+        assert_eq!(recognition.lines.len(), 1);
+        assert!(
+            saved
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .is_empty()
+        );
     }
 }

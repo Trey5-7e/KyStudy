@@ -1545,6 +1545,7 @@ mod tests {
         let plan = planning
             .save_plan(SavePlanInput {
                 id: None,
+                expected_revision: None,
                 title: "408 备考计划".to_owned(),
                 target_exam: None,
                 exam_date: Some("2026-12-20".to_owned()),
@@ -1555,6 +1556,7 @@ mod tests {
             .save_stage(SavePlanStageInput {
                 id: None,
                 plan_id: plan.plan.id.clone(),
+                expected_plan_revision: plan.plan.revision,
                 title: "基础阶段".to_owned(),
                 start_date: "2026-07-20".to_owned(),
                 end_date: "2026-07-26".to_owned(),
@@ -1563,7 +1565,7 @@ mod tests {
             })
             .expect("stage should persist");
         planning
-            .set_status(&plan.plan.id, "active")
+            .set_status(&plan.plan.id, plan.plan.revision + 1, "active")
             .expect("plan should become active");
         (planning, stage.id)
     }
@@ -1622,9 +1624,10 @@ mod tests {
         use_cases
             .confirm(&input)
             .expect("confirmation should create one task");
+        let revision = planning.list().expect("plans should list")[0].plan.revision;
 
         planning
-            .delete_stage(&stage_id)
+            .delete_stage(&stage_id, revision)
             .expect("stage should remain deletable");
         let connection =
             Connection::open(fixture.workspace.database_path()).expect("database should reopen");
@@ -1655,12 +1658,9 @@ mod tests {
     fn draft_plan_stage_cannot_create_schedule_tasks() {
         let fixture = initialized_fixture();
         let (planning, stage_id) = active_plan_stage(&fixture);
-        let plan_id = planning.list().expect("plans should list")[0]
-            .plan
-            .id
-            .clone();
+        let plan = planning.list().expect("plans should list")[0].plan.clone();
         planning
-            .set_status(&plan_id, "draft")
+            .set_status(&plan.id, plan.revision, "draft")
             .expect("plan should return to draft");
         let use_cases = PlanScheduleUseCases::new(fixture.schedule.clone());
 

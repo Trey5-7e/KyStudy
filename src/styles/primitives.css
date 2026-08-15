@@ -1,0 +1,577 @@
+.ui-button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: var(--control-height-md);
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-3);
+  color: var(--color-text-primary);
+  background: transparent;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: color-mix(
+    in srgb,
+    var(--color-primary) 16%,
+    transparent
+  );
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.ui-button:focus-visible,
+.ui-control:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.ui-button:disabled,
+.ui-control:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ui-button-primary {
+  color: var(--color-text-inverse);
+  background: var(--color-primary);
+}
+
+.ui-button-primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.ui-button-secondary {
+  border-color: var(--color-border-default);
+  background: var(--color-bg-surface);
+}
+
+.ui-button-secondary:hover:not(:disabled),
+.ui-button-ghost:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+}
+
+.ui-button-danger {
+  color: var(--color-text-inverse);
+  background: var(--color-danger);
+}
+
+.ui-button-danger:hover:not(:disabled) {
+  background: var(--color-danger-hover);
+}
+
+.ui-button-text {
+  min-height: auto;
+  padding: var(--space-1);
+  color: var(--color-primary);
+}
+
+.ui-button-text:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.ui-button-sm {
+  min-height: var(--control-height-sm);
+  padding-inline: var(--space-2);
+}
+.ui-button-lg {
+  min-height: var(--control-height-lg);
+  padding-inline: var(--space-4);
+}
+.ui-button-block {
+  width: 100%;
+}
+.ui-icon-button {
+  width: var(--control-height-md);
+  padding: 0;
+  flex: 0 0 auto;
+}
+.ui-icon-button.ui-button-sm {
+  width: var(--control-height-sm);
+}
+.ui-icon-button.ui-button-lg {
+  width: var(--control-height-lg);
+}
+
+.ui-field {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.ui-field-label {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+.ui-field-required {
+  color: var(--color-danger);
+}
+.ui-field-description,
+.ui-field-error {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-body);
+}
+.ui-field-description {
+  color: var(--color-text-muted);
+}
+.ui-field-error {
+  color: var(--color-danger);
+}
+
+.ui-control {
+  width: 100%;
+  min-height: var(--control-height-md);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface);
+  font: inherit;
+  font-size: var(--font-size-sm);
+}
+
+.ui-control::placeholder {
+  color: var(--color-text-muted);
+}
+.ui-control[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+.ui-textarea {
+  min-height: 5rem;
+  resize: vertical;
+  line-height: var(--line-height-body);
+}
+.ui-checkbox {
+  width: 1rem;
+  min-height: 1rem;
+  accent-color: var(--color-primary);
+}
+
+.ui-badge,
+.ui-chip {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--space-1);
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-subtle);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.ui-badge {
+  padding: 0.125rem var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+.ui-chip {
+  min-height: var(--control-height-sm);
+  border: 1px solid var(--color-border-subtle);
+  padding: 0 var(--space-2);
+}
+.ui-badge-success {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+}
+.ui-badge-warning {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+.ui-badge-danger {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+.ui-badge-info {
+  color: var(--color-info);
+  background: var(--color-info-soft);
+}
+
+.ui-toolbar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  padding-block: var(--space-2);
+}
+
+.ui-toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.ui-section-header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.ui-section-header h2,
+.ui-section-header h3,
+.ui-section-header p {
+  margin: 0;
+}
+
+.ui-section-header > div:first-child {
+  min-width: 0;
+}
+.ui-section-header h2,
+.ui-section-header h3 {
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-tight);
+  scroll-margin-top: var(--space-6);
+}
+.ui-section-header p {
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.ui-section-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.ui-status-banner {
+  display: grid;
+  gap: var(--space-1);
+  border-left: 3px solid var(--color-info);
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text-secondary);
+  background: var(--color-info-soft);
+  font-size: var(--font-size-sm);
+}
+
+.ui-status-banner strong,
+.ui-status-banner p {
+  margin: 0;
+}
+.ui-status-banner-success {
+  border-color: var(--color-success);
+  background: var(--color-success-soft);
+}
+.ui-status-banner-warning {
+  border-color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+.ui-status-banner-error {
+  border-color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+.ui-status-banner-actions {
+  margin-top: var(--space-2);
+}
+
+/* Shared page primitives. Keep these classes stable while feature surfaces
+   migrate away from the legacy app stylesheet. */
+.page-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: clamp(var(--space-4), 3vw, var(--space-8));
+  align-items: end;
+  min-width: 0;
+  margin: 0;
+  border-bottom: 1px solid var(--color-border-default);
+  padding: var(--space-1) 0 var(--space-4);
+}
+
+.page-header-content {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.page-header-eyebrow,
+.page-header-title,
+.page-header-description {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.page-header-eyebrow {
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.page-header-title {
+  max-width: 28ch;
+  color: var(--color-text-primary);
+  font-size: clamp(1.8rem, 4vw, 2.65rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+  scroll-margin-top: var(--space-6);
+}
+
+.page-header-description {
+  max-width: 62ch;
+  color: var(--color-text-muted);
+  line-height: var(--line-height-body);
+  text-wrap: pretty;
+}
+
+.page-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.page-header-actions > :where(button, a),
+.page-header-back-action > :where(button, a) {
+  min-height: var(--control-height-lg);
+}
+
+.page-header-back-action {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border-left: 1px solid var(--color-border-default);
+  padding-left: var(--space-2);
+}
+
+.page-header-actions > .page-header-back-action:only-child {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.page-surface {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: clamp(var(--space-4), 2.5vw, var(--space-6));
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-surface);
+}
+
+.page-surface-default {
+  background: var(--color-bg-surface);
+}
+
+.page-surface-muted {
+  border-color: var(--color-border-subtle);
+  background: var(--color-bg-subtle);
+  box-shadow: none;
+}
+
+.page-status {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text-primary);
+  background: var(--color-bg-subtle);
+  box-shadow: none;
+  line-height: var(--line-height-body);
+  overflow-wrap: anywhere;
+}
+
+.page-status > :where(strong, p),
+.page-status-action {
+  margin: 0;
+}
+
+.status-banner-action,
+.page-empty-action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-self: start;
+  min-width: 0;
+  margin-top: var(--space-1);
+}
+
+.page-header-actions > :where(button, a),
+.page-header-back-action > :where(button, a),
+.page-empty-action > :where(button, a),
+.status-banner-action > :where(button, a) {
+  transition:
+    transform 120ms ease,
+    opacity 120ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .page-header-actions > :where(button, a):hover,
+  .page-header-back-action > :where(button, a):hover,
+  .page-empty-action > :where(button, a):hover,
+  .status-banner-action > :where(button, a):hover {
+    transform: translateY(-1px);
+  }
+}
+
+.page-header-actions > :where(button, a):active,
+.page-header-back-action > :where(button, a):active,
+.page-empty-action > :where(button, a):active,
+.status-banner-action > :where(button, a):active {
+  transform: translateY(0);
+  opacity: 0.86;
+}
+
+.status-banner.page-status-loading {
+  border-style: dashed;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-subtle);
+}
+
+.status-banner.page-status-info {
+  border-color: var(--color-info);
+  color: var(--color-info);
+  background: var(--color-info-soft);
+}
+
+.status-banner.page-status-success {
+  border-color: var(--color-success);
+  color: var(--color-success);
+  background: var(--color-success-soft);
+}
+
+.status-banner.page-status-warning {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+
+.status-banner.page-status-error {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.empty-state {
+  min-width: 0;
+  margin: var(--space-6) 0 0;
+  border: 1px dashed var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  color: var(--color-text-muted);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.page-empty {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 8rem;
+  margin: 0;
+  border: 1px dashed var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: clamp(var(--space-4), 3vw, var(--space-5));
+  color: var(--color-text-muted);
+  text-align: left;
+  background: var(--color-bg-subtle);
+  box-shadow: none;
+  overflow-wrap: anywhere;
+}
+
+.page-empty > :where(h2, h3, p) {
+  margin: 0;
+}
+
+.page-empty > :where(h2, h3) {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-tight);
+  text-wrap: balance;
+}
+
+@media (max-width: 640px) {
+  .page-header {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+    align-items: start;
+  }
+
+  .page-header-title {
+    max-width: none;
+    font-size: clamp(1.65rem, 9vw, 2.2rem);
+  }
+
+  .page-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .page-header-actions > :where(button, a),
+  .page-header-back-action,
+  .page-header-back-action > :where(button, a) {
+    width: 100%;
+  }
+
+  .page-header-back-action {
+    border-top: 1px solid var(--color-border-default);
+    border-left: 0;
+    padding-top: var(--space-2);
+    padding-left: 0;
+  }
+
+  .page-surface {
+    padding: var(--space-3);
+  }
+}
+
+@media (max-width: 320px) {
+  .page-header-actions,
+  .status-banner-action,
+  .page-empty-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .page-header-actions > :where(button, a),
+  .status-banner-action > :where(button, a),
+  .page-empty-action > :where(button, a) {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .page-surface,
+  .page-status,
+  .page-empty {
+    padding: var(--space-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-header-actions > :where(button, a),
+  .page-header-back-action > :where(button, a),
+  .page-empty-action > :where(button, a),
+  .status-banner-action > :where(button, a) {
+    transition: none;
+  }
+
+  .page-header-actions > :where(button, a):hover,
+  .page-header-back-action > :where(button, a):hover,
+  .page-empty-action > :where(button, a):hover,
+  .status-banner-action > :where(button, a):hover {
+    transform: none;
+  }
+
+  .ui-button {
+    transition: none;
+  }
+}

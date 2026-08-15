@@ -242,6 +242,7 @@ mod tests {
         let plan = planning
             .save_plan(SavePlanInput {
                 id: None,
+                expected_revision: None,
                 title: "408 计划".to_owned(),
                 target_exam: None,
                 exam_date: None,
@@ -252,6 +253,7 @@ mod tests {
             .save_stage(SavePlanStageInput {
                 id: None,
                 plan_id: plan.plan.id.clone(),
+                expected_plan_revision: plan.plan.revision,
                 title: "基础阶段".to_owned(),
                 start_date: "2026-07-20".to_owned(),
                 end_date: "2026-07-26".to_owned(),
@@ -260,7 +262,7 @@ mod tests {
             })
             .expect("stage should persist");
         planning
-            .set_status(&plan.plan.id, "active")
+            .set_status(&plan.plan.id, plan.plan.revision + 1, "active")
             .expect("plan should become active");
         let creation = PlanScheduleUseCases::new(SqliteScheduleRepository::new(directory.path()))
             .confirm(&PlanTaskScheduleInput {

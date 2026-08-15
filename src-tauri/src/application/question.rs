@@ -4,7 +4,8 @@ use uuid::Uuid;
 
 use super::{PersistenceError, current_utc_millis};
 use crate::domain::{
-    AttemptResult, LocalDate, Question, QuestionAttempt, QuestionBundle, QuestionRegion,
+    AttemptResult, ClassificationSource, LocalDate, Question, QuestionAttempt, QuestionBundle,
+    QuestionRegion, QuestionType, WorkbookProfile, classify_question_text,
 };
 
 const MIN_REGION_SPAN: f64 = 0.002;
@@ -23,6 +24,8 @@ pub(crate) struct QuestionRegionInput {
 pub(crate) struct CreateQuestionInput {
     pub(crate) document_id: String,
     pub(crate) title: String,
+    pub(crate) subject_id: Option<String>,
+    pub(crate) question_type: Option<String>,
     pub(crate) chapter: Option<String>,
     pub(crate) question_number: Option<String>,
     pub(crate) difficulty: u8,
@@ -35,6 +38,8 @@ pub(crate) struct CreateQuestionInput {
 pub(crate) struct UpdateQuestionInput {
     pub(crate) question_id: String,
     pub(crate) title: String,
+    pub(crate) subject_id: Option<String>,
+    pub(crate) question_type: Option<String>,
     pub(crate) chapter: Option<String>,
     pub(crate) question_number: Option<String>,
     pub(crate) difficulty: u8,
@@ -48,6 +53,12 @@ pub(crate) struct AddQuestionRegionInput {
     pub(crate) region: QuestionRegionInput,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct UpdateQuestionRegionInput {
+    pub(crate) region_id: String,
+    pub(crate) region: QuestionRegionInput,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AddQuestionAttemptInput {
     pub(crate) question_id: String,
@@ -57,16 +68,33 @@ pub(crate) struct AddQuestionAttemptInput {
     pub(crate) answer_note: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ValidatedQuestionUpdate {
     pub(crate) question_id: String,
     pub(crate) title: String,
+    pub(crate) subject_id: Option<String>,
+    pub(crate) question_type: Option<QuestionType>,
+    pub(crate) classification_source: ClassificationSource,
+    pub(crate) classification_confidence: Option<f64>,
     pub(crate) chapter: Option<String>,
     pub(crate) question_number: Option<String>,
     pub(crate) difficulty: u8,
     pub(crate) analysis_markdown: Option<String>,
     pub(crate) knowledge_node_ids: Vec<String>,
     pub(crate) updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SetWorkbookSubjectInput {
+    pub(crate) document_id: String,
+    pub(crate) subject_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BatchClassifyQuestionsInput {
+    pub(crate) document_id: String,
+    pub(crate) question_ids: Vec<String>,
+    pub(crate) question_type: String,
 }
 
 /// Stable failures from manual workbook question management.
@@ -88,6 +116,8 @@ pub(crate) enum QuestionError {
     LastRegionProtected,
     #[error("knowledge-node association is invalid")]
     InvalidKnowledgeLink,
+    #[error("subject was not found")]
+    SubjectNotFound,
     #[error(transparent)]
     Persistence(#[from] PersistenceError),
 }
@@ -103,6 +133,7 @@ impl QuestionError {
             Self::InvalidRegion => "QUESTION_REGION_INVALID",
             Self::LastRegionProtected => "QUESTION_LAST_REGION_PROTECTED",
             Self::InvalidKnowledgeLink => "QUESTION_KNOWLEDGE_LINK_INVALID",
+            Self::SubjectNotFound => "QUESTION_SUBJECT_NOT_FOUND",
             Self::Persistence(error) => error.code(),
         }
     }
@@ -112,6 +143,20 @@ impl QuestionError {
 pub(crate) trait QuestionRepository: Clone + Send + Sync + 'static {
     fn list_for_document(&self, document_id: &str) -> Result<Vec<QuestionBundle>, QuestionError>;
     fn list_trashed(&self) -> Result<Vec<QuestionBundle>, QuestionError>;
+    fn workbook_profile(&self, document_id: &str) -> Result<WorkbookProfile, QuestionError>;
+    fn set_workbook_subject(
+        &self,
+        document_id: &str,
+        subject_id: Option<&str>,
+        updated_at: i64,
+    ) -> Result<WorkbookProfile, QuestionError>;
+    fn batch_classify(
+        &self,
+        document_id: &str,
+        question_ids: &[String],
+        question_type: QuestionType,
+        updated_at: i64,
+    ) -> Result<Vec<QuestionBundle>, QuestionError>;
     fn create_question(
         &self,
         question: Question,
@@ -123,6 +168,7 @@ pub(crate) trait QuestionRepository: Clone + Send + Sync + 'static {
         update: &ValidatedQuestionUpdate,
     ) -> Result<QuestionBundle, QuestionError>;
     fn add_region(&self, region: QuestionRegion) -> Result<QuestionBundle, QuestionError>;
+    fn update_region(&self, region: QuestionRegion) -> Result<QuestionBundle, QuestionError>;
     fn delete_region(
         &self,
         region_id: &str,
@@ -164,6 +210,48 @@ impl<R: QuestionRepository> QuestionUseCases<R> {
         self.repository.list_trashed()
     }
 
+    pub(crate) fn workbook_profile(
+        &self,
+        document_id: &str,
+    ) -> Result<WorkbookProfile, QuestionError> {
+        validate_id(document_id)?;
+        self.repository.workbook_profile(document_id)
+    }
+
+    pub(crate) fn set_workbook_subject(
+        &self,
+        input: &SetWorkbookSubjectInput,
+    ) -> Result<WorkbookProfile, QuestionError> {
+        validate_id(&input.document_id)?;
+        validate_optional_id(input.subject_id.as_deref())?;
+        self.repository.set_workbook_subject(
+            &input.document_id,
+            input.subject_id.as_deref(),
+            current_utc_millis()?,
+        )
+    }
+
+    pub(crate) fn batch_classify(
+        &self,
+        input: &BatchClassifyQuestionsInput,
+    ) -> Result<Vec<QuestionBundle>, QuestionError> {
+        validate_id(&input.document_id)?;
+        if input.question_ids.is_empty() || input.question_ids.len() > 500 {
+            return Err(QuestionError::InvalidInput);
+        }
+        for question_id in &input.question_ids {
+            validate_id(question_id)?;
+        }
+        let question_type =
+            QuestionType::parse(&input.question_type).ok_or(QuestionError::InvalidInput)?;
+        self.repository.batch_classify(
+            &input.document_id,
+            &input.question_ids,
+            question_type,
+            current_utc_millis()?,
+        )
+    }
+
     pub(crate) fn create_question(
         &self,
         input: CreateQuestionInput,
@@ -171,6 +259,10 @@ impl<R: QuestionRepository> QuestionUseCases<R> {
         validate_id(&input.document_id)?;
         validate_difficulty(input.difficulty)?;
         let knowledge_node_ids = validate_knowledge_ids(input.knowledge_node_ids)?;
+        validate_optional_id(input.subject_id.as_deref())?;
+        let title = required_text(&input.title, 200)?;
+        let (question_type, classification_source, classification_confidence) =
+            classify_input(input.question_type.as_deref(), &title)?;
         let now = current_utc_millis()?;
         let question_id = Uuid::now_v7().to_string();
         self.repository.create_question(
@@ -178,7 +270,13 @@ impl<R: QuestionRepository> QuestionUseCases<R> {
                 id: question_id.clone(),
                 document_id: input.document_id.clone(),
                 document_title: String::new(),
-                title: required_text(&input.title, 200)?,
+                subject_id: input.subject_id,
+                subject_name: None,
+                subject_inherited: false,
+                question_type,
+                classification_source,
+                classification_confidence,
+                title,
                 chapter: optional_text(input.chapter, 120)?,
                 number_label: optional_text(input.question_number, 60)?,
                 difficulty: input.difficulty,
@@ -205,9 +303,16 @@ impl<R: QuestionRepository> QuestionUseCases<R> {
     ) -> Result<QuestionBundle, QuestionError> {
         validate_id(&input.question_id)?;
         validate_difficulty(input.difficulty)?;
+        validate_optional_id(input.subject_id.as_deref())?;
+        let (question_type, classification_source, classification_confidence) =
+            classify_input(input.question_type.as_deref(), &input.title)?;
         self.repository.update_question(&ValidatedQuestionUpdate {
             question_id: input.question_id,
             title: required_text(&input.title, 200)?,
+            subject_id: input.subject_id,
+            question_type,
+            classification_source,
+            classification_confidence,
             chapter: optional_text(input.chapter, 120)?,
             question_number: optional_text(input.question_number, 60)?,
             difficulty: input.difficulty,
@@ -226,6 +331,22 @@ impl<R: QuestionRepository> QuestionUseCases<R> {
         self.repository.add_region(build_region(
             Uuid::now_v7().to_string(),
             input.question_id,
+            String::new(),
+            &input.region,
+            u32::MAX,
+            now,
+        )?)
+    }
+
+    pub(crate) fn update_region(
+        &self,
+        input: UpdateQuestionRegionInput,
+    ) -> Result<QuestionBundle, QuestionError> {
+        validate_id(&input.region_id)?;
+        let now = current_utc_millis()?;
+        self.repository.update_region(build_region(
+            input.region_id,
+            String::new(),
             String::new(),
             &input.region,
             u32::MAX,
@@ -281,6 +402,30 @@ impl<R: QuestionRepository> QuestionUseCases<R> {
         validate_id(question_id)?;
         self.repository
             .restore_question(question_id, current_utc_millis()?)
+    }
+}
+
+fn classify_input(
+    requested: Option<&str>,
+    fallback_text: &str,
+) -> Result<(Option<QuestionType>, ClassificationSource, Option<f64>), QuestionError> {
+    if let Some(requested) = requested {
+        let question_type = QuestionType::parse(requested).ok_or(QuestionError::InvalidInput)?;
+        return Ok((Some(question_type), ClassificationSource::Manual, Some(1.0)));
+    }
+    let suggestion = classify_question_text(fallback_text);
+    if suggestion.question_type.is_some() {
+        Ok((
+            suggestion.question_type,
+            ClassificationSource::Automatic,
+            Some(suggestion.confidence),
+        ))
+    } else {
+        Ok((
+            None,
+            ClassificationSource::Pending,
+            Some(suggestion.confidence),
+        ))
     }
 }
 
@@ -366,6 +511,10 @@ fn validate_id(value: &str) -> Result<(), QuestionError> {
     Uuid::parse_str(value)
         .map(|_| ())
         .map_err(|_| QuestionError::InvalidInput)
+}
+
+fn validate_optional_id(value: Option<&str>) -> Result<(), QuestionError> {
+    value.map_or(Ok(()), validate_id)
 }
 
 #[cfg(test)]

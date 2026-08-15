@@ -1,5 +1,6 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import type { AiCommandError } from "../../shared/tauri/aiClient";
 import {
   createPlanningConversation,
   executePlanningChat,
@@ -9,7 +10,6 @@ import {
   savePlanningReplyAsDraft,
   type PlanningChatPreview,
   type PlanningChatRequest,
-  type PlanningContextSelection,
   type PlanningConversation,
 } from "../../shared/tauri/planningChatClient";
 import {
@@ -17,18 +17,35 @@ import {
   searchResources,
   type ResourceSearchResult,
 } from "../../shared/tauri/resourceSearchClient";
-import type { AiCommandError } from "../../shared/tauri/aiClient";
-
-interface SelectedContext {
-  selection: PlanningContextSelection;
-  title: string;
-  excerpt: string;
-}
+import {
+  buildPlanningChatRequest,
+  confirmedPromptMatches,
+  isCurrentPlanningRequest,
+  planningPreviewFingerprint,
+  togglePlanningContext,
+  type SelectedPlanningContext,
+} from "./planningChatModel";
+import { Composer } from "./planning-chat/Composer";
+import { ContextPanel } from "./planning-chat/ContextPanel";
+import { ConversationRail } from "./planning-chat/ConversationRail";
+import { DraftAction } from "./planning-chat/DraftAction";
+import { PreviewDialog } from "./planning-chat/PreviewDialog";
+import { Thread } from "./planning-chat/Thread";
+import "./planning-chat.css";
 
 interface PlanningChatPanelProps {
   onOpenReference(documentId: string, page: number): void;
   onDraftCreated(planId: string): Promise<void>;
 }
+
+const BUSY_COPY: Record<string, string> = {
+  conversations: "正在读取本地规划对话…",
+  create: "正在新建对话…",
+  search: "正在搜索资料页…",
+  preview: "正在生成完整外发预览…",
+  execute: "正在发送并保存 AI 回复…",
+  draft: "正在保存规划草案…",
+};
 
 export function PlanningChatPanel({
   onOpenReference,
@@ -43,36 +60,58 @@ export function PlanningChatPanel({
   const [searchResults, setSearchResults] = useState<ResourceSearchResult[]>(
     [],
   );
-  const [selectedContexts, setSelectedContexts] = useState<SelectedContext[]>(
-    [],
-  );
+  const [selectedContexts, setSelectedContexts] = useState<
+    SelectedPlanningContext[]
+  >([]);
   const [question, setQuestion] = useState("");
   const [outputLimit, setOutputLimit] = useState("800");
   const [preview, setPreview] = useState<PlanningChatPreview>();
   const [preparedRequest, setPreparedRequest] = useState<PlanningChatRequest>();
-  const [confirmed, setConfirmed] = useState(false);
+  const [previewFingerprint, setPreviewFingerprint] = useState<string>();
+  const [confirmedPrompt, setConfirmedPrompt] = useState<string>();
   const [draftTitle, setDraftTitle] = useState("");
-  const [busy, setBusy] = useState<string>();
+  const [busy, setBusy] = useState<string | undefined>("conversations");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState<AiCommandError>();
 
+  const searchRequestIdRef = useRef(0);
+  const previewRequestIdRef = useRef(0);
+  const executeRequestIdRef = useRef(0);
+  const conversationRequestIdRef = useRef(0);
+  const draftRequestIdRef = useRef(0);
+  const activeButtonRef = useRef<HTMLButtonElement>(null);
+  const previewHeadingRef = useRef<HTMLHeadingElement>(null);
+  const previewTriggerRef = useRef<HTMLButtonElement>(null);
+  const mountedRef = useRef(true);
+
   useEffect(() => {
+    mountedRef.current = true;
     let active = true;
     void listPlanningConversations().then(
       (loaded) => {
-        if (active) {
-          setConversations(loaded);
-          setActiveId(loaded[0]?.id);
-        }
+        if (!active) return;
+        setConversations(loaded);
+        setActiveId(loaded[0]?.id);
+        setDraftTitle(
+          loaded[0] === undefined ? "" : `${loaded[0].title} AI 草案`,
+        );
+        setBusy(undefined);
       },
       (reason: unknown) => {
         if (active) {
           setError(normalizePlanningChatError(reason));
+          setBusy(undefined);
         }
       },
     );
     return () => {
       active = false;
+      mountedRef.current = false;
+      conversationRequestIdRef.current += 1;
+      searchRequestIdRef.current += 1;
+      previewRequestIdRef.current += 1;
+      executeRequestIdRef.current += 1;
+      draftRequestIdRef.current += 1;
     };
   }, []);
 
@@ -84,40 +123,92 @@ export function PlanningChatPanel({
     .find((message) => message.role === "assistant");
 
   const invalidatePreview = () => {
+    previewRequestIdRef.current += 1;
     setPreview(undefined);
     setPreparedRequest(undefined);
-    setConfirmed(false);
+    setPreviewFingerprint(undefined);
+    setConfirmedPrompt(undefined);
+  };
+
+  const resetTurnState = () => {
+    searchRequestIdRef.current += 1;
+    executeRequestIdRef.current += 1;
+    setQuestion("");
+    setSearchQuery("");
+    setSearchResults([]);
+    setSelectedContexts([]);
+    invalidatePreview();
+    setNotice("");
+    setError(undefined);
   };
 
   const run = async (label: string, operation: () => Promise<void>) => {
+    if (!mountedRef.current) return;
     setBusy(label);
     setError(undefined);
     setNotice("");
     try {
       await operation();
     } catch (reason: unknown) {
-      setError(normalizePlanningChatError(reason));
+      if (mountedRef.current) {
+        setError(normalizePlanningChatError(reason));
+      }
     } finally {
-      setBusy(undefined);
+      if (mountedRef.current) {
+        setBusy(undefined);
+      }
     }
+  };
+
+  const focusActiveConversation = () => {
+    requestAnimationFrame(() => activeButtonRef.current?.focus());
   };
 
   const createConversation = (event: FormEvent) => {
     event.preventDefault();
+    const requestId = ++conversationRequestIdRef.current;
     void run("create", async () => {
-      const created = await createPlanningConversation(newTitle);
+      const created = await createPlanningConversation(newTitle.trim());
+      if (
+        !isCurrentPlanningRequest(
+          requestId,
+          conversationRequestIdRef.current,
+          mountedRef.current,
+        )
+      ) {
+        return;
+      }
       setConversations((current) => [created, ...current]);
       setActiveId(created.id);
-      setDraftTitle(`${created.title} · AI 草案`);
-      invalidatePreview();
+      setDraftTitle(`${created.title} AI 草案`);
+      resetTurnState();
+      focusActiveConversation();
     });
+  };
+
+  const chooseConversation = (conversation: PlanningConversation) => {
+    conversationRequestIdRef.current += 1;
+    setActiveId(conversation.id);
+    setDraftTitle(`${conversation.title} AI 草案`);
+    resetTurnState();
+    focusActiveConversation();
   };
 
   const submitSearch = (event: FormEvent) => {
     event.preventDefault();
+    const requestId = ++searchRequestIdRef.current;
     void run("search", async () => {
       try {
         const results = await searchResources(searchQuery, 30);
+        if (
+          !isCurrentPlanningRequest(
+            requestId,
+            searchRequestIdRef.current,
+            mountedRef.current,
+          )
+        ) {
+          return;
+        }
         setSearchResults(
           results.filter(
             (result) =>
@@ -126,65 +217,62 @@ export function PlanningChatPanel({
           ),
         );
       } catch (reason: unknown) {
-        const normalized = normalizeResourceSearchError(reason);
-        setError(normalized);
+        if (
+          isCurrentPlanningRequest(
+            requestId,
+            searchRequestIdRef.current,
+            mountedRef.current,
+          )
+        ) {
+          setError(normalizeResourceSearchError(reason));
+        }
       }
     });
   };
 
   const toggleContext = (result: ResourceSearchResult) => {
-    const pageNumber = result.pageNumber;
-    if (pageNumber === undefined) {
-      return;
-    }
-    const key = `${result.documentId}:${pageNumber}`;
-    setSelectedContexts((current) => {
-      const exists = current.some(
-        (context) =>
-          `${context.selection.documentId}:${context.selection.pageNumber}` ===
-          key,
-      );
-      if (exists) {
-        return current.filter(
-          (context) =>
-            `${context.selection.documentId}:${context.selection.pageNumber}` !==
-            key,
-        );
-      }
-      if (current.length >= 6) {
-        return current;
-      }
-      return [
-        ...current,
-        {
-          selection: {
-            documentId: result.documentId,
-            pageNumber,
-            searchQuery,
-          },
-          title: result.documentTitle,
-          excerpt: result.excerpt,
-        },
-      ];
-    });
+    if (result.pageNumber === undefined) return;
+    setSelectedContexts((current) =>
+      togglePlanningContext(current, result, searchQuery),
+    );
+    invalidatePreview();
+  };
+
+  const changeQuestion = (value: string) => {
+    setQuestion(value);
+    invalidatePreview();
+  };
+
+  const changeOutputLimit = (value: string) => {
+    setOutputLimit(value);
     invalidatePreview();
   };
 
   const prepare = (event: FormEvent) => {
     event.preventDefault();
-    if (activeId === undefined) {
-      return;
-    }
-    const request: PlanningChatRequest = {
-      conversationId: activeId,
+    const request = buildPlanningChatRequest(
+      activeId,
       question,
-      contexts: selectedContexts.map((context) => context.selection),
-      maxOutputTokens: Number(outputLimit),
-    };
+      selectedContexts,
+      outputLimit,
+    );
+    if (request === undefined) return;
+    const requestId = ++previewRequestIdRef.current;
     void run("preview", async () => {
-      setPreview(await previewPlanningChat(request));
+      const nextPreview = await previewPlanningChat(request);
+      if (
+        !isCurrentPlanningRequest(
+          requestId,
+          previewRequestIdRef.current,
+          mountedRef.current,
+        )
+      ) {
+        return;
+      }
+      setPreview(nextPreview);
       setPreparedRequest(request);
-      setConfirmed(false);
+      setPreviewFingerprint(planningPreviewFingerprint(request, nextPreview));
+      setConfirmedPrompt(undefined);
     });
   };
 
@@ -192,320 +280,172 @@ export function PlanningChatPanel({
     if (
       preview === undefined ||
       preparedRequest === undefined ||
-      !confirmed ||
-      !preview.preview.allowed
+      previewFingerprint === undefined ||
+      confirmedPrompt === undefined ||
+      !preview.preview.allowed ||
+      planningPreviewFingerprint(preparedRequest, preview) !==
+        previewFingerprint ||
+      !confirmedPromptMatches(preview, confirmedPrompt)
     ) {
       return;
     }
+    const requestId = ++executeRequestIdRef.current;
     void run("execute", async () => {
       const reply = await executePlanningChat({
         ...preparedRequest,
-        confirmedPrompt: preview.preview.prompt,
+        confirmedPrompt,
       });
+      if (
+        !isCurrentPlanningRequest(
+          requestId,
+          executeRequestIdRef.current,
+          mountedRef.current,
+        )
+      ) {
+        return;
+      }
       setConversations((current) => [
         reply.conversation,
         ...current.filter(
           (conversation) => conversation.id !== reply.conversation.id,
         ),
       ]);
+      setActiveId(reply.conversation.id);
       setQuestion("");
       setSelectedContexts([]);
       setSearchResults([]);
-      setDraftTitle(`${reply.conversation.title} · AI 草案`);
       invalidatePreview();
+      setDraftTitle(`${reply.conversation.title} AI 草案`);
       setNotice(
         reply.result.cacheHit
-          ? "已从本地缓存生成回复，没有新增 Token。"
-          : "AI 回复已保存到本地对话；尚未写入个人计划。",
+          ? "已从本地缓存读取回复，没有新增 Token 消耗。"
+          : "回复已保存到本地对话，尚未成为正式计划。",
       );
     });
   };
 
   const saveDraft = () => {
-    if (lastAssistantMessage === undefined) {
-      return;
-    }
+    if (lastAssistantMessage === undefined) return;
+    const requestId = ++draftRequestIdRef.current;
     void run("draft", async () => {
       const planId = await savePlanningReplyAsDraft(
         lastAssistantMessage.id,
-        draftTitle,
+        draftTitle.trim(),
       );
+      if (
+        !isCurrentPlanningRequest(
+          requestId,
+          draftRequestIdRef.current,
+          mountedRef.current,
+        )
+      ) {
+        return;
+      }
       await onDraftCreated(planId);
-      setNotice("AI 回复已复制为待确认计划草案，原对话保持不变。");
+      if (
+        isCurrentPlanningRequest(
+          requestId,
+          draftRequestIdRef.current,
+          mountedRef.current,
+        )
+      ) {
+        setNotice("AI 回复已复制为待复核草案。");
+      }
     });
-  };
-
-  const chooseConversation = (conversation: PlanningConversation) => {
-    setActiveId(conversation.id);
-    setDraftTitle(`${conversation.title} · AI 草案`);
-    setSelectedContexts([]);
-    setSearchResults([]);
-    invalidatePreview();
   };
 
   return (
     <section
       className="planning-chat-card"
       aria-labelledby="planning-chat-title"
+      aria-busy={busy !== undefined}
     >
-      <div className="planning-chat-heading">
+      <header className="planning-chat-heading">
         <div>
-          <p className="section-label">M9 · 资料驱动的 AI 规划</p>
-          <h2 id="planning-chat-title">选择资料，再与 AI 完善规划</h2>
-          <p>最多选择 6 个已索引页码；只有外发预览中显示的文字会被发送。</p>
+          <p className="section-label">资料辅助 AI 规划</p>
+          <h2 id="planning-chat-title">结合本地资料完善规划</h2>
+          <p>最多选择 6 个已索引页；只有明确确认的完整预览会被外发。</p>
         </div>
         <span>{conversations.length} 段本地对话</span>
-      </div>
-
+      </header>
+      {busy === undefined ? null : (
+        <p role="status" aria-live="polite">
+          {BUSY_COPY[busy] ?? "正在处理…"}
+        </p>
+      )}
       {error === undefined ? null : (
-        <div className="error-detail" role="alert">
+        <div className="error-detail" role="alert" aria-live="assertive">
           <strong>{error.message}</strong>
           <p>{error.action}</p>
         </div>
       )}
       {notice === "" ? null : (
-        <p className="ai-notice" role="status">
+        <p className="ai-notice" role="status" aria-live="polite">
           {notice}
         </p>
       )}
-
       <div className="planning-chat-layout">
-        <aside className="planning-conversation-list">
-          <form onSubmit={createConversation}>
-            <label>
-              新对话标题
-              <input
-                maxLength={120}
-                value={newTitle}
-                onChange={(event) => setNewTitle(event.target.value)}
-                required
-              />
-            </label>
-            <button type="submit" disabled={busy !== undefined}>
-              新建规划对话
-            </button>
-          </form>
-          <nav aria-label="规划对话列表">
-            {conversations.map((conversation) => (
-              <button
-                key={conversation.id}
-                type="button"
-                className={
-                  conversation.id === activeId ? "plan-list-active" : undefined
-                }
-                onClick={() => chooseConversation(conversation)}
-              >
-                <strong>{conversation.title}</strong>
-                <span>{conversation.messages.length} 条消息</span>
-              </button>
-            ))}
-          </nav>
-        </aside>
-
+        <ConversationRail
+          conversations={conversations}
+          activeId={activeId}
+          newTitle={newTitle}
+          busy={busy !== undefined}
+          activeButtonRef={activeButtonRef}
+          onTitleChange={setNewTitle}
+          onCreate={createConversation}
+          onSelect={chooseConversation}
+        />
         <div className="planning-chat-workspace">
-          {activeConversation === undefined ? (
-            <p className="empty-state">先新建一段规划对话。</p>
-          ) : (
+          <Thread
+            conversation={activeConversation}
+            onOpenReference={onOpenReference}
+          />
+          {activeConversation === undefined ? null : (
             <>
-              <div className="planning-message-list" aria-live="polite">
-                {activeConversation.messages.length === 0 ? (
-                  <p className="empty-state">
-                    搜索资料页并提出第一个规划问题。
-                  </p>
-                ) : null}
-                {activeConversation.messages.map((message) => (
-                  <article
-                    key={message.id}
-                    className={`planning-message planning-message-${message.role}`}
-                  >
-                    <strong>
-                      {message.role === "user" ? "你" : "AI 建议"}
-                    </strong>
-                    <p>{message.content}</p>
-                    {message.sources.length === 0 ? null : (
-                      <div className="planning-message-sources">
-                        {message.sources.map((source) => (
-                          <button
-                            key={`${source.documentId}:${source.pageNumber}`}
-                            type="button"
-                            className="secondary-button"
-                            onClick={() =>
-                              onOpenReference(
-                                source.documentId,
-                                source.pageNumber,
-                              )
-                            }
-                          >
-                            {source.citationLabel} {source.documentTitle} · 第{" "}
-                            {source.pageNumber} 页
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </article>
-                ))}
-              </div>
-
-              <form className="planning-context-search" onSubmit={submitSearch}>
-                <label>
-                  搜索本地资料原文
-                  <input
-                    type="search"
-                    maxLength={100}
-                    value={searchQuery}
-                    placeholder="例如：强化阶段 每日安排"
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    required
-                  />
-                </label>
-                <button type="submit" disabled={busy !== undefined}>
-                  搜索可引用页码
-                </button>
-              </form>
-
-              {searchResults.length === 0 ? null : (
-                <ul className="planning-context-results">
-                  {searchResults.map((result) => {
-                    const selected = selectedContexts.some(
-                      (context) =>
-                        context.selection.documentId === result.documentId &&
-                        context.selection.pageNumber === result.pageNumber,
-                    );
-                    return (
-                      <li key={`${result.documentId}:${result.pageNumber}`}>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={selected}
-                            disabled={!selected && selectedContexts.length >= 6}
-                            onChange={() => toggleContext(result)}
-                          />
-                          <span>
-                            <strong>
-                              {result.documentTitle} · 第 {result.pageNumber} 页
-                            </strong>
-                            <small>{result.excerpt}</small>
-                          </span>
-                        </label>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-
-              <div className="planning-selected-contexts">
-                <strong>本轮已选 {selectedContexts.length} / 6 页</strong>
-                {selectedContexts.map((context) => (
-                  <button
-                    key={`${context.selection.documentId}:${context.selection.pageNumber}`}
-                    type="button"
-                    className="secondary-button"
-                    title={context.excerpt}
-                    onClick={() =>
-                      toggleContext({
-                        documentId: context.selection.documentId,
-                        documentTitle: context.title,
-                        documentKind: "pdf",
-                        pageNumber: context.selection.pageNumber,
-                        excerpt: context.excerpt,
-                        matchKind: "page_text",
-                      })
-                    }
-                  >
-                    {context.title} · 第 {context.selection.pageNumber} 页 ×
-                  </button>
-                ))}
-              </div>
-
-              <form className="planning-chat-form" onSubmit={prepare}>
-                <label>
-                  本轮问题
-                  <textarea
-                    rows={4}
-                    maxLength={4000}
-                    value={question}
-                    onChange={(event) => {
-                      setQuestion(event.target.value);
-                      invalidatePreview();
-                    }}
-                    placeholder="结合我选择的资料，给出适合当前基础的阶段安排。"
-                    required
-                  />
-                </label>
-                <label>
-                  输出 Token 上限
-                  <input
-                    type="number"
-                    min={1}
-                    max={1800}
-                    value={outputLimit}
-                    onChange={(event) => {
-                      setOutputLimit(event.target.value);
-                      invalidatePreview();
-                    }}
-                    required
-                  />
-                </label>
-                <button type="submit" disabled={busy !== undefined}>
-                  生成完整外发预览
-                </button>
-              </form>
-
-              {preview === undefined ? null : (
-                <section
-                  className="planning-chat-preview"
-                  aria-labelledby="planning-preview-title"
-                >
-                  <h3 id="planning-preview-title">本次将发送的完整文本</h3>
-                  <span>
-                    {preview.preview.destination} · 预计{" "}
-                    {preview.preview.projectedTokens} Token
-                  </span>
-                  <pre>{preview.preview.prompt}</pre>
-                  <label className="ai-confirm">
-                    <input
-                      type="checkbox"
-                      checked={confirmed}
-                      disabled={!preview.preview.allowed}
-                      onChange={(event) => setConfirmed(event.target.checked)}
-                    />
-                    我已核对上方完整文本和引用页码
-                  </label>
-                  <button
-                    type="button"
-                    disabled={
-                      !confirmed ||
-                      !preview.preview.allowed ||
-                      busy !== undefined
-                    }
-                    onClick={execute}
-                  >
-                    明确确认并发送
-                  </button>
-                </section>
-              )}
-
+              <ContextPanel
+                searchQuery={searchQuery}
+                searchResults={searchResults}
+                selectedContexts={selectedContexts}
+                busy={busy !== undefined}
+                onSearchQueryChange={setSearchQuery}
+                onSearch={submitSearch}
+                onToggle={toggleContext}
+              />
+              <Composer
+                question={question}
+                outputLimit={outputLimit}
+                busy={busy !== undefined}
+                submitButtonRef={previewTriggerRef}
+                onQuestionChange={changeQuestion}
+                onOutputLimitChange={changeOutputLimit}
+                onPrepare={prepare}
+              />
+              <PreviewDialog
+                preview={preview}
+                contextCount={selectedContexts.length}
+                confirmed={
+                  preview !== undefined &&
+                  confirmedPromptMatches(preview, confirmedPrompt ?? "")
+                }
+                busy={busy === "execute"}
+                headingRef={previewHeadingRef}
+                returnFocusRef={previewTriggerRef}
+                onConfirmed={(value) =>
+                  setConfirmedPrompt(
+                    value ? preview?.preview.prompt : undefined,
+                  )
+                }
+                onExecute={execute}
+                onClose={invalidatePreview}
+                onOpenReference={onOpenReference}
+              />
               {lastAssistantMessage === undefined ? null : (
-                <div className="planning-draft-action">
-                  <label>
-                    草案标题
-                    <input
-                      maxLength={120}
-                      value={draftTitle}
-                      onChange={(event) => setDraftTitle(event.target.value)}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    disabled={busy !== undefined || draftTitle.trim() === ""}
-                    onClick={saveDraft}
-                  >
-                    把最后一条 AI 回复保存为计划草案
-                  </button>
-                  <small>
-                    只复制为草案；仍需你检查、编辑并手动确认为当前计划。
-                  </small>
-                </div>
+                <DraftAction
+                  title={draftTitle}
+                  busy={busy !== undefined}
+                  onTitleChange={setDraftTitle}
+                  onSave={saveDraft}
+                />
               )}
             </>
           )}

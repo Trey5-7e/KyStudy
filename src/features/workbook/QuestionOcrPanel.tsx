@@ -5,9 +5,11 @@ import {
   confirmQuestionRegionOcr,
   discardQuestionRegionOcr,
   getOcrStatus,
+  installOcrComponent,
   listQuestionOcr,
   normalizeOcrError,
   recognizeQuestionRegion,
+  removeOcrComponent,
   type OcrComponentStatus,
   type OcrRecognition,
 } from "../../shared/tauri/ocrClient";
@@ -35,6 +37,7 @@ export function QuestionOcrPanel({
   const [recognitions, setRecognitions] = useState<OcrRecognition[]>([]);
   const [active, setActive] = useState<ActiveRecognition>();
   const [mutatingId, setMutatingId] = useState<string>();
+  const [componentBusy, setComponentBusy] = useState<"install" | "remove">();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ResourceCommandError>();
   const locallyCanceled = useRef(new Set<string>());
@@ -75,6 +78,37 @@ export function QuestionOcrPanel({
       setError(normalizeOcrError(reloadError));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const manageComponent = async (action: "install" | "remove") => {
+    if (
+      componentBusy !== undefined ||
+      active !== undefined ||
+      mutatingId !== undefined
+    ) {
+      return;
+    }
+    if (
+      action === "remove" &&
+      !window.confirm("移除本地 OCR 组件？PDF 阅读和手动框选不会受影响。")
+    ) {
+      return;
+    }
+    setComponentBusy(action);
+    setError(undefined);
+    try {
+      const next =
+        action === "install"
+          ? await installOcrComponent()
+          : await removeOcrComponent();
+      if (next !== null) {
+        setComponent(next);
+      }
+    } catch (componentError: unknown) {
+      setError(normalizeOcrError(componentError));
+    } finally {
+      setComponentBusy(undefined);
     }
   };
 
@@ -153,11 +187,51 @@ export function QuestionOcrPanel({
         <button
           type="button"
           className="secondary-button"
-          disabled={loading || active !== undefined || mutatingId !== undefined}
+          disabled={
+            loading ||
+            componentBusy !== undefined ||
+            active !== undefined ||
+            mutatingId !== undefined
+          }
           onClick={() => void reload()}
         >
           重新检测
         </button>
+        {component?.state === "available" ? (
+          <>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={
+                loading || componentBusy !== undefined || active !== undefined
+              }
+              onClick={() => void manageComponent("install")}
+            >
+              {componentBusy === "install" ? "正在修复" : "修复组件"}
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={
+                loading || componentBusy !== undefined || active !== undefined
+              }
+              onClick={() => void manageComponent("remove")}
+            >
+              {componentBusy === "remove" ? "正在移除" : "移除组件"}
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={
+              loading || componentBusy !== undefined || active !== undefined
+            }
+            onClick={() => void manageComponent("install")}
+          >
+            {componentBusy === "install" ? "正在安装" : "安装 OCR 组件"}
+          </button>
+        )}
       </div>
 
       {error === undefined ? null : (
@@ -198,6 +272,7 @@ export function QuestionOcrPanel({
                   type="button"
                   disabled={
                     component?.state !== "available" ||
+                    componentBusy !== undefined ||
                     active !== undefined ||
                     mutatingId !== undefined
                   }
@@ -295,15 +370,15 @@ function componentStatusLabel(
     return "正在检测 OCR 组件…";
   }
   if (component === undefined || component.state === "missing") {
-    return "OCR 组件未安装";
+    return "OCR 组件未安装 · 可选离线组件";
   }
   if (component.state === "incomplete") {
-    return "OCR 组件不完整";
+    return `OCR 组件不完整 · ${component.engine}`;
   }
   const size = component.componentSizeBytes;
   return size === undefined
-    ? "OCR 组件可用 · 完全离线"
-    : `OCR 组件可用 · 完全离线 · ${formatBytes(size)}`;
+    ? `OCR 组件可用 · ${component.engine} · 完全离线`
+    : `OCR 组件可用 · ${component.engine} · 完全离线 · ${formatBytes(size)}`;
 }
 
 function formatBytes(bytes: number): string {

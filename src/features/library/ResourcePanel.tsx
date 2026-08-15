@@ -5,7 +5,10 @@ import {
   useEffect,
   useRef,
   useState,
+  type KeyboardEvent,
 } from "react";
+
+import "./library.css";
 
 import {
   cancelResourceImport,
@@ -16,16 +19,44 @@ import {
   normalizeResourceCommandError,
   saveResourceReadingProgress,
   startResourceImport,
+  trashResource,
   updateResourceRole,
   type ImportEvent,
   type ResourceCommandError,
   type ResourceDocument,
   type ResourceReaderDescriptor,
 } from "../../shared/tauri/resourceClient";
+import { EditorDialog } from "../../shared/components/EditorDialog";
+import {
+  PageEmpty,
+  PageHeader,
+  PageStatus,
+  PageSurface,
+} from "../../shared/components/PagePrimitives";
+import { Button } from "../../shared/ui/Button";
+import { SectionHeader } from "../../shared/ui/SectionHeader";
+import { StatusBanner } from "../../shared/ui/StatusBanner";
+import { Toolbar, ToolbarSpacer } from "../../shared/ui/Toolbar";
 import { ResourceSearchPanel } from "./ResourceSearchPanel";
+import { ResourceTable } from "./ResourceTable";
+import {
+  formatResourceBytes,
+  formatResourceCount,
+  nextResourceFileView,
+  nextResourceTab,
+  RESOURCE_FILE_VIEWS,
+  RESOURCE_TABS,
+  type ResourceFileView,
+  type ResourceTab,
+} from "./resourceListModel";
 
 const PdfReader = lazy(() =>
   import("./pdf/PdfReader").then((module) => ({ default: module.PdfReader })),
+);
+const MindMapPanel = lazy(() =>
+  import("../mindmap/MindMapPanel").then((module) => ({
+    default: module.MindMapPanel,
+  })),
 );
 
 export interface ResourceOpenRequest {
@@ -45,24 +76,9 @@ interface ActiveImport {
   canceling: boolean;
 }
 
-function formatBytes(sizeBytes: number): string {
-  if (sizeBytes < 1024) {
-    return `${sizeBytes} B`;
-  }
-  if (sizeBytes < 1024 * 1024) {
-    return `${(sizeBytes / 1024).toFixed(1)} KiB`;
-  }
-  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MiB`;
-}
-
-const ROLE_LABELS: Record<ResourceDocument["role"], string> = {
-  planning: "规划资料",
-  reference: "参考资料",
-  workbook: "习题册",
-  other: "未分类",
-};
-
 export function ResourcePanel({ openRequest }: ResourcePanelProps) {
+  const [sectionView, setSectionView] = useState<ResourceTab>("files");
+  const [fileView, setFileView] = useState<ResourceFileView>("browse");
   const [resources, setResources] = useState<ResourceDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [listenerReady, setListenerReady] = useState(false);
@@ -71,8 +87,30 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
   const [reader, setReader] = useState<ResourceReaderDescriptor | null>(null);
   const [requestedPage, setRequestedPage] = useState<number>();
   const [readerLoading, setReaderLoading] = useState(false);
+  const [trashTarget, setTrashTarget] = useState<ResourceDocument>();
+  const [trashBusy, setTrashBusy] = useState(false);
   const terminalOperations = useRef(new Set<string>());
   const lastSavedProgress = useRef<string | undefined>(undefined);
+  const readerRequestRef = useRef(0);
+  const sectionTabRefs = useRef<Record<ResourceTab, HTMLButtonElement | null>>({
+    files: null,
+    mindmaps: null,
+  });
+  const fileViewRefs = useRef<
+    Record<ResourceFileView, HTMLButtonElement | null>
+  >({ browse: null, search: null });
+  const refreshResources = useCallback(async () => {
+    setLoading(true);
+    try {
+      const documents = await listResources();
+      setResources(documents);
+      setError(null);
+    } catch (listError: unknown) {
+      setError(normalizeResourceCommandError(listError));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -123,30 +161,26 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
       },
     );
 
-    void listResources().then(
-      (documents) => {
-        if (isActive) {
-          setResources(documents);
-          setLoading(false);
-        }
-      },
-      (listError: unknown) => {
-        if (isActive) {
-          setError(normalizeResourceCommandError(listError));
-          setLoading(false);
-        }
-      },
-    );
+    void Promise.resolve().then(() => {
+      if (isActive) {
+        void refreshResources();
+      }
+    });
 
     return () => {
       isActive = false;
       unlisten?.();
     };
-  }, []);
+  }, [refreshResources]);
 
   const openReader = useCallback(async (documentId: string, page?: number) => {
+    const requestId = readerRequestRef.current + 1;
+    readerRequestRef.current = requestId;
     try {
       const descriptor = await getResourceReaderDescriptor(documentId);
+      if (requestId !== readerRequestRef.current) {
+        return;
+      }
       setRequestedPage(page);
       setReader(descriptor);
       lastSavedProgress.current = undefined;
@@ -156,9 +190,13 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
           ?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 0);
     } catch (readerError: unknown) {
-      setError(normalizeResourceCommandError(readerError));
+      if (requestId === readerRequestRef.current) {
+        setError(normalizeResourceCommandError(readerError));
+      }
     } finally {
-      setReaderLoading(false);
+      if (requestId === readerRequestRef.current) {
+        setReaderLoading(false);
+      }
     }
   }, []);
 
@@ -168,6 +206,29 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
     void openReader(documentId, page);
   };
 
+  const closeReader = () => {
+    readerRequestRef.current += 1;
+    setReader(null);
+  };
+
+  const removeResource = async () => {
+    if (trashTarget === undefined) return;
+    setTrashBusy(true);
+    setError(null);
+    try {
+      await trashResource(trashTarget.id);
+      setResources((current) =>
+        current.filter((resource) => resource.id !== trashTarget.id),
+      );
+      if (reader?.documentId === trashTarget.id) setReader(null);
+      setTrashTarget(undefined);
+    } catch (trashError: unknown) {
+      setError(normalizeResourceCommandError(trashError));
+    } finally {
+      setTrashBusy(false);
+    }
+  };
+
   const requestedDocumentId = openRequest?.documentId;
   const requestedReferencePage = openRequest?.page;
   const requestNonce = openRequest?.nonce;
@@ -175,10 +236,12 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
     if (requestedDocumentId === undefined) {
       return;
     }
+    const requestId = readerRequestRef.current + 1;
+    readerRequestRef.current = requestId;
     let active = true;
     void getResourceReaderDescriptor(requestedDocumentId).then(
       (descriptor) => {
-        if (active) {
+        if (active && requestId === readerRequestRef.current) {
           setRequestedPage(requestedReferencePage);
           setReader(descriptor);
           lastSavedProgress.current = undefined;
@@ -190,7 +253,7 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
         }
       },
       (readerError: unknown) => {
-        if (active) {
+        if (active && requestId === readerRequestRef.current) {
           setError(normalizeResourceCommandError(readerError));
         }
       },
@@ -303,163 +366,304 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
           ),
         );
 
+  const selectSectionTab = (next: ResourceTab) => {
+    setSectionView(next);
+    requestAnimationFrame(() => sectionTabRefs.current[next]?.focus());
+  };
+
+  const handleSectionTabKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    current: ResourceTab,
+  ) => {
+    const next = nextResourceTab(current, event.key);
+    if (next === null) {
+      return;
+    }
+    event.preventDefault();
+    selectSectionTab(next);
+  };
+
+  const selectFileView = (next: ResourceFileView) => {
+    setFileView(next);
+    requestAnimationFrame(() => fileViewRefs.current[next]?.focus());
+  };
+
+  const handleFileViewKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    current: ResourceFileView,
+  ) => {
+    const next = nextResourceFileView(current, event.key);
+    if (next === null) {
+      return;
+    }
+    event.preventDefault();
+    selectFileView(next);
+  };
+
   return (
-    <section className="library-card" aria-labelledby="library-title">
-      <div className="library-heading">
-        <div>
-          <p className="section-label">本地资料库</p>
-          <h2 id="library-title">学习资料</h2>
-          <p className="library-description">
-            PDF、图片和思维导图源文件会复制到本地工作区；相同内容只保存一份。
-          </p>
-        </div>
-        <button
-          type="button"
-          disabled={!listenerReady || activeImport !== null}
-          onClick={() => void beginImport()}
-        >
-          选择并导入资料
-        </button>
-      </div>
-
-      {activeImport === null ? null : (
-        <div className="import-progress" aria-live="polite">
-          <div className="progress-copy">
-            <span>
-              {activeImport.canceling
-                ? "正在取消导入…"
-                : activeImport.totalBytes === 0
-                  ? "正在准备导入…"
-                  : `正在导入 ${progress}%`}
-            </span>
-            <span>
-              {formatBytes(activeImport.copiedBytes)} /{" "}
-              {formatBytes(activeImport.totalBytes)}
-            </span>
-          </div>
-          <progress value={progress} max={100} aria-label="资料导入进度" />
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={activeImport.canceling}
-            onClick={() => void cancelImport()}
+    <div className="library-page">
+      <PageHeader
+        id="library-title"
+        title="资料"
+        description="PDF、图片和思维导图源文件会复制到本地工作区；相同内容只保存一份。"
+        actions={
+          <Button
+            variant="primary"
+            disabled={!listenerReady || activeImport !== null}
+            onClick={() => void beginImport()}
           >
-            取消导入
-          </button>
-        </div>
-      )}
+            {listenerReady ? "选择并导入资料" : "正在准备导入…"}
+          </Button>
+        }
+      />
 
-      {error === null ? null : (
-        <div className="error-detail" role="alert">
-          <strong>{error.message}</strong>
-          <p>{error.action}</p>
-          {error.operationId === undefined ? null : (
-            <p className="operation-id">操作编号：{error.operationId}</p>
-          )}
-        </div>
-      )}
-
-      <ResourceSearchPanel resources={resources} onOpen={requestReader} />
-
-      {loading ? (
-        <p className="empty-state">正在读取本地资料…</p>
-      ) : resources.length === 0 ? (
-        <p className="empty-state">还没有资料，可以先导入一份 PDF 或图片。</p>
-      ) : (
-        <ul className="resource-list">
-          {resources.map((resource) => (
-            <li key={resource.id}>
-              <div>
-                <strong>{resource.title}</strong>
-                <span>
-                  {resource.kind} · {formatBytes(resource.sizeBytes)}
-                </span>
-                {resource.lastPage === undefined ? null : (
-                  <span>
-                    上次读到第 {resource.lastPage}
-                    {resource.pageCount === undefined
-                      ? " 页"
-                      : `/${resource.pageCount} 页`}
-                  </span>
-                )}
-              </div>
-              <div className="resource-actions">
-                <label>
-                  用途
-                  <select
-                    value={resource.role}
-                    onChange={(event) =>
-                      void changeRole(
-                        resource.id,
-                        event.target.value as ResourceDocument["role"],
-                      )
-                    }
-                  >
-                    {Object.entries(ROLE_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {resource.kind === "pdf" || resource.kind === "image" ? (
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={readerLoading}
-                    onClick={() => requestReader(resource.id)}
-                  >
-                    打开阅读
-                  </button>
-                ) : null}
-                <code title="SHA-256 内容指纹">
-                  {resource.sha256.slice(0, 12)}…
-                </code>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {reader === null ? null : (
-        <section
-          className="resource-reader"
-          aria-labelledby="resource-reader-title"
-        >
-          <div className="resource-reader-heading">
-            <div>
-              <p className="section-label">受控本地阅读</p>
-              <h3 id="resource-reader-title">{reader.title}</h3>
+      <PageSurface as="div" className="library-card">
+        {activeImport === null ? null : (
+          <div className="import-progress" aria-live="polite">
+            <div className="progress-copy">
+              <span>
+                {activeImport.canceling
+                  ? "正在取消导入…"
+                  : activeImport.totalBytes === 0
+                    ? "正在准备导入…"
+                    : `正在导入 ${progress}%`}
+              </span>
+              <span>
+                {formatResourceBytes(activeImport.copiedBytes)} /{" "}
+                {formatResourceBytes(activeImport.totalBytes)}
+              </span>
             </div>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => setReader(null)}
+            <progress value={progress} max={100} aria-label="资料导入进度" />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={activeImport.canceling}
+              onClick={() => void cancelImport()}
             >
-              关闭阅读器
-            </button>
+              取消导入
+            </Button>
           </div>
-          {reader.kind === "pdf" ? (
-            <Suspense
-              fallback={<p className="empty-state">正在加载 PDF 阅读器…</p>}
+        )}
+
+        {error === null ? null : (
+          <StatusBanner
+            tone="error"
+            title={error.message}
+            actions={
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={loading}
+                onClick={() => void refreshResources()}
+              >
+                {loading ? "正在重新读取资料…" : "重试读取资料"}
+              </Button>
+            }
+          >
+            <p>{error.action}</p>
+            {error.operationId === undefined ? null : (
+              <span className="operation-id">
+                操作编号：{error.operationId}
+              </span>
+            )}
+          </StatusBanner>
+        )}
+
+        <div
+          className="library-view-switch"
+          role="tablist"
+          aria-label="资料功能切换"
+        >
+          {RESOURCE_TABS.map((tab) => (
+            <Button
+              key={tab.id}
+              ref={(node) => {
+                sectionTabRefs.current[tab.id] = node;
+              }}
+              variant={sectionView === tab.id ? "primary" : "ghost"}
+              size="sm"
+              id={`resource-tab-${tab.id}`}
+              role="tab"
+              aria-controls={`resource-panel-${tab.id}`}
+              aria-selected={sectionView === tab.id}
+              tabIndex={sectionView === tab.id ? 0 : -1}
+              onClick={() => selectSectionTab(tab.id)}
+              onKeyDown={(event) => handleSectionTabKeyDown(event, tab.id)}
             >
-              <PdfReader
-                key={`${reader.documentId}:${requestedPage ?? "resume"}`}
-                descriptor={reader}
-                requestedPage={requestedPage}
-                onProgress={persistReadingProgress}
+              {tab.label}
+            </Button>
+          ))}
+        </div>
+
+        <div
+          id={`resource-panel-${sectionView}`}
+          role="tabpanel"
+          aria-labelledby={`resource-tab-${sectionView}`}
+          tabIndex={0}
+        >
+          {sectionView === "mindmaps" ? (
+            <Suspense
+              fallback={
+                <PageStatus tone="loading" title="正在加载导图阅读器…" />
+              }
+            >
+              <MindMapPanel
+                onOpenResource={(documentId, page) => {
+                  selectSectionTab("files");
+                  requestReader(documentId, page);
+                }}
               />
             </Suspense>
           ) : (
-            <div className="image-reader">
-              <img
-                src={buildResourceProtocolUrl(reader.documentId, "image")}
-                alt={reader.title}
-              />
-            </div>
+            <>
+              <Toolbar
+                label="资料浏览与搜索视图"
+                className="resource-file-toolbar"
+              >
+                {RESOURCE_FILE_VIEWS.map((view) => (
+                  <Button
+                    key={view.id}
+                    ref={(node) => {
+                      fileViewRefs.current[view.id] = node;
+                    }}
+                    variant={fileView === view.id ? "primary" : "ghost"}
+                    size="sm"
+                    aria-pressed={fileView === view.id}
+                    onClick={() => selectFileView(view.id)}
+                    onKeyDown={(event) => handleFileViewKeyDown(event, view.id)}
+                  >
+                    {view.label}
+                  </Button>
+                ))}
+                <ToolbarSpacer />
+                <span className="resource-count" aria-live="polite">
+                  {formatResourceCount(resources.length)} 份资料
+                </span>
+              </Toolbar>
+
+              {fileView === "search" ? (
+                <div id="resource-file-panel-search" aria-label="全文搜索">
+                  <ResourceSearchPanel
+                    resources={resources}
+                    onOpen={requestReader}
+                  />
+                </div>
+              ) : (
+                <section
+                  id="resource-file-panel-browse"
+                  className="resource-browser"
+                  aria-label="浏览资料"
+                >
+                  <SectionHeader
+                    title="资料文件"
+                    description="按用途管理资料；打开是最常用的动作，更多操作收在行菜单中。"
+                    actions={
+                      <span className="resource-browser-hint">
+                        {resources.length === 0 ? "暂无资料" : "列表视图"}
+                      </span>
+                    }
+                  />
+
+                  {loading ? (
+                    <PageStatus tone="loading" title="正在读取本地资料…" />
+                  ) : resources.length === 0 ? (
+                    <PageEmpty
+                      title="还没有资料"
+                      description="可以先导入一份 PDF 或图片。"
+                    />
+                  ) : (
+                    <ResourceTable
+                      resources={resources}
+                      readerLoading={readerLoading}
+                      onOpen={requestReader}
+                      onChangeRole={(documentId, role) =>
+                        void changeRole(documentId, role)
+                      }
+                      onRequestDelete={setTrashTarget}
+                    />
+                  )}
+                </section>
+              )}
+
+              {reader === null ? null : (
+                <section
+                  className="resource-reader"
+                  aria-labelledby="resource-reader-title"
+                >
+                  <div className="resource-reader-heading">
+                    <div>
+                      <p className="section-label">受控本地阅读</p>
+                      <h2 id="resource-reader-title">{reader.title}</h2>
+                    </div>
+                    <Button variant="secondary" size="sm" onClick={closeReader}>
+                      关闭阅读器
+                    </Button>
+                  </div>
+                  {reader.kind === "pdf" ? (
+                    <Suspense
+                      fallback={
+                        <PageStatus
+                          tone="loading"
+                          title="正在加载 PDF 阅读器…"
+                        />
+                      }
+                    >
+                      <PdfReader
+                        key={`${reader.documentId}:${requestedPage ?? "resume"}`}
+                        descriptor={reader}
+                        requestedPage={requestedPage}
+                        onProgress={persistReadingProgress}
+                      />
+                    </Suspense>
+                  ) : (
+                    <div className="image-reader">
+                      <img
+                        src={buildResourceProtocolUrl(
+                          reader.documentId,
+                          "image",
+                        )}
+                        alt={reader.title}
+                        width={1600}
+                        height={1200}
+                      />
+                    </div>
+                  )}
+                </section>
+              )}
+              {trashTarget === undefined ? null : (
+                <EditorDialog
+                  title="删除资料"
+                  description="资料会从资料库列表移除；为保证已建立的题目卡片仍可查看，原文件会安全保留在 KyStudy 工作区中。"
+                  dirty={false}
+                  onRequestClose={() => setTrashTarget(undefined)}
+                >
+                  <div className="destructive-confirmation">
+                    <strong>{trashTarget.title}</strong>
+                    <p>此操作不会删除已经建立的题目索引和错题记录。</p>
+                    <div className="editor-actions">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setTrashTarget(undefined)}
+                      >
+                        取消
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        disabled={trashBusy}
+                        onClick={() => void removeResource()}
+                      >
+                        {trashBusy ? "正在删除…" : "确认删除资料"}
+                      </Button>
+                    </div>
+                  </div>
+                </EditorDialog>
+              )}
+            </>
           )}
-        </section>
-      )}
-    </section>
+        </div>
+      </PageSurface>
+    </div>
   );
 }

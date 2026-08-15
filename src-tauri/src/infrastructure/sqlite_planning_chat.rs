@@ -120,6 +120,8 @@ impl PlanningChatRepository for SqlitePlanningChatRepository {
                          FROM resource_text_chunk c
                          JOIN resource_document d ON d.id = c.document_id
                          WHERE c.document_id = ?1 AND c.page_number = ?2
+                           AND d.deleted_at IS NULL
+                           AND d.role = 'planning'
                          ORDER BY CASE
                             WHEN instr(lower(c.text), lower(?3)) > 0 THEN 0 ELSE 1
                          END, c.sequence
@@ -449,15 +451,125 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex, PoisonError};
 
+    use rusqlite::params;
     use tempfile::tempdir;
 
     use super::SqlitePlanningChatRepository;
     use crate::application::{
-        AiError, AiUseCases, ConfirmPlanningChatInput, PlanningChatInput, PlanningChatUseCases,
-        SecretStore, WorkspaceRepository,
+        AiError, AiUseCases, ConfirmPlanningChatInput, PlanningChatError, PlanningChatInput,
+        PlanningChatRepository, PlanningChatUseCases, PlanningContextSelection, SecretStore,
+        WorkspaceRepository,
     };
     use crate::domain::NewWorkspace;
     use crate::infrastructure::{ProviderRouter, SqliteAiRepository, SqliteWorkspaceRepository};
+
+    const DOCUMENT_ID: &str = "019f7328-4b66-7613-9729-e3570fc41525";
+
+    struct ContextFixture {
+        _directory: tempfile::TempDir,
+        repository: SqlitePlanningChatRepository,
+    }
+
+    impl ContextFixture {
+        fn selection(document_id: &str) -> PlanningContextSelection {
+            PlanningContextSelection {
+                document_id: document_id.to_owned(),
+                page_number: 1,
+                search_query: "context".to_owned(),
+            }
+        }
+
+        fn assert_context_not_found(&self) {
+            let error = self
+                .repository
+                .resolve_contexts(&[Self::selection(DOCUMENT_ID)])
+                .expect_err("ineligible documents must not resolve as planning context");
+            assert!(matches!(error, PlanningChatError::ContextNotFound));
+        }
+
+        fn set_document_metadata(&self, role: &str, kind: &str, deleted_at: Option<i64>) {
+            let connection = self.repository.open().expect("database should open");
+            connection
+                .execute(
+                    "UPDATE resource_document
+                     SET role = ?1, kind = ?2, deleted_at = ?3
+                     WHERE id = ?4",
+                    params![role, kind, deleted_at, DOCUMENT_ID],
+                )
+                .expect("document metadata should update");
+        }
+    }
+
+    fn context_fixture() -> ContextFixture {
+        let directory = tempdir().expect("temporary directory should exist");
+        SqliteWorkspaceRepository::new(directory.path())
+            .initialize_default(&NewWorkspace::default_at(1_700_000_000_000))
+            .expect("workspace should initialize");
+        let repository = SqlitePlanningChatRepository::new(directory.path());
+        let connection = repository.open().expect("database should open");
+        let workspace_id: String = connection
+            .query_row(
+                "SELECT id FROM workspace WHERE singleton_key = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("workspace should exist");
+        let blob_id = "019f7328-4b66-7613-9729-e3570fc41526";
+        let hash = "0".repeat(64);
+        connection
+            .execute(
+                "INSERT INTO blob(
+                    id, workspace_id, sha256, size_bytes, storage_key, created_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![blob_id, &workspace_id, &hash, 1_i64, "blobs/context", 1_i64],
+            )
+            .expect("blob fixture should insert");
+        connection
+            .execute(
+                "INSERT INTO resource_document(
+                    id, workspace_id, blob_id, title, original_name, kind, mime_type,
+                    created_at, updated_at, revision, role, page_count, deleted_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, 'pdf', 'application/pdf', ?6, ?6, 1,
+                           'planning', 1, NULL)",
+                params![
+                    DOCUMENT_ID,
+                    &workspace_id,
+                    blob_id,
+                    "Active planning PDF",
+                    "context.pdf",
+                    1_i64
+                ],
+            )
+            .expect("document fixture should insert");
+        connection
+            .execute(
+                "INSERT INTO resource_page_text(
+                    document_id, page_number, width_points, height_points, text_state,
+                    text_content, content_hash, indexed_at
+                 ) VALUES (?1, 1, 1.0, 1.0, 'text', ?2, ?3, ?4)",
+                params![DOCUMENT_ID, "planning context", &hash, 1_i64],
+            )
+            .expect("page text fixture should insert");
+        connection
+            .execute(
+                "INSERT INTO resource_text_chunk(
+                    id, document_id, page_number, sequence, text, chunk_hash, created_at
+                 ) VALUES (?1, ?2, 1, 0, ?3, ?4, ?5)",
+                params![
+                    uuid::Uuid::now_v7().to_string(),
+                    DOCUMENT_ID,
+                    "planning context",
+                    &hash,
+                    1_i64
+                ],
+            )
+            .expect("text chunk fixture should insert");
+
+        ContextFixture {
+            _directory: directory,
+            repository,
+        }
+    }
 
     #[derive(Debug, Clone, Default)]
     struct MemorySecretStore(Arc<Mutex<HashMap<String, String>>>);
@@ -558,5 +670,50 @@ mod tests {
         assert_eq!(status, "draft");
         assert_eq!(source_message, assistant.id);
         assert_eq!(purpose, "planning_chat");
+    }
+
+    #[test]
+    fn resolve_contexts_accepts_active_planning_pdf_page_text() {
+        let fixture = context_fixture();
+
+        let contexts = fixture
+            .repository
+            .resolve_contexts(&[ContextFixture::selection(DOCUMENT_ID)])
+            .expect("active planning PDF should resolve");
+
+        assert_eq!(
+            (
+                contexts[0].source.document_title.as_str(),
+                contexts[0].text.as_str()
+            ),
+            ("Active planning PDF", "planning context")
+        );
+    }
+
+    #[test]
+    fn resolve_contexts_accepts_active_planning_non_pdf_page_text() {
+        let fixture = context_fixture();
+        fixture.set_document_metadata("planning", "document", None);
+
+        let contexts = fixture
+            .repository
+            .resolve_contexts(&[ContextFixture::selection(DOCUMENT_ID)])
+            .expect("active planning non-PDF should resolve");
+
+        assert_eq!(contexts[0].text, "planning context");
+    }
+
+    #[test]
+    fn resolve_contexts_rejects_reference_workbook_and_trashed_documents() {
+        let fixture = context_fixture();
+
+        for (role, kind, deleted_at) in [
+            ("reference", "pdf", None),
+            ("workbook", "pdf", None),
+            ("planning", "pdf", Some(1_700_000_000_100_i64)),
+        ] {
+            fixture.set_document_metadata(role, kind, deleted_at);
+            fixture.assert_context_not_found();
+        }
     }
 }

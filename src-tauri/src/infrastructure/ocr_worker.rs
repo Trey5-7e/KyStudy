@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -7,11 +7,14 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
+use sha2::Digest;
 use tempfile::Builder;
+use uuid::Uuid;
+use zip::ZipArchive;
 
 use crate::application::{
-    OCR_ENGINE_NAME, OcrComponentState, OcrComponentStatus, OcrEngine, OcrEngineLine,
-    OcrEngineOutput, OcrError,
+    OCR_ENGINE_NAME, OcrComponentDownloader, OcrComponentManager, OcrComponentState,
+    OcrComponentStatus, OcrEngine, OcrEngineLine, OcrEngineOutput, OcrError,
 };
 
 const POLL_INTERVAL: Duration = Duration::from_millis(25);
@@ -24,6 +27,35 @@ const REQUIRED_COMPONENT_FILES: &[&str] = &[
     "_internal/rapidocr/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx",
     "_internal/onnxruntime/capi/onnxruntime_pybind11_state.pyd",
 ];
+const MAX_DOWNLOAD_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_ARCHIVE_UNCOMPRESSED_BYTES: u64 = 1024 * 1024 * 1024;
+
+#[derive(Debug, Clone, Copy)]
+struct OcrDownloadManifest {
+    url: &'static str,
+    sha256: &'static str,
+}
+
+// Filled only when a signed Release asset and its digest are published.
+const OCR_DOWNLOAD_URL: Option<&str> = option_env!("KYSTUDY_OCR_DOWNLOAD_URL");
+const OCR_DOWNLOAD_SHA256: Option<&str> = option_env!("KYSTUDY_OCR_DOWNLOAD_SHA256");
+
+fn ocr_download_manifest() -> Option<OcrDownloadManifest> {
+    match (OCR_DOWNLOAD_URL, OCR_DOWNLOAD_SHA256) {
+        (Some(url), Some(sha256)) if valid_download_url(url) && valid_sha256(sha256) => {
+            Some(OcrDownloadManifest { url, sha256 })
+        }
+        _ => None,
+    }
+}
+
+fn valid_download_url(value: &str) -> bool {
+    reqwest::Url::parse(value).is_ok_and(|url| url.scheme() == "https")
+}
+
+fn valid_sha256(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
 
 /// Launches the optional OCR component without exposing its managed path.
 #[derive(Debug, Clone)]
@@ -45,6 +77,7 @@ impl LocalOcrWorker {
             .join("kystudy-ocr-worker")
     }
 
+    #[cfg(debug_assertions)]
     fn development_component_root() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
@@ -61,12 +94,16 @@ impl LocalOcrWorker {
         if managed.exists() {
             return managed;
         }
-        let development = Self::development_component_root();
-        if development.exists() {
-            development
-        } else {
-            managed
+        // Keep the repository-local worker convenient for `tauri dev`, but never
+        // let a Release build report an unmanaged development component.
+        #[cfg(debug_assertions)]
+        {
+            let development = Self::development_component_root();
+            if development.exists() {
+                return development;
+            }
         }
+        managed
     }
 }
 
@@ -149,6 +186,246 @@ impl OcrEngine for LocalOcrWorker {
         let output = fs::read_to_string(output_file.path()).map_err(storage_error)?;
         parse_worker_response(&output)
     }
+}
+
+impl OcrComponentManager for LocalOcrWorker {
+    fn install_component(&self, source: &Path) -> Result<OcrComponentStatus, OcrError> {
+        let source = fs::canonicalize(source).map_err(|_| OcrError::ComponentSourceInvalid)?;
+        let managed = self.managed_component_root();
+        if !source.is_dir()
+            || (managed.exists()
+                && fs::canonicalize(&managed).is_ok_and(|managed| managed == source))
+        {
+            return Err(OcrError::ComponentSourceInvalid);
+        }
+        validate_component_tree(&source)?;
+
+        let parent = self
+            .managed_component_root()
+            .parent()
+            .map(Path::to_owned)
+            .ok_or(OcrError::ComponentInstallFailed)?;
+        fs::create_dir_all(&parent).map_err(|_| OcrError::ComponentInstallFailed)?;
+        let temporary = parent.join(format!(".kystudy-ocr-install-{}", Uuid::now_v7()));
+        if let Err(error) = copy_component_tree(&source, &temporary) {
+            let _ = fs::remove_dir_all(&temporary);
+            return Err(error);
+        }
+
+        let previous = parent.join(format!(".kystudy-ocr-previous-{}", Uuid::now_v7()));
+        let had_previous = managed.exists();
+        if had_previous {
+            fs::rename(&managed, &previous).map_err(|_| {
+                let _ = fs::remove_dir_all(&temporary);
+                OcrError::ComponentInstallFailed
+            })?;
+        }
+        if fs::rename(&temporary, &managed).is_err() {
+            let _ = fs::remove_dir_all(&temporary);
+            if had_previous {
+                let _ = fs::rename(&previous, &managed);
+            }
+            return Err(OcrError::ComponentInstallFailed);
+        }
+        if had_previous {
+            fs::remove_dir_all(&previous).map_err(|_| OcrError::ComponentInstallFailed)?;
+        }
+        Ok(self.status())
+    }
+
+    fn remove_component(&self) -> Result<OcrComponentStatus, OcrError> {
+        let managed = self.managed_component_root();
+        if managed.exists() {
+            fs::remove_dir_all(managed).map_err(|_| OcrError::ComponentRemovalFailed)?;
+        }
+        Ok(self.status())
+    }
+}
+
+impl OcrComponentDownloader for LocalOcrWorker {
+    fn download_available(&self) -> bool {
+        ocr_download_manifest().is_some()
+    }
+
+    fn download_component(
+        &self,
+        canceled: &AtomicBool,
+        observe: &mut dyn FnMut(u64, u64),
+    ) -> Result<OcrComponentStatus, OcrError> {
+        let Some(manifest) = ocr_download_manifest() else {
+            return Err(OcrError::ComponentDownloadUnavailable);
+        };
+        let cache_directory = self.application_data_directory.join("cache").join("ocr");
+        fs::create_dir_all(&cache_directory).map_err(|_| OcrError::ComponentDownloadFailed)?;
+        let archive_path = cache_directory.join(format!("download-{}.zip", Uuid::now_v7()));
+        let result = download_archive(manifest, &archive_path, canceled, observe).and_then(|()| {
+            let (source, extraction_root) =
+                extract_component_archive(&archive_path, &cache_directory, canceled)?;
+            let install_result = self.install_component(&source);
+            let _ = fs::remove_dir_all(extraction_root);
+            install_result
+        });
+        let _ = fs::remove_file(&archive_path);
+        result
+    }
+}
+
+fn download_archive(
+    manifest: OcrDownloadManifest,
+    archive_path: &Path,
+    canceled: &AtomicBool,
+    observe: &mut dyn FnMut(u64, u64),
+) -> Result<(), OcrError> {
+    let url =
+        reqwest::Url::parse(manifest.url).map_err(|_| OcrError::ComponentDownloadUnavailable)?;
+    if url.scheme() != "https" {
+        return Err(OcrError::ComponentDownloadUnavailable);
+    }
+    let client = reqwest::blocking::Client::builder()
+        .https_only(true)
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::limited(3))
+        .build()
+        .map_err(|_| OcrError::ComponentDownloadFailed)?;
+    let mut response = client
+        .get(url)
+        .send()
+        .map_err(|_| OcrError::ComponentDownloadFailed)?;
+    if !response.status().is_success() {
+        return Err(OcrError::ComponentDownloadFailed);
+    }
+    let total = response.content_length().unwrap_or(0);
+    if total > MAX_DOWNLOAD_BYTES {
+        return Err(OcrError::ComponentDownloadFailed);
+    }
+    let mut output =
+        fs::File::create(archive_path).map_err(|_| OcrError::ComponentDownloadFailed)?;
+    let mut hasher = sha2::Sha256::new();
+    let mut copied = 0_u64;
+    let mut buffer = vec![0_u8; 64 * 1024].into_boxed_slice();
+    loop {
+        if canceled.load(Ordering::Relaxed) {
+            return Err(OcrError::Canceled);
+        }
+        let read = response
+            .read(&mut buffer)
+            .map_err(|_| OcrError::ComponentDownloadFailed)?;
+        if read == 0 {
+            break;
+        }
+        copied = copied
+            .checked_add(u64::try_from(read).map_err(|_| OcrError::ComponentDownloadFailed)?)
+            .ok_or(OcrError::ComponentDownloadFailed)?;
+        if copied > MAX_DOWNLOAD_BYTES {
+            return Err(OcrError::ComponentDownloadFailed);
+        }
+        output
+            .write_all(&buffer[..read])
+            .map_err(|_| OcrError::ComponentDownloadFailed)?;
+        hasher.update(&buffer[..read]);
+        observe(copied, total);
+    }
+    output
+        .sync_all()
+        .map_err(|_| OcrError::ComponentDownloadFailed)?;
+    let actual = format!("{:x}", hasher.finalize());
+    if !actual.eq_ignore_ascii_case(manifest.sha256) {
+        return Err(OcrError::ComponentDownloadIntegrity);
+    }
+    Ok(())
+}
+
+fn extract_component_archive(
+    archive_path: &Path,
+    temporary_parent: &Path,
+    canceled: &AtomicBool,
+) -> Result<(PathBuf, PathBuf), OcrError> {
+    let file = fs::File::open(archive_path).map_err(|_| OcrError::ComponentArchiveInvalid)?;
+    let mut archive = ZipArchive::new(file).map_err(|_| OcrError::ComponentArchiveInvalid)?;
+    let extraction_root = temporary_parent.join(format!("extract-{}", Uuid::now_v7()));
+    fs::create_dir_all(&extraction_root).map_err(|_| OcrError::ComponentArchiveInvalid)?;
+    let result = (|| {
+        let mut uncompressed_bytes = 0_u64;
+        for index in 0..archive.len() {
+            if canceled.load(Ordering::Relaxed) {
+                return Err(OcrError::Canceled);
+            }
+            let mut entry = archive
+                .by_index(index)
+                .map_err(|_| OcrError::ComponentArchiveInvalid)?;
+            uncompressed_bytes = uncompressed_bytes
+                .checked_add(entry.size())
+                .ok_or(OcrError::ComponentArchiveInvalid)?;
+            if uncompressed_bytes > MAX_ARCHIVE_UNCOMPRESSED_BYTES {
+                return Err(OcrError::ComponentArchiveInvalid);
+            }
+            if entry
+                .unix_mode()
+                .is_some_and(|mode| mode & 0o170_000 == 0o120_000)
+            {
+                return Err(OcrError::ComponentArchiveInvalid);
+            }
+            let relative = entry
+                .enclosed_name()
+                .ok_or(OcrError::ComponentArchiveInvalid)?;
+            let destination = extraction_root.join(relative);
+            if entry.is_dir() {
+                fs::create_dir_all(&destination).map_err(|_| OcrError::ComponentArchiveInvalid)?;
+            } else {
+                if let Some(parent) = destination.parent() {
+                    fs::create_dir_all(parent).map_err(|_| OcrError::ComponentArchiveInvalid)?;
+                }
+                let mut output = fs::File::create(&destination)
+                    .map_err(|_| OcrError::ComponentArchiveInvalid)?;
+                std::io::copy(&mut entry, &mut output)
+                    .map_err(|_| OcrError::ComponentArchiveInvalid)?;
+            }
+        }
+        let source = extraction_root.join("kystudy-ocr-worker");
+        validate_component_tree(&source).map_err(|_| OcrError::ComponentArchiveInvalid)?;
+        Ok((source, extraction_root.clone()))
+    })();
+    if result.is_err() {
+        let _ = fs::remove_dir_all(&extraction_root);
+    }
+    result
+}
+
+fn validate_component_tree(root: &Path) -> Result<(), OcrError> {
+    for relative in REQUIRED_COMPONENT_FILES {
+        let path = root.join(relative);
+        let metadata = fs::symlink_metadata(path).map_err(|_| OcrError::ComponentSourceInvalid)?;
+        if !metadata.file_type().is_file() {
+            return Err(OcrError::ComponentSourceInvalid);
+        }
+    }
+    Ok(())
+}
+
+fn copy_component_tree(source: &Path, destination: &Path) -> Result<(), OcrError> {
+    fs::create_dir(destination).map_err(|_| OcrError::ComponentInstallFailed)?;
+    for entry in fs::read_dir(source).map_err(|_| OcrError::ComponentInstallFailed)? {
+        let entry = entry.map_err(|_| OcrError::ComponentInstallFailed)?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        let metadata =
+            fs::symlink_metadata(&source_path).map_err(|_| OcrError::ComponentInstallFailed)?;
+        if metadata.file_type().is_symlink() {
+            let _ = fs::remove_dir_all(destination);
+            return Err(OcrError::ComponentSourceInvalid);
+        }
+        if metadata.file_type().is_dir() {
+            copy_component_tree(&source_path, &destination_path)?;
+        } else if metadata.file_type().is_file() {
+            fs::copy(&source_path, &destination_path)
+                .map_err(|_| OcrError::ComponentInstallFailed)?;
+        } else {
+            let _ = fs::remove_dir_all(destination);
+            return Err(OcrError::ComponentSourceInvalid);
+        }
+    }
+    Ok(())
 }
 
 fn wait_for_worker(child: &mut Child, canceled: &AtomicBool) -> Result<ExitStatus, OcrError> {
@@ -295,7 +572,19 @@ fn storage_error(_: std::io::Error) -> OcrError {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
+    use tempfile::tempdir;
+
+    fn component_fixture(root: &Path) {
+        for relative in REQUIRED_COMPONENT_FILES {
+            let path = root.join(relative);
+            fs::create_dir_all(path.parent().expect("fixture file should have a parent"))
+                .expect("fixture directory should be created");
+            fs::write(path, b"fixture").expect("fixture file should be written");
+        }
+    }
 
     #[test]
     fn parser_accepts_the_stable_worker_schema() {
@@ -323,5 +612,74 @@ mod tests {
             parse_worker_response(r#"{"schemaVersion":1,"error":{"code":"OCR_INPUT_TOO_LARGE"}}"#);
 
         assert!(matches!(result, Err(OcrError::InvalidInput)));
+    }
+
+    #[test]
+    fn component_install_validates_and_replaces_managed_directory_atomically() {
+        let application_data = tempdir().expect("application data should exist");
+        let source = tempdir().expect("component source should exist");
+        component_fixture(source.path());
+        let worker = LocalOcrWorker::new(application_data.path());
+
+        let status = worker
+            .install_component(source.path())
+            .expect("complete component should install");
+        assert_eq!(status.state, OcrComponentState::Available);
+        assert!(worker.managed_component_root().is_dir());
+
+        let replacement = tempdir().expect("replacement source should exist");
+        component_fixture(replacement.path());
+        fs::write(
+            replacement.path().join("kystudy-ocr-worker.exe"),
+            b"replacement",
+        )
+        .expect("replacement marker should be written");
+        worker
+            .install_component(replacement.path())
+            .expect("replacement component should install");
+        assert_eq!(
+            fs::read(
+                worker
+                    .managed_component_root()
+                    .join("kystudy-ocr-worker.exe")
+            )
+            .expect("installed executable marker should be readable"),
+            b"replacement"
+        );
+    }
+
+    #[test]
+    fn component_install_rejects_incomplete_source_and_remove_cleans_managed_copy() {
+        let application_data = tempdir().expect("application data should exist");
+        let source = tempdir().expect("component source should exist");
+        fs::write(source.path().join("kystudy-ocr-worker.exe"), b"partial")
+            .expect("partial marker should be written");
+        let worker = LocalOcrWorker::new(application_data.path());
+
+        assert!(matches!(
+            worker.install_component(source.path()),
+            Err(OcrError::ComponentSourceInvalid)
+        ));
+
+        let complete = tempdir().expect("complete source should exist");
+        component_fixture(complete.path());
+        worker
+            .install_component(complete.path())
+            .expect("complete component should install");
+        worker
+            .remove_component()
+            .expect("managed component should be removable");
+        assert!(!worker.managed_component_root().exists());
+    }
+
+    #[test]
+    fn download_configuration_accepts_only_https_and_a_sha256_digest() {
+        assert!(valid_download_url("https://example.com/ocr.zip"));
+        assert!(!valid_download_url("http://example.com/ocr.zip"));
+        assert!(!valid_download_url("not-a-url"));
+        assert!(valid_sha256(&"a".repeat(64)));
+        assert!(valid_sha256(&"A1".repeat(32)));
+        assert!(!valid_sha256("short"));
+        assert!(!valid_sha256(&"g".repeat(64)));
     }
 }

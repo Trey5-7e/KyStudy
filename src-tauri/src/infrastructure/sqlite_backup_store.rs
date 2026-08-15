@@ -508,18 +508,20 @@ mod tests {
     };
     use crate::application::{
         BackupRepository, BeginResourceIndexInput, CreateQuestionInput, GenerateReviewQueueInput,
-        ImportRequest, KnowledgeRepository, QuestionRegionInput, QuestionUseCases,
-        ResourceRepository, ReviewUseCases, ScheduleRepository, SearchResourcesInput,
-        SearchUseCases, StoreResourcePageTextInput, SubmitReviewInput, WorkspaceRepository,
+        ImportRequest, KnowledgeRepository, QuestionBankUseCases, QuestionRegionInput,
+        QuestionUseCases, ResourceRepository, ReviewUseCases, ScheduleRepository,
+        SearchResourcesInput, SearchUseCases, SetQuestionGapAcknowledgementInput,
+        StoreResourcePageTextInput, SubmitReviewInput, WorkspaceRepository,
     };
     use crate::domain::{
         KnowledgeMap, KnowledgeNode, LATEST_SCHEMA_VERSION, LocalDate, MasteryState,
         NewStudySession, NewSubject, NewTask, NewWorkspace, SubjectColor, TaskDraft, TaskPriority,
     };
+    use crate::infrastructure::sqlite_workspace::DATABASE_FILE_NAME;
     use crate::infrastructure::{
-        SqliteBlobStore, SqliteKnowledgeRepository, SqliteQuestionRepository,
-        SqliteReviewRepository, SqliteScheduleRepository, SqliteSearchRepository,
-        SqliteWorkspaceRepository,
+        SqliteBlobStore, SqliteKnowledgeRepository, SqliteQuestionBankRepository,
+        SqliteQuestionRepository, SqliteReviewRepository, SqliteScheduleRepository,
+        SqliteSearchRepository, SqliteWorkspaceRepository,
     };
 
     struct Fixture {
@@ -596,6 +598,98 @@ mod tests {
             b"backup-fixture-content"
         );
         assert!(destination.join(MANIFEST_FILE_NAME).is_file());
+    }
+
+    #[test]
+    fn complete_backup_restores_question_gap_acknowledgements() {
+        let fixture = initialized_fixture();
+        let question_bank = QuestionBankUseCases::new(SqliteQuestionBankRepository::new(
+            fixture.application_data.path(),
+        ));
+        question_bank
+            .set_question_gap_acknowledgement(&SetQuestionGapAcknowledgementInput {
+                issue_key: "jump|question-z".to_owned(),
+                acknowledged: true,
+            })
+            .expect("question gap acknowledgement should persist");
+
+        let output = tempdir().expect("output directory should exist");
+        let backup = create_backup(&fixture, &output);
+        let destination = output.path().join("restored-question-gap");
+        fixture
+            .backup
+            .restore_backup(&backup, &destination)
+            .expect("question gap acknowledgement should restore");
+
+        let connection = Connection::open(destination.join(DATABASE_FILE_NAME))
+            .expect("restored database should open");
+        let issue_key: String = connection
+            .query_row(
+                "SELECT issue_key FROM question_gap_acknowledgement",
+                [],
+                |row| row.get(0),
+            )
+            .expect("acknowledged issue should restore");
+
+        assert_eq!(issue_key, "jump|question-z");
+    }
+
+    #[test]
+    fn complete_backup_restores_skipped_cycle_plan_items() {
+        let fixture = initialized_fixture();
+        let connection = Connection::open(fixture.workspace.database_path())
+            .expect("workspace database should open");
+        let workspace_id: String = connection
+            .query_row(
+                "SELECT id FROM workspace WHERE singleton_key = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("workspace id should load");
+        connection
+            .execute(
+                "INSERT INTO cycle_plan(
+                    id, workspace_id, name, total_units, unit_label, start_date, deadline,
+                    study_days_per_unit, schedule_mode, calendar_visible, archived_at,
+                    created_at, updated_at
+                 ) VALUES (?1, ?2, 'cycle', 1, 'unit', '2026-08-01', '2026-09-01',
+                           1, 'rhythm', 1, NULL, 100, 200)",
+                rusqlite::params!["019f7328-4b66-7613-9729-e3570fc41525", workspace_id],
+            )
+            .expect("cycle plan should insert");
+        connection
+            .execute(
+                "INSERT INTO cycle_plan_item(
+                    id, plan_id, unit_index, planned_start_date, planned_end_date,
+                    original_start_date, original_end_date, state, completed_at, skipped_at,
+                    shift_count, created_at, updated_at
+                 ) VALUES (?1, ?2, 1, '2026-08-01', '2026-08-01',
+                           '2026-08-01', '2026-08-01', 'skipped', NULL, 180, 0, 100, 180)",
+                [
+                    "019f7328-4b66-7613-9729-e3570fc41526",
+                    "019f7328-4b66-7613-9729-e3570fc41525",
+                ],
+            )
+            .expect("skipped item should insert");
+        drop(connection);
+
+        let output = tempdir().expect("output directory should exist");
+        let backup = create_backup(&fixture, &output);
+        let destination = output.path().join("restored-skipped-cycle");
+        fixture
+            .backup
+            .restore_backup(&backup, &destination)
+            .expect("backup should restore");
+        let restored = Connection::open(destination.join(DATABASE_FILE_NAME))
+            .expect("restored database should open");
+        let state: (String, Option<i64>, Option<i64>) = restored
+            .query_row(
+                "SELECT state, completed_at, skipped_at FROM cycle_plan_item WHERE unit_index = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("restored skipped item should load");
+        assert_eq!(state, ("skipped".to_owned(), None, Some(180)));
     }
 
     #[test]
@@ -844,6 +938,8 @@ mod tests {
             .create_question(CreateQuestionInput {
                 document_id: fixture.document_id.clone(),
                 title: "数据结构题目".to_owned(),
+                subject_id: None,
+                question_type: Some("solution".to_owned()),
                 chapter: None,
                 question_number: Some("1".to_owned()),
                 difficulty: 3,
@@ -1022,7 +1118,20 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE ai_context_ref;
+                "DROP TABLE review_scheme_undo;
+                 DROP TABLE question_gap_acknowledgement;
+                 DROP TABLE cycle_plan_shift_undo_item;
+                 DROP TABLE cycle_plan_shift_undo;
+                 DROP TABLE cycle_plan_item;
+                 DROP TABLE cycle_plan;
+                 DROP TABLE ai_context_ref;
+                 DROP TABLE review_scheme_queue_item;
+                 DROP TABLE review_scheme_queue;
+                 DROP TABLE review_scheme_type_quota;
+                 DROP TABLE review_scheme_document;
+                 DROP TABLE review_scheme;
+                 DROP TABLE workspace_rest_weekday;
+                 DROP TABLE workbook_profile;
                  DROP TABLE ai_message;
                  DROP TABLE ai_conversation;
                  DROP TABLE ai_response_cache;
@@ -1041,8 +1150,14 @@ mod tests {
                  DROP TABLE review_state;
                  DROP TABLE mistake_profile;
                  DROP TABLE plan_stage_task;
+                 DROP INDEX idx_resource_document_active;
+                 ALTER TABLE resource_document DROP COLUMN deleted_at;
                  DROP TABLE question_region_ocr_line;
                  DROP TABLE question_region_ocr;
+                 DROP TABLE workbook_segment_question_trash;
+                 DROP TABLE question_index_metadata;
+                 DROP TABLE workbook_document_segment;
+                 DROP TABLE workbook_category;
                  DROP TABLE question_knowledge_node;
                  DROP TABLE question_attempt;
                  DROP TABLE question_region;
@@ -1059,7 +1174,7 @@ mod tests {
                  ALTER TABLE resource_document DROP COLUMN page_count;
                  ALTER TABLE resource_document DROP COLUMN role;
                  DROP TABLE study_session;
-                 DELETE FROM schema_migration WHERE version IN (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
+                 DELETE FROM schema_migration WHERE version IN (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23);
                  PRAGMA user_version = 3;",
             )
             .expect("fixture should represent a v3 backup");
@@ -1109,7 +1224,22 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE ai_context_ref;
+                "DROP INDEX idx_resource_document_active;
+                 ALTER TABLE resource_document DROP COLUMN deleted_at;
+                 DROP TABLE review_scheme_undo;
+                 DROP TABLE question_gap_acknowledgement;
+                 DROP TABLE cycle_plan_shift_undo_item;
+                 DROP TABLE cycle_plan_shift_undo;
+                 DROP TABLE cycle_plan_item;
+                 DROP TABLE cycle_plan;
+                 DROP TABLE ai_context_ref;
+                 DROP TABLE review_scheme_queue_item;
+                 DROP TABLE review_scheme_queue;
+                 DROP TABLE review_scheme_type_quota;
+                 DROP TABLE review_scheme_document;
+                 DROP TABLE review_scheme;
+                 DROP TABLE workspace_rest_weekday;
+                 DROP TABLE workbook_profile;
                  DROP TABLE ai_message;
                  DROP TABLE ai_conversation;
                  DROP TABLE ai_response_cache;
@@ -1130,6 +1260,10 @@ mod tests {
                  DROP TABLE plan_stage_task;
                  DROP TABLE question_region_ocr_line;
                  DROP TABLE question_region_ocr;
+                 DROP TABLE workbook_segment_question_trash;
+                 DROP TABLE question_index_metadata;
+                 DROP TABLE workbook_document_segment;
+                 DROP TABLE workbook_category;
                  DROP TABLE question_knowledge_node;
                  DROP TABLE question_attempt;
                  DROP TABLE question_region;
@@ -1149,7 +1283,7 @@ mod tests {
                  DROP TABLE task_change;
                  DROP TABLE task;
                  DROP TABLE subject;
-                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
+                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23);
                  PRAGMA user_version = 2;",
             )
             .expect("fixture should represent a v2 backup");

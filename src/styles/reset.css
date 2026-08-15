@@ -1,0 +1,56 @@
+/* Global document defaults. Keep this layer free of feature selectors so the
+   rest of the application can opt into the shared primitives below. */
+:root {
+  color: var(--color-text-primary);
+  background: var(--color-bg-app);
+  color-scheme: light;
+  font-family: var(--font-family-app);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: light;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100dvh;
+  margin: 0;
+  overflow-x: hidden;
+  color: var(--color-text-primary);
+  background: var(--color-bg-app);
+  font-family: var(--font-family-app);
+}
+
+body.review-region-viewer-open {
+  overflow: hidden;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+button {
+  border: 0;
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text-inverse);
+  background: var(--color-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 3px;
+}

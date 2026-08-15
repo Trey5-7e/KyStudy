@@ -10,7 +10,11 @@ use crate::domain::{
 
 use super::mindmap_import::parse_mindmap_source;
 
-const MAX_SOURCE_BYTES: u64 = 4 * 1024 * 1024;
+/// Maximum source size loaded into memory while generating a mind-map draft.
+///
+/// The parser is intentionally bounded even though source files are stored on
+/// disk, because draft generation needs to inspect the structured document.
+pub(super) const MAX_MINDMAP_SOURCE_BYTES: u64 = 100 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CreateKnowledgeMapInput {
@@ -414,7 +418,7 @@ impl<R: KnowledgeRepository, S: ResourceRepository> KnowledgeUseCases<R, S> {
         validate_id(document_id)?;
         let source = self
             .sources
-            .read_mindmap_source(document_id, MAX_SOURCE_BYTES)?;
+            .read_mindmap_source(document_id, MAX_MINDMAP_SOURCE_BYTES)?;
         let parsed = parse_mindmap_source(&source)?;
         let now = current_utc_millis()?;
         self.repository.save_import_draft(MindMapImportDraft {

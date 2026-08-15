@@ -237,6 +237,7 @@ impl ResourceRepository for SqliteBlobStore {
                  FROM resource_document d
                  JOIN blob b ON b.id = d.blob_id
                  LEFT JOIN resource_reading_state s ON s.document_id = d.id
+                 WHERE d.deleted_at IS NULL
                  ORDER BY d.created_at DESC, d.id DESC",
             )
             .map_err(super::sqlite_workspace::database_error)?;
@@ -287,6 +288,22 @@ impl ResourceRepository for SqliteBlobStore {
             })
         })
         .collect()
+    }
+
+    fn trash_resource(&self, document_id: &str, deleted_at: i64) -> Result<(), ImportError> {
+        let connection = self.open()?;
+        let changed = connection
+            .execute(
+                "UPDATE resource_document
+                 SET deleted_at = ?2, updated_at = ?2, revision = revision + 1
+                 WHERE id = ?1 AND deleted_at IS NULL",
+                params![document_id, deleted_at],
+            )
+            .map_err(super::sqlite_workspace::database_error)?;
+        if changed == 0 {
+            return Err(ImportError::DocumentNotFound);
+        }
+        Ok(())
     }
 
     fn reader_descriptor(
@@ -1106,6 +1123,34 @@ mod tests {
             blob_path(&workspace.workspace_directory(), &document.sha256)
                 .expect("blob path should derive")
                 .is_file()
+        );
+    }
+
+    #[test]
+    fn trashed_resource_is_hidden_but_its_reader_remains_available() {
+        let (_application_data, store, _workspace) = initialized_store();
+        let sources = tempdir().expect("source directory should exist");
+        let source = write_source(&sources, "questions.pdf", b"stable-pdf-bytes");
+        let document = store
+            .import_file(
+                &source,
+                &request("questions"),
+                &AtomicBool::new(false),
+                &mut |_| {},
+            )
+            .expect("source should import");
+
+        store
+            .trash_resource(&document.id, 1_700_000_000_100)
+            .expect("resource should be hidden");
+
+        assert!(store.list_resources().expect("list should load").is_empty());
+        assert_eq!(
+            store
+                .reader_descriptor(&document.id)
+                .expect("question references should still read")
+                .document_id,
+            document.id,
         );
     }
 

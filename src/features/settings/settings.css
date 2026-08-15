@@ -1,0 +1,493 @@
+/* Settings is a layout shell. The selected preference is the visual anchor;
+   the app-level surface/card rules remain available to other pages. */
+.settings-page {
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.settings-page > .settings-surface {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+  gap: clamp(var(--space-6), 4vw, var(--space-8));
+  margin: 0;
+  align-items: start;
+  min-width: 0;
+}
+
+.settings-tabs {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  min-width: 0;
+  border-right: 1px solid var(--color-border-subtle);
+  padding-right: var(--space-4);
+}
+
+.settings-page .settings-tabs [role="tab"] {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: var(--space-1);
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-3);
+  color: var(--color-text-secondary);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.settings-page .settings-tabs [role="tab"]:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.settings-page .settings-tabs [role="tab"]:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.settings-page .settings-tabs [role="tab"] > strong {
+  min-width: 0;
+  color: inherit;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
+  overflow-wrap: anywhere;
+}
+
+.settings-page .settings-tabs [role="tab"] > span {
+  display: block;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  line-height: var(--line-height-body);
+  overflow-wrap: anywhere;
+}
+
+/* Secondary navigation intentionally uses a soft state instead of the
+   primary green block used by the app-level navigation. */
+.settings-page .settings-tabs [role="tab"][aria-selected="true"] {
+  border-left-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-bg-subtle);
+  box-shadow: none;
+}
+
+.settings-page .settings-tabs [role="tab"][aria-selected="true"] > span {
+  color: var(--color-text-secondary);
+}
+
+.settings-content {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-content:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 4px;
+}
+
+.settings-content-heading {
+  margin: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding-bottom: var(--space-4);
+}
+
+.settings-content-heading h2 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xl);
+  line-height: var(--line-height-tight);
+  text-wrap: balance;
+}
+
+.settings-content-heading p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.settings-section-stack {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.settings-section {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: var(--space-5);
+}
+
+.settings-section .ui-section-header {
+  align-items: center;
+}
+
+.settings-section .ui-section-header h3 {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+  text-wrap: balance;
+}
+
+.settings-content .ui-section-header > div {
+  min-width: 0;
+}
+
+.settings-content .ui-status-banner {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-content .ui-status-banner-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.settings-section .ui-section-header p {
+  color: var(--color-text-muted);
+}
+
+/* Lazy feature panels still expose feature-specific classes. At the Settings
+   boundary only their outer section is flattened, so a future card/dialog
+   nested inside a feature keeps its own visual contract. */
+.settings-content
+  > :is(
+    .workspace-card,
+    .ai-card,
+    .backup-card,
+    .personal-plan-card,
+    .status-card,
+    .boundary-card
+  ),
+.settings-content
+  > .settings-section-stack
+  > :is(
+    .workspace-card,
+    .ai-card,
+    .backup-card,
+    .personal-plan-card,
+    .status-card,
+    .boundary-card
+  ) {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+  padding: var(--space-5) 0 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.settings-content > .workspace-card > div:first-child > h2,
+.settings-content > .ai-card > .ai-heading h2,
+.settings-content > .backup-card > .backup-heading h2,
+.settings-content > .personal-plan-card > .personal-plan-heading h2,
+.settings-content > :is(.status-card, .boundary-card) > h2,
+.settings-content
+  > .settings-section-stack
+  > .workspace-card
+  > div:first-child
+  > h2,
+.settings-content > .settings-section-stack > .ai-card > .ai-heading h2,
+.settings-content > .settings-section-stack > .backup-card > .backup-heading h2,
+.settings-content
+  > .settings-section-stack
+  > .personal-plan-card
+  > .personal-plan-heading
+  h2,
+.settings-content
+  > .settings-section-stack
+  > :is(.status-card, .boundary-card)
+  > h2 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+}
+
+.settings-content
+  > :is(.workspace-card, .ai-card, .backup-card, .personal-plan-card)
+  > :is(div:first-child, .ai-heading, .backup-heading, .personal-plan-heading),
+.settings-content
+  > .settings-section-stack
+  > :is(.workspace-card, .ai-card, .backup-card, .personal-plan-card)
+  > :is(div:first-child, .ai-heading, .backup-heading, .personal-plan-heading) {
+  min-width: 0;
+}
+
+/* Description lists make runtime/workspace metadata scan as rows rather than
+   four independent statistic cards. */
+.settings-description-list,
+.settings-content .workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex-basis: auto;
+  min-width: 0;
+  gap: 0;
+  margin: 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.settings-description-list > div,
+.settings-content .workspace-grid > div {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.4fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: baseline;
+  min-width: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding: var(--space-3) 0;
+  background: transparent;
+}
+
+.settings-description-list dt,
+.settings-content .workspace-grid dt {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+.settings-description-list dd,
+.settings-content .workspace-grid dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.settings-boundary-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  list-style: none;
+}
+
+.settings-boundary-list li {
+  position: relative;
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding: var(--space-3) 0 var(--space-3) var(--space-5);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-body);
+  overflow-wrap: anywhere;
+}
+
+.settings-boundary-list li::before {
+  position: absolute;
+  top: 1.05em;
+  left: var(--space-1);
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--color-primary);
+  content: "";
+}
+
+.settings-runtime .ui-section-header-actions {
+  align-items: center;
+}
+
+.settings-section-actions,
+.diagnostic-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.diagnostic-preview {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  background: var(--color-bg-subtle);
+}
+
+.diagnostic-preview-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.diagnostic-preview-heading h4,
+.diagnostic-preview-heading p {
+  margin: 0;
+}
+
+.diagnostic-preview-heading h4 {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.diagnostic-preview-heading p {
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.diagnostic-preview pre {
+  max-height: 18rem;
+  min-width: 0;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* AI summary is information-dense by design: dividers and rows replace the
+   old large summary surface while dialogs remain owned by the AI feature. */
+.settings-content .ai-provider-summary {
+  min-width: 0;
+  margin: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: var(--space-4);
+  background: transparent;
+  box-shadow: none;
+}
+
+.settings-content .ai-provider-summary .ai-budget-summary-compact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3) var(--space-4);
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+  padding: var(--space-4) 0 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.settings-content .ai-budget-summary-compact > div,
+.settings-content .ai-budget-summary-compact h3,
+.settings-content .ai-budget-summary-compact span,
+.settings-content .ai-budget-summary-compact small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-content .ai-budget-summary-compact h3,
+.settings-content .ai-budget-summary-compact span,
+.settings-content .ai-budget-summary-compact small {
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-content
+  :where(.backup-status, .success-detail, .backup-note, .error-detail) {
+  margin: 0;
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+}
+
+.settings-content :where(input, select, textarea) {
+  min-height: var(--control-height-md);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+@media (max-width: 56.25rem) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+
+  .settings-tabs {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border-subtle);
+    padding-right: 0;
+    padding-bottom: var(--space-3);
+  }
+
+  .settings-page .settings-tabs [role="tab"] {
+    border-left: 0;
+    border-bottom: 3px solid transparent;
+  }
+
+  .settings-page .settings-tabs [role="tab"][aria-selected="true"] {
+    border-bottom-color: var(--color-primary);
+  }
+}
+
+@media (max-width: 42rem) {
+  .settings-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-description-list > div,
+  .settings-content .workspace-grid > div {
+    grid-template-columns: minmax(7rem, 0.6fr) minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+}
+
+@media (max-width: 24rem) {
+  .settings-content .ai-provider-summary .ai-budget-summary-compact {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-description-list > div,
+  .settings-content .workspace-grid > div {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-page .settings-tabs [role="tab"] {
+    transition: none;
+  }
+}

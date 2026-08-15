@@ -66,7 +66,7 @@ impl SearchRepository for SqliteSearchRepository {
                         j.text_pages, j.chunk_count, j.updated_at
                  FROM resource_document d
                  LEFT JOIN resource_index_job j ON j.document_id = d.id
-                 WHERE d.kind = 'pdf'
+                 WHERE d.kind = 'pdf' AND d.deleted_at IS NULL
                  ORDER BY d.created_at DESC, d.id DESC",
             )
             .map_err(database_error)?;
@@ -335,7 +335,8 @@ fn load_pdf_sha256(connection: &Connection, document_id: &str) -> Result<String,
     connection
         .query_row(
             "SELECT d.kind, b.sha256 FROM resource_document d
-             JOIN blob b ON b.id = d.blob_id WHERE d.id = ?1",
+             JOIN blob b ON b.id = d.blob_id
+             WHERE d.id = ?1 AND d.deleted_at IS NULL",
             params![document_id],
             |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
         )
@@ -358,7 +359,8 @@ fn ensure_pdf_exists(connection: &Connection, document_id: &str) -> Result<(), S
 fn load_document_title(connection: &Connection, document_id: &str) -> Result<String, SearchError> {
     connection
         .query_row(
-            "SELECT title FROM resource_document WHERE id = ?1 AND kind = 'pdf'",
+            "SELECT title FROM resource_document
+             WHERE id = ?1 AND kind = 'pdf' AND deleted_at IS NULL",
             params![document_id],
             |row| row.get(0),
         )
@@ -393,7 +395,7 @@ fn load_status(
                     j.text_pages, j.chunk_count, j.updated_at
              FROM resource_document d
              LEFT JOIN resource_index_job j ON j.document_id = d.id
-             WHERE d.id = ?1 AND d.kind = 'pdf'",
+             WHERE d.id = ?1 AND d.kind = 'pdf' AND d.deleted_at IS NULL",
             params![document_id],
             status_from_row,
         )
@@ -465,7 +467,7 @@ fn ensure_running_job(
              FROM resource_index_job j
              JOIN resource_document d ON d.id = j.document_id
              JOIN blob b ON b.id = d.blob_id
-             WHERE j.document_id = ?1 AND d.kind = 'pdf'",
+             WHERE j.document_id = ?1 AND d.kind = 'pdf' AND d.deleted_at IS NULL",
             params![page.document_id],
             |row| {
                 Ok((
@@ -581,7 +583,7 @@ fn search_titles(
     let mut statement = connection
         .prepare(
             "SELECT id, title, kind FROM resource_document
-             WHERE instr(lower(title), lower(?1)) > 0
+             WHERE deleted_at IS NULL AND instr(lower(title), lower(?1)) > 0
              ORDER BY created_at DESC, id DESC LIMIT ?2",
         )
         .map_err(database_error)?;
@@ -612,7 +614,8 @@ fn search_short_page_text(
             "SELECT p.document_id, d.title, d.kind, p.page_number, p.text_content
              FROM resource_page_text p
              JOIN resource_document d ON d.id = p.document_id
-             WHERE p.text_state = 'text' AND instr(p.text_content, ?1) > 0
+             WHERE d.deleted_at IS NULL AND p.text_state = 'text'
+               AND instr(p.text_content, ?1) > 0
              ORDER BY d.created_at DESC, p.page_number
              LIMIT ?2",
         )
@@ -642,7 +645,7 @@ fn search_fts(
             "SELECT f.document_id, d.title, d.kind, CAST(f.page_number AS INTEGER), f.text
              FROM resource_text_fts f
              JOIN resource_document d ON d.id = f.document_id
-             WHERE resource_text_fts MATCH ?1
+             WHERE resource_text_fts MATCH ?1 AND d.deleted_at IS NULL
              ORDER BY bm25(resource_text_fts), d.created_at DESC
              LIMIT ?2",
         )

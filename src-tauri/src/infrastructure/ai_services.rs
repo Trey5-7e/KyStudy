@@ -62,15 +62,17 @@ impl AiProviderGateway for ProviderRouter {
         provider: &AiProviderConfig,
         model: &AiModelProfile,
         prompt: &str,
+        image_data_urls: &[String],
         max_output_tokens: u32,
         secret: Option<&str>,
     ) -> Result<AiProviderResponse, AiError> {
         match provider.provider_type {
-            AiProviderType::OfflineTest => Ok(offline_response(prompt)),
+            AiProviderType::OfflineTest => Ok(offline_response(prompt, image_data_urls.len())),
             AiProviderType::OpenAiResponses => Self::execute_responses_api(
                 provider,
                 model,
                 prompt,
+                image_data_urls,
                 max_output_tokens,
                 secret.ok_or(AiError::SecretMissing)?,
             ),
@@ -83,6 +85,7 @@ impl ProviderRouter {
         provider: &AiProviderConfig,
         model: &AiModelProfile,
         prompt: &str,
+        image_data_urls: &[String],
         max_output_tokens: u32,
         secret: &str,
     ) -> Result<AiProviderResponse, AiError> {
@@ -102,12 +105,12 @@ impl ProviderRouter {
         let response = client
             .post(url)
             .bearer_auth(secret)
-            .json(&ResponsesRequest {
-                model: &model.model_name,
-                input: prompt,
+            .json(&responses_request(
+                &model.model_name,
+                prompt,
+                image_data_urls,
                 max_output_tokens,
-                store: false,
-            })
+            ))
             .send()
             .map_err(|_| AiError::ProviderUnavailable)?;
         let status = response.status();
@@ -168,10 +171,10 @@ impl ProviderRouter {
     }
 }
 
-fn offline_response(prompt: &str) -> AiProviderResponse {
+fn offline_response(prompt: &str, image_count: usize) -> AiProviderResponse {
     let preview = prompt.chars().take(120).collect::<String>();
     let text = format!(
-        "离线测试已完成。KyStudy 收到的外发预览内容为：“{preview}”。这只是确定性测试结果，不是学习建议，也不会修改任何本地数据。"
+        "离线测试已完成。KyStudy 收到 {image_count} 张题目图片，外发预览内容为：“{preview}”。这只是确定性测试结果，不是学习建议，也不会修改任何本地数据。"
     );
     AiProviderResponse {
         input_tokens: estimate_tokens(prompt),
@@ -195,9 +198,66 @@ fn status_error(status: StatusCode) -> AiError {
 #[derive(Debug, Serialize)]
 struct ResponsesRequest<'a> {
     model: &'a str,
-    input: &'a str,
+    input: ResponsesInput<'a>,
     max_output_tokens: u32,
     store: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum ResponsesInput<'a> {
+    Text(&'a str),
+    Messages(Vec<ResponsesMessage<'a>>),
+}
+
+#[derive(Debug, Serialize)]
+struct ResponsesMessage<'a> {
+    role: &'static str,
+    content: Vec<ResponsesContentPart<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type")]
+enum ResponsesContentPart<'a> {
+    #[serde(rename = "input_text")]
+    Text { text: &'a str },
+    #[serde(rename = "input_image")]
+    Image {
+        image_url: &'a str,
+        detail: &'static str,
+    },
+}
+
+fn responses_request<'a>(
+    model: &'a str,
+    prompt: &'a str,
+    image_data_urls: &'a [String],
+    max_output_tokens: u32,
+) -> ResponsesRequest<'a> {
+    let input = if image_data_urls.is_empty() {
+        ResponsesInput::Text(prompt)
+    } else {
+        let mut content = Vec::with_capacity(image_data_urls.len() + 1);
+        content.push(ResponsesContentPart::Text { text: prompt });
+        content.extend(
+            image_data_urls
+                .iter()
+                .map(|image_url| ResponsesContentPart::Image {
+                    image_url,
+                    detail: "auto",
+                }),
+        );
+        ResponsesInput::Messages(vec![ResponsesMessage {
+            role: "user",
+            content,
+        }])
+    };
+    ResponsesRequest {
+        model,
+        input,
+        max_output_tokens,
+        store: false,
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -244,14 +304,27 @@ struct OutputTokenDetails {
 
 #[cfg(test)]
 mod tests {
-    use super::offline_response;
+    use super::{offline_response, responses_request};
 
     #[test]
     fn offline_provider_is_deterministic_and_reports_estimated_usage() {
-        let first = offline_response("测试外发内容");
-        let second = offline_response("测试外发内容");
+        let first = offline_response("测试外发内容", 0);
+        let second = offline_response("测试外发内容", 0);
 
         assert_eq!(first, second);
         assert_eq!(first.usage_source, "estimated");
+    }
+
+    #[test]
+    fn responses_request_uses_ordered_image_parts_for_question_analysis() {
+        let images = vec![
+            "data:image/png;base64,AAA".to_owned(),
+            "data:image/jpeg;base64,BBB".to_owned(),
+        ];
+        let request = responses_request("model", "分析", &images, 600);
+        let value = serde_json::to_value(request).expect("request should serialize");
+
+        assert_eq!(value["input"][0]["content"][1]["image_url"], images[0]);
+        assert_eq!(value["input"][0]["content"][2]["image_url"], images[1]);
     }
 }

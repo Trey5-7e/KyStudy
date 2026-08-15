@@ -5,6 +5,7 @@ export default tseslint.config(
   {
     ignores: [
       ".agents/**",
+      ".codex/**",
       "dist/**",
       "experiments/**",
       "node_modules/**",

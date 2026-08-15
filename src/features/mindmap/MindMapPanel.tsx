@@ -22,7 +22,6 @@ import {
   updateKnowledgeNode,
   type AddKnowledgeNodeResourceInput,
   type KnowledgeMapBundle,
-  type MoveKnowledgeNodeInput,
   type UpdateKnowledgeMapInput,
   type UpdateKnowledgeNodeInput,
   type MindMapImportDraft,
@@ -36,9 +35,16 @@ import {
   listSubjects,
   type StudySubject,
 } from "../../shared/tauri/scheduleClient";
+import { EditorDialog } from "../../shared/components/EditorDialog";
 import { MindMapNodeEditor, MindMapSettings } from "./MindMapDetails";
+import { MindElixirCanvas } from "./MindElixirCanvas";
+import "./mindmap.css";
 import { MindMapImportPanel } from "./MindMapImportPanel";
-import { MindMapTree } from "./MindMapTree";
+import {
+  buildKnowledgeTreeIndex,
+  childrenOf,
+  collectDescendantIds,
+} from "./mindMapTreeModel";
 
 interface MindMapPanelProps {
   onOpenResource(documentId: string, page?: number): void;
@@ -61,8 +67,13 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
   const [newMapSubjectId, setNewMapSubjectId] = useState("");
   const [addParentId, setAddParentId] = useState<string>();
   const [newNodeTitle, setNewNodeTitle] = useState("");
-  const [zoom, setZoom] = useState(1);
   const [trashConfirmation, setTrashConfirmation] = useState<string>();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [mapSettingsOpen, setMapSettingsOpen] = useState(false);
+  const [nodeEditorOpen, setNodeEditorOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [mapEditorDirty, setMapEditorDirty] = useState(false);
+  const [nodeEditorDirty, setNodeEditorDirty] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -198,6 +209,7 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
     );
     if (saved) {
       setNewMapTitle("");
+      setCreateOpen(false);
     }
   };
 
@@ -236,10 +248,6 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
     } finally {
       setBusy(false);
     }
-  };
-
-  const moveNode = (input: MoveKnowledgeNodeInput) => {
-    void runBundle(() => moveKnowledgeNode(input), input.nodeId);
   };
 
   const createDraft = async (documentId: string) => {
@@ -292,14 +300,93 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
     <section className="mindmap-card" aria-labelledby="mindmap-title">
       <div className="mindmap-heading">
         <div>
-          <p className="section-label">M4 · 本地知识结构</p>
-          <h2 id="mindmap-title">可编辑思维导图</h2>
+          <p className="section-label">知识导图</p>
+          <h2 id="mindmap-title">导入、浏览，需要时简单改一下</h2>
           <p>
-            手动维护知识层级、掌握状态和资料依据；所有正式修改都可持久化撤销与重做。
+            成熟画布负责阅读、搜索和折叠；KyStudy
+            只保留基础节点修改与本地资料关联。
           </p>
         </div>
-        <span className="mindmap-local-badge">本地运行 · 无 AI 消耗</span>
+        <div className="mindmap-heading-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setImportOpen(true)}
+          >
+            导入导图
+          </button>
+          <button type="button" onClick={() => setCreateOpen(true)}>
+            新建空白导图
+          </button>
+        </div>
       </div>
+
+      {createOpen ? (
+        <EditorDialog
+          title="新建空白导图"
+          description="更推荐导入已有导图；这里只创建一个可简单修改的本地副本。"
+          dirty={newMapTitle.trim() !== "" || newMapSubjectId !== ""}
+          onRequestClose={() => setCreateOpen(false)}
+        >
+          <form
+            className="mindmap-create-form"
+            onSubmit={(event) => void submitMap(event)}
+          >
+            <label>
+              名称
+              <input
+                name="mindmap-create-title"
+                autoComplete="off"
+                required
+                autoFocus
+                maxLength={120}
+                placeholder="例如：408 数据结构…"
+                value={newMapTitle}
+                onChange={(event) => setNewMapTitle(event.target.value)}
+              />
+            </label>
+            <label>
+              科目
+              <select
+                name="mindmap-create-subject"
+                autoComplete="off"
+                value={newMapSubjectId}
+                onChange={(event) => setNewMapSubjectId(event.target.value)}
+              >
+                <option value="">未分类</option>
+                {subjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" disabled={busy}>
+              创建导图
+            </button>
+          </form>
+        </EditorDialog>
+      ) : null}
+
+      {importOpen ? (
+        <EditorDialog
+          title="导入已有思维导图"
+          description="原文件保持不变，确认后生成可简单修改的本地副本。"
+          dirty={false}
+          onRequestClose={() => setImportOpen(false)}
+          size="large"
+        >
+          <MindMapImportPanel
+            resources={resources}
+            drafts={drafts}
+            busy={busy}
+            onRefresh={() => void refreshAll()}
+            onCreateDraft={(documentId) => void createDraft(documentId)}
+            onAcceptDraft={(draftId) => void acceptDraft(draftId)}
+            onRejectDraft={(draftId) => void rejectDraft(draftId)}
+          />
+        </EditorDialog>
+      ) : null}
 
       {error === undefined ? null : (
         <div className="error-detail" role="alert">
@@ -318,40 +405,6 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
       ) : (
         <div className="mindmap-workspace">
           <aside className="mindmap-sidebar" aria-label="思维导图列表">
-            <form
-              className="mindmap-create-form"
-              onSubmit={(event) => void submitMap(event)}
-            >
-              <h3>新建导图</h3>
-              <label>
-                名称
-                <input
-                  required
-                  maxLength={120}
-                  placeholder="例如：408 数据结构"
-                  value={newMapTitle}
-                  onChange={(event) => setNewMapTitle(event.target.value)}
-                />
-              </label>
-              <label>
-                科目
-                <select
-                  value={newMapSubjectId}
-                  onChange={(event) => setNewMapSubjectId(event.target.value)}
-                >
-                  <option value="">未分类</option>
-                  {subjects.map((subject) => (
-                    <option key={subject.id} value={subject.id}>
-                      {subject.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button type="submit" disabled={busy}>
-                创建导图
-              </button>
-            </form>
-
             <div className="mindmap-list">
               {maps.length === 0 ? (
                 <p className="mindmap-empty">还没有正式导图。</p>
@@ -414,39 +467,15 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
                 >
                   重做
                 </button>
-                <span
-                  className="mindmap-toolbar-separator"
-                  aria-hidden="true"
-                />
                 <button
                   type="button"
                   className="secondary-button"
-                  aria-label="缩小导图"
-                  disabled={zoom <= 0.6}
-                  onClick={() =>
-                    setZoom((current) => Math.max(0.6, current - 0.1))
-                  }
+                  onClick={() => {
+                    setMapEditorDirty(false);
+                    setMapSettingsOpen(true);
+                  }}
                 >
-                  −
-                </button>
-                <span>{Math.round(zoom * 100)}%</span>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  aria-label="放大导图"
-                  disabled={zoom >= 1.5}
-                  onClick={() =>
-                    setZoom((current) => Math.min(1.5, current + 0.1))
-                  }
-                >
-                  +
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setZoom(1)}
-                >
-                  重置缩放
+                  编辑导图信息
                 </button>
                 <span className="mindmap-toolbar-spacer" />
                 <button
@@ -493,108 +522,242 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
               </div>
 
               {addParent === undefined ? null : (
-                <form
-                  className="mindmap-add-node-form"
-                  onSubmit={(event) => void submitNode(event)}
+                <EditorDialog
+                  title={`在“${addParent.title}”下添加子节点`}
+                  description="只填写节点名称即可，详细信息以后需要时再补。"
+                  dirty={newNodeTitle.trim() !== ""}
+                  onRequestClose={() => setAddParentId(undefined)}
                 >
-                  <label>
-                    在“{addParent.title}”下添加子节点
-                    <input
-                      autoFocus
-                      required
-                      maxLength={200}
-                      value={newNodeTitle}
-                      onChange={(event) => setNewNodeTitle(event.target.value)}
-                    />
-                  </label>
-                  <button type="submit" disabled={busy}>
-                    添加
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => setAddParentId(undefined)}
+                  <form
+                    className="mindmap-add-node-form"
+                    onSubmit={(event) => void submitNode(event)}
                   >
-                    取消
-                  </button>
-                </form>
+                    <label>
+                      节点名称
+                      <input
+                        name="mindmap-child-title"
+                        autoComplete="off"
+                        autoFocus
+                        required
+                        maxLength={200}
+                        value={newNodeTitle}
+                        onChange={(event) =>
+                          setNewNodeTitle(event.target.value)
+                        }
+                      />
+                    </label>
+                    <button type="submit" disabled={busy}>
+                      添加节点
+                    </button>
+                  </form>
+                </EditorDialog>
               )}
 
-              <div className="mindmap-editor-layout">
-                <MindMapTree
-                  bundle={selectedBundle}
-                  selectedNodeId={selectedNode?.id}
-                  zoom={zoom}
-                  busy={busy}
-                  onSelect={setSelectedNodeId}
-                  onToggle={(nodeId, collapsed) =>
-                    void runBundle(
-                      () => setKnowledgeNodeCollapsed(nodeId, collapsed),
-                      nodeId,
-                    )
-                  }
-                  onAddChild={(parentId) => {
-                    setAddParentId(parentId);
-                    setNewNodeTitle("");
+              {mapSettingsOpen ? (
+                <EditorDialog
+                  title="编辑导图信息"
+                  dirty={mapEditorDirty}
+                  onRequestClose={() => {
+                    setMapSettingsOpen(false);
+                    setMapEditorDirty(false);
                   }}
-                  onMove={(nodeId, parentId, position) =>
-                    moveNode({
-                      nodeId,
-                      newParentId: parentId,
-                      position,
-                    })
-                  }
-                />
-
-                <aside
-                  className="mindmap-inspector"
-                  aria-label="导图与节点详情"
                 >
                   <MindMapSettings
                     key={`${selectedBundle.map.id}-${selectedBundle.map.updatedAt}`}
                     map={selectedBundle.map}
                     subjects={subjects}
                     busy={busy}
-                    onSave={(input: UpdateKnowledgeMapInput) =>
-                      runBundle(() => updateKnowledgeMap(input))
-                    }
+                    onDirtyChange={setMapEditorDirty}
+                    onSave={async (input: UpdateKnowledgeMapInput) => {
+                      const saved = await runBundle(() =>
+                        updateKnowledgeMap(input),
+                      );
+                      if (saved) setMapSettingsOpen(false);
+                      return saved;
+                    }}
                   />
-                  {selectedNode === undefined ? null : (
-                    <MindMapNodeEditor
-                      key={`${selectedNode.id}-${selectedNode.updatedAt}-${selectedBundle.map.currentRevision}`}
-                      node={selectedNode}
-                      isRoot={selectedNode.id === selectedBundle.map.rootNodeId}
-                      subjects={subjects}
-                      resources={resources}
-                      links={selectedLinks}
-                      busy={busy}
-                      onSave={(input: UpdateKnowledgeNodeInput) =>
-                        runBundle(
-                          () => updateKnowledgeNode(input),
-                          input.nodeId,
-                        )
-                      }
-                      onDelete={() => {
-                        const parentId = selectedNode.parentId;
-                        void runBundle(
-                          () => deleteKnowledgeSubtree(selectedNode.id),
-                          parentId,
-                        );
-                      }}
-                      onAddResource={(input: AddKnowledgeNodeResourceInput) =>
-                        runBundle(
-                          () => addKnowledgeNodeResource(input),
-                          input.nodeId,
-                        )
-                      }
-                      onDeleteResource={(resourceId) =>
-                        void runBundle(
-                          () => deleteKnowledgeNodeResource(resourceId),
-                          selectedNode.id,
-                        )
-                      }
-                      onOpenResource={onOpenResource}
-                    />
+                </EditorDialog>
+              ) : null}
+
+              {nodeEditorOpen && selectedNode !== undefined ? (
+                <EditorDialog
+                  title={`编辑节点：${selectedNode.title}`}
+                  dirty={nodeEditorDirty}
+                  onRequestClose={() => {
+                    setNodeEditorOpen(false);
+                    setNodeEditorDirty(false);
+                  }}
+                  size="large"
+                >
+                  <MindMapNodeEditor
+                    key={`${selectedNode.id}-${selectedNode.updatedAt}-${selectedBundle.map.currentRevision}`}
+                    node={selectedNode}
+                    isRoot={selectedNode.id === selectedBundle.map.rootNodeId}
+                    subjects={subjects}
+                    resources={resources}
+                    links={selectedLinks}
+                    moveTargets={moveTargets(selectedBundle, selectedNode.id)}
+                    busy={busy}
+                    onDirtyChange={setNodeEditorDirty}
+                    onSave={async (input: UpdateKnowledgeNodeInput) => {
+                      const saved = await runBundle(
+                        () => updateKnowledgeNode(input),
+                        input.nodeId,
+                      );
+                      if (saved) setNodeEditorOpen(false);
+                      return saved;
+                    }}
+                    onDelete={() => {
+                      const parentId = selectedNode.parentId;
+                      void runBundle(
+                        () => deleteKnowledgeSubtree(selectedNode.id),
+                        parentId,
+                      ).then((saved) => {
+                        if (saved) setNodeEditorOpen(false);
+                      });
+                    }}
+                    onMove={async (newParentId) => {
+                      const position = childrenOf(
+                        buildKnowledgeTreeIndex(selectedBundle.nodes),
+                        newParentId,
+                      ).length;
+                      const saved = await runBundle(
+                        () =>
+                          moveKnowledgeNode({
+                            nodeId: selectedNode.id,
+                            newParentId,
+                            position,
+                          }),
+                        selectedNode.id,
+                      );
+                      if (saved) setNodeEditorOpen(false);
+                      return saved;
+                    }}
+                    onAddResource={(input: AddKnowledgeNodeResourceInput) =>
+                      runBundle(
+                        () => addKnowledgeNodeResource(input),
+                        input.nodeId,
+                      )
+                    }
+                    onDeleteResource={(resourceId) =>
+                      void runBundle(
+                        () => deleteKnowledgeNodeResource(resourceId),
+                        selectedNode.id,
+                      )
+                    }
+                    onOpenResource={onOpenResource}
+                  />
+                </EditorDialog>
+              ) : null}
+
+              <div className="mindmap-editor-layout">
+                <MindElixirCanvas
+                  bundle={selectedBundle}
+                  selectedNodeId={selectedNode?.id}
+                  onSelect={setSelectedNodeId}
+                />
+
+                <aside
+                  className="mindmap-inspector"
+                  aria-label="选中节点快捷操作"
+                >
+                  {selectedNode === undefined ? (
+                    <p>在画布中选择一个节点。</p>
+                  ) : (
+                    <>
+                      <p className="section-label">当前节点</p>
+                      <h3>{selectedNode.title}</h3>
+                      {selectedNode.noteMarkdown === undefined ? (
+                        <p>没有附加笔记。</p>
+                      ) : (
+                        <p>{selectedNode.noteMarkdown}</p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNodeEditorDirty(false);
+                          setNodeEditorOpen(true);
+                        }}
+                      >
+                        编辑节点
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => {
+                          setAddParentId(selectedNode.id);
+                          setNewNodeTitle("");
+                        }}
+                      >
+                        添加子节点
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() =>
+                          void runBundle(
+                            () =>
+                              setKnowledgeNodeCollapsed(
+                                selectedNode.id,
+                                !selectedNode.collapsed,
+                              ),
+                            selectedNode.id,
+                          )
+                        }
+                      >
+                        {selectedNode.collapsed ? "展开子节点" : "折叠子节点"}
+                      </button>
+                      <section
+                        className="mindmap-inspector-resources"
+                        aria-labelledby="mindmap-inspector-resources-title"
+                      >
+                        <h4 id="mindmap-inspector-resources-title">关联资料</h4>
+                        {selectedLinks.length === 0 ? (
+                          <p className="mindmap-empty">还没有关联资料。</p>
+                        ) : (
+                          <ul>
+                            {selectedLinks.map((link) => {
+                              const resource = resources.find(
+                                (item) => item.id === link.documentId,
+                              );
+                              const canOpen =
+                                resource?.kind === "pdf" ||
+                                resource?.kind === "image";
+                              return (
+                                <li key={link.id}>
+                                  <div>
+                                    <strong>{link.documentTitle}</strong>
+                                    {link.pageStart === undefined ? null : (
+                                      <span>
+                                        第 {link.pageStart}
+                                        {link.pageEnd === link.pageStart
+                                          ? ""
+                                          : `-${link.pageEnd}`}{" "}
+                                        页
+                                      </span>
+                                    )}
+                                  </div>
+                                  {canOpen ? (
+                                    <button
+                                      type="button"
+                                      className="secondary-button"
+                                      onClick={() =>
+                                        onOpenResource(
+                                          link.documentId,
+                                          link.pageStart,
+                                        )
+                                      }
+                                    >
+                                      打开
+                                    </button>
+                                  ) : null}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </section>
+                    </>
                   )}
                 </aside>
               </div>
@@ -602,16 +765,6 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
           )}
         </div>
       )}
-
-      <MindMapImportPanel
-        resources={resources}
-        drafts={drafts}
-        busy={busy}
-        onRefresh={() => void refreshAll()}
-        onCreateDraft={(documentId) => void createDraft(documentId)}
-        onAcceptDraft={(draftId) => void acceptDraft(draftId)}
-        onRejectDraft={(draftId) => void rejectDraft(draftId)}
-      />
     </section>
   );
 }
@@ -623,4 +776,14 @@ function loadMindMapData() {
     listResources(),
     listSubjects(),
   ]);
+}
+
+function moveTargets(
+  bundle: KnowledgeMapBundle,
+  nodeId: string,
+): KnowledgeMapBundle["nodes"] {
+  const index = buildKnowledgeTreeIndex(bundle.nodes);
+  const excluded = collectDescendantIds(index, nodeId);
+  excluded.add(nodeId);
+  return bundle.nodes.filter((node) => !excluded.has(node.id));
 }

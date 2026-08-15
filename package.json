@@ -2,6 +2,7 @@
   "name": "kystudy",
   "private": true,
   "version": "0.1.0",
+  "license": "GPL-3.0-only",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "engines": {
@@ -10,16 +11,21 @@
   "scripts": {
     "dev": "vite",
     "build": "pnpm typecheck && vite build",
-    "format": "prettier --check package.json index.html eslint.config.js tsconfig.json vite.config.ts vitest.config.ts .github src src-tauri/capabilities src-tauri/tauri.conf.json",
-    "format:write": "prettier --write package.json index.html eslint.config.js tsconfig.json vite.config.ts vitest.config.ts .github src src-tauri/capabilities src-tauri/tauri.conf.json",
+    "format": "prettier --check package.json index.html eslint.config.js tsconfig.json vite.config.ts vitest.config.ts README.md AGENTS.md docs/DEVELOPMENT_WORKFLOW.md docs/V0_1_0_DEVELOPMENT_HANDOFF.md docs/V0_1_0_FINAL_ACCEPTANCE.md scripts/audit-css.mjs scripts/css-audit-core.mjs scripts/css-audit-core.test.mjs scripts/check-targets.mjs .github src src-tauri/capabilities src-tauri/tauri.conf.json",
+    "format:write": "prettier --write package.json index.html eslint.config.js tsconfig.json vite.config.ts vitest.config.ts README.md AGENTS.md docs/DEVELOPMENT_WORKFLOW.md docs/V0_1_0_DEVELOPMENT_HANDOFF.md docs/V0_1_0_FINAL_ACCEPTANCE.md scripts/audit-css.mjs scripts/css-audit-core.mjs scripts/css-audit-core.test.mjs scripts/check-targets.mjs .github src src-tauri/capabilities src-tauri/tauri.conf.json",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
+    "audit:css": "node scripts/audit-css.mjs",
+    "test:css-audit": "node --test scripts/css-audit-core.test.mjs",
+    "check:target": "node scripts/check-targets.mjs",
+    "package:windows-portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows-portable.ps1 -ExecutablePath src-tauri/target/release/kystudy.exe -OutputArchive artifacts/kystudy-windows-x64-portable.zip -Version 0.1.0",
     "typecheck": "tsc --noEmit",
     "check": "pnpm format && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
+    "mind-elixir": "5.13.0",
     "pdfjs-dist": "6.1.200",
     "react": "19.2.7",
     "react-dom": "19.2.7"

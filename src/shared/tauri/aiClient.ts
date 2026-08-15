@@ -231,6 +231,28 @@ export async function executeAiCall(request: {
   return parseAiCallResult(await invoke("execute_ai_call", { request }));
 }
 
+export interface QuestionAiAnalysisRequest {
+  prompt: string;
+  imageDataUrls: string[];
+  maxOutputTokens: number;
+}
+
+export async function previewQuestionAiAnalysis(
+  request: QuestionAiAnalysisRequest,
+): Promise<AiCallPreview> {
+  return parseAiCallPreview(
+    await invoke("preview_question_ai_analysis", { request }),
+  );
+}
+
+export async function executeQuestionAiAnalysis(
+  request: QuestionAiAnalysisRequest,
+): Promise<AiCallResult> {
+  return parseAiCallResult(
+    await invoke("execute_question_ai_analysis", { request }),
+  );
+}
+
 export function parseAiOverview(value: unknown): AiOverview {
   if (
     !isRecord(value) ||

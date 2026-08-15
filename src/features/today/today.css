@@ -1,0 +1,401 @@
+/* Today is a focus view: one action surface, then a quiet reading order. */
+.today-focus-view.today-overview {
+  display: grid;
+  gap: clamp(0.9rem, 2vw, 1.35rem);
+  min-width: 0;
+  margin-top: 0;
+  overflow-wrap: anywhere;
+}
+
+.today-focus-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+  min-width: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding: 0.2rem 0 1rem;
+}
+
+.today-focus-heading,
+.today-focus-heading > * {
+  min-width: 0;
+  margin: 0;
+}
+
+.today-focus-heading {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.today-focus-heading h1 {
+  max-width: 18ch;
+  color: var(--color-text-primary);
+  font-size: clamp(1.8rem, 4vw, 2.65rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.today-focus-heading > p:last-child {
+  max-width: 54ch;
+  color: var(--color-text-muted);
+  line-height: 1.55;
+}
+
+.today-focus-eyebrow {
+  color: var(--color-primary);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.today-exam-context {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  min-width: 0;
+  color: var(--color-text-muted);
+}
+
+.today-exam-context > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+  text-align: right;
+}
+
+.today-exam-context span {
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.today-exam-context strong {
+  color: var(--color-text-primary);
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.today-next-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.25rem;
+  min-width: 0;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: clamp(1.1rem, 3vw, 2rem);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-popup);
+}
+
+.today-next-action-copy {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.today-next-action-copy h2,
+.today-next-action-copy p {
+  min-width: 0;
+  margin: 0;
+}
+
+.today-next-action-copy h2 {
+  color: var(--color-text-primary);
+  font-size: clamp(1.3rem, 3vw, 2.05rem);
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.today-next-action-copy p {
+  color: var(--color-text-muted);
+  line-height: 1.55;
+}
+
+.today-next-action-cta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  min-width: min(100%, 10rem);
+}
+
+.today-progress {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding: 0 0 1rem;
+}
+
+.today-progress .ui-section-header {
+  align-items: end;
+}
+
+.today-progress-track {
+  position: relative;
+  width: 100%;
+  height: 0.55rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
+}
+
+.today-progress-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary);
+  transition: width 180ms ease-out;
+}
+
+.today-progress-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.today-secondary-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(15rem, 0.75fr);
+  gap: clamp(1.25rem, 3vw, 2.25rem);
+  min-width: 0;
+}
+
+.today-up-next,
+.today-support,
+.today-support-item {
+  min-width: 0;
+}
+
+.today-up-next {
+  display: grid;
+  align-content: start;
+  gap: 0.8rem;
+}
+
+.today-up-next-list {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.today-up-next-list > li {
+  display: grid;
+  grid-template-columns: 1.55rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding: 0.75rem 0;
+}
+
+.today-up-next-list > li[aria-current="step"] {
+  border-left: 0.2rem solid var(--color-primary);
+  padding-left: 0.65rem;
+}
+
+.today-task-marker {
+  display: grid;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: 50%;
+  place-items: center;
+  color: var(--color-text-inverse);
+  background: transparent;
+  font-size: 0.72rem;
+}
+
+.today-task-copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.today-task-copy strong {
+  min-width: 0;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.today-task-copy small {
+  color: var(--color-text-muted);
+}
+
+.today-task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.today-task-done .today-task-marker {
+  border-color: var(--color-success);
+  background: var(--color-success);
+}
+
+.today-task-done .today-task-copy {
+  color: var(--color-text-muted);
+}
+
+.today-task-done .today-task-copy strong {
+  color: inherit;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.today-inline-empty {
+  min-height: 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+  padding: 0.7rem 0 1rem;
+  background: transparent;
+}
+
+.today-support {
+  display: grid;
+  align-content: start;
+  gap: 0;
+}
+
+.today-support-item {
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding: 0.85rem 0 1.1rem;
+}
+
+.today-support-item:first-child {
+  padding-top: 0;
+}
+
+.today-support-item:last-child {
+  border-bottom: 0;
+}
+
+.today-support-item.today-review-promoted {
+  border-left: 0.2rem solid var(--color-accent);
+  padding-left: 0.8rem;
+}
+
+.today-support-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.55rem 0.8rem;
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.55;
+}
+
+.today-support-copy > span {
+  flex-basis: 100%;
+}
+
+.today-support-copy strong {
+  color: var(--color-text-primary);
+  font-size: 1.1rem;
+}
+
+.today-support-item .ui-section-header h3 {
+  font-size: 1.05rem;
+}
+
+.today-focus-view .ui-section-header > div:first-child {
+  min-width: 0;
+}
+
+.today-focus-view .ui-section-header h2,
+.today-focus-view .ui-section-header h3 {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .today-focus-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .today-exam-context > div {
+    text-align: left;
+  }
+
+  .today-next-action {
+    grid-template-columns: 1fr;
+  }
+
+  .today-next-action-cta {
+    justify-content: flex-start;
+  }
+
+  .today-secondary-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .today-support {
+    border-top: 1px solid var(--color-border-subtle);
+  }
+
+  .today-support-item:first-child {
+    padding-top: 1rem;
+  }
+}
+
+@media (max-width: 430px) {
+  .today-focus-header {
+    padding-bottom: 0.8rem;
+  }
+
+  .today-next-action {
+    padding: 1rem;
+  }
+
+  .today-up-next-list > li {
+    grid-template-columns: 1.4rem minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .today-task-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 340px) {
+  .today-focus-view.today-overview {
+    gap: 0.8rem;
+  }
+
+  .today-next-action-cta,
+  .today-next-action-cta .ui-button,
+  .today-task-actions .ui-button {
+    width: 100%;
+  }
+
+  .today-task-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .today-progress-track > span {
+    transition: none;
+  }
+}

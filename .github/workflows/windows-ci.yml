@@ -85,9 +85,17 @@ jobs:
         shell: pwsh
         run: cargo clippy --all-targets --all-features --locked --manifest-path src-tauri\Cargo.toml -- -D warnings
 
+      - name: Validate OCR component packaging scripts
+        shell: pwsh
+        run: .\scripts\test-ocr-package.ps1
+
       - name: Build Windows Release executable
         shell: pwsh
-        run: pnpm tauri build --no-bundle
+        run: pnpm tauri build
+
+      - name: Build Windows portable package
+        shell: pwsh
+        run: pnpm package:windows-portable
 
       - name: Run isolated Release startup Smoke
         shell: pwsh
@@ -101,7 +109,8 @@ jobs:
         with:
           name: kystudy-windows-x64-${{ github.sha }}
           path: |
-            src-tauri/target/release/kystudy.exe
+            src-tauri/target/release/bundle/nsis/*
+            artifacts/kystudy-windows-x64-portable.zip
             artifacts/windows-release-smoke.json
           if-no-files-found: error
           retention-days: 14

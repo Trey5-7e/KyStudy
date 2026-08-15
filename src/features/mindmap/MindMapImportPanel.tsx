@@ -51,7 +51,7 @@ export function MindMapImportPanel({
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (effectiveSourceId !== "" && !isXMind) {
+    if (effectiveSourceId !== "") {
       onCreateDraft(effectiveSourceId);
     }
   };
@@ -79,12 +79,14 @@ export function MindMapImportPanel({
         <label>
           已上传的导图源文件
           <select
+            name="mindmap-import-source"
+            autoComplete="off"
             value={effectiveSourceId}
             disabled={busy || sources.length === 0}
             onChange={(event) => setSelectedSourceId(event.target.value)}
           >
             {sources.length === 0 ? (
-              <option value="">请先在资料库上传 OPML 或 .mm</option>
+              <option value="">请先在资料库上传 OPML、.mm 或 .xmind</option>
             ) : null}
             {sources.map((source) => (
               <option key={source.id} value={source.id}>
@@ -93,18 +95,15 @@ export function MindMapImportPanel({
             ))}
           </select>
         </label>
-        <button
-          type="submit"
-          disabled={busy || effectiveSourceId === "" || isXMind}
-        >
+        <button type="submit" disabled={busy || effectiveSourceId === ""}>
           生成预览草案
         </button>
       </form>
 
       {isXMind ? (
         <p className="mindmap-import-notice" role="status">
-          该文件是 XMind 原文件。当前不直接解压多版本 XMind 包，请先在 XMind
-          中导出为 OPML 再上传。
+          XMind
+          将读取主题层级与标题生成草案；样式、关系线和附件会在预览中明确标注未导入。
         </p>
       ) : null}
 
@@ -118,8 +117,13 @@ export function MindMapImportPanel({
                 <div>
                   <strong>{draft.title}</strong>
                   <span>
-                    {draft.sourceFormat === "opml" ? "OPML" : "FreeMind"} ·{" "}
-                    {draft.nodeCount} 个节点 · {DRAFT_STATE_LABELS[draft.state]}
+                    {draft.sourceFormat === "opml"
+                      ? "OPML"
+                      : draft.sourceFormat === "freemind"
+                        ? "FreeMind"
+                        : "XMind"}{" "}
+                    · {draft.nodeCount} 个节点 ·{" "}
+                    {DRAFT_STATE_LABELS[draft.state]}
                   </span>
                 </div>
                 {draft.state === "generated" ? (

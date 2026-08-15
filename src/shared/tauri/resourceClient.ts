@@ -49,6 +49,42 @@ export interface ImportEvent {
 const IMPORT_EVENT_NAME = "kystudy-import-progress";
 
 const ERROR_COPY: Record<string, { message: string; action: string }> = {
+  DATABASE_BUSY: {
+    message: "本地数据库正在被占用。",
+    action: "关闭其他 KyStudy 窗口后重试。",
+  },
+  WORKSPACE_STORAGE_UNAVAILABLE: {
+    message: "无法访问本地工作区存储。",
+    action: "检查磁盘空间和目录权限后重试。",
+  },
+  DATABASE_CONFIGURATION_UNSUPPORTED: {
+    message: "本地数据库配置不符合 KyStudy 的安全要求。",
+    action: "不要覆盖文件；请保留工作区并查看诊断信息。",
+  },
+  DATABASE_ERROR: {
+    message: "本地工作区暂时无法打开。",
+    action: "重新启动应用；如果仍失败，请导出诊断信息。",
+  },
+  SCHEMA_VERSION_UNSUPPORTED: {
+    message: "这个工作区由更新版本的 KyStudy 创建，当前版本无法安全打开。",
+    action: "请升级 KyStudy 后重试。",
+  },
+  MIGRATION_HISTORY_INCONSISTENT: {
+    message: "工作区数据库升级记录不一致。",
+    action: "不要覆盖文件；请保留工作区并查看诊断信息。",
+  },
+  MIGRATION_FAILED: {
+    message: "工作区数据库升级未能安全完成。",
+    action: "不要覆盖文件；请保留工作区并查看诊断信息。",
+  },
+  SYSTEM_TIME_INVALID: {
+    message: "系统时间无法用于创建工作区。",
+    action: "检查 Windows 日期和时间设置后重试。",
+  },
+  INTERNAL_ERROR: {
+    message: "本地任务意外中断。",
+    action: "重新启动应用后重试。",
+  },
   WORKSPACE_NOT_INITIALIZED: {
     message: "尚未创建本地工作区。",
     action: "先创建本地工作区，再导入学习资料。",
@@ -249,6 +285,10 @@ export async function listResources(): Promise<ResourceDocument[]> {
     throw new Error("RESOURCE_LIST_INVALID");
   }
   return value.map(parseResourceDocument);
+}
+
+export async function trashResource(documentId: string): Promise<void> {
+  await invoke("trash_resource", { documentId });
 }
 
 export async function startResourceImport(): Promise<ImportOperation | null> {

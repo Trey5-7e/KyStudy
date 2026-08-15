@@ -177,6 +177,9 @@ pub(crate) trait ResourceRepository: Clone + Send + Sync + 'static {
     /// Lists formal resources without exposing managed locations.
     fn list_resources(&self) -> Result<Vec<ResourceDocument>, ImportError>;
 
+    /// Hides one resource from the library while preserving managed bytes for references.
+    fn trash_resource(&self, document_id: &str, deleted_at: i64) -> Result<(), ImportError>;
+
     /// Loads reader metadata for one PDF or image document.
     fn reader_descriptor(&self, document_id: &str)
     -> Result<ResourceReaderDescriptor, ImportError>;
@@ -247,6 +250,13 @@ impl<R: ResourceRepository> ResourceUseCases<R> {
     /// Lists formal resources without re-running startup recovery.
     pub(crate) fn list(&self) -> Result<Vec<ResourceDocument>, ImportError> {
         self.repository.list_resources()
+    }
+
+    /// Removes one resource from the active library without breaking existing question cards.
+    pub(crate) fn trash(&self, document_id: &str) -> Result<(), ImportError> {
+        Uuid::parse_str(document_id).map_err(|_| ImportError::InvalidMetadata)?;
+        self.repository
+            .trash_resource(document_id, current_utc_millis()?)
     }
 
     /// Loads safe metadata before opening a registered PDF or image.

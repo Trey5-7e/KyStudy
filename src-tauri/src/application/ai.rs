@@ -15,6 +15,10 @@ const DEFAULT_MONTHLY_LIMIT: u64 = 1_000_000;
 const CHINA_OFFSET_MILLIS: i64 = 8 * 60 * 60 * 1_000;
 const DAY_MILLIS: i64 = 24 * 60 * 60 * 1_000;
 const MAXIMUM_PROVIDERS: u64 = 20;
+const MAXIMUM_IMAGE_COUNT: usize = 6;
+const MAXIMUM_IMAGE_DATA_URL_BYTES: usize = 4 * 1024 * 1024;
+const MAXIMUM_IMAGE_TOTAL_BYTES: usize = 12 * 1024 * 1024;
+const ESTIMATED_TOKENS_PER_IMAGE: u64 = 1_200;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SaveAiProviderInput {
@@ -37,6 +41,13 @@ pub(crate) struct SaveAiBudgetInput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AiPreviewInput {
     pub(crate) prompt: String,
+    pub(crate) max_output_tokens: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AiImagePreviewInput {
+    pub(crate) prompt: String,
+    pub(crate) image_data_urls: Vec<String>,
     pub(crate) max_output_tokens: u32,
 }
 
@@ -119,6 +130,7 @@ pub(crate) struct BeginAiCall {
 pub(crate) enum AiCallPurpose {
     FoundationTest,
     PlanningChat,
+    QuestionAnalysis,
 }
 
 impl AiCallPurpose {
@@ -126,6 +138,7 @@ impl AiCallPurpose {
         match self {
             Self::FoundationTest => "foundation_test",
             Self::PlanningChat => "planning_chat",
+            Self::QuestionAnalysis => "question_analysis",
         }
     }
 }
@@ -231,6 +244,7 @@ pub(crate) trait AiProviderGateway: Clone + Send + Sync + 'static {
         provider: &AiProviderConfig,
         model: &AiModelProfile,
         prompt: &str,
+        image_data_urls: &[String],
         max_output_tokens: u32,
         secret: Option<&str>,
     ) -> Result<AiProviderResponse, AiError>;
@@ -399,7 +413,16 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
     }
 
     pub(crate) fn preview(&self, input: &AiPreviewInput) -> Result<AiCallPreview, AiError> {
+        self.preview_with_images(input, &[])
+    }
+
+    fn preview_with_images(
+        &self,
+        input: &AiPreviewInput,
+        image_data_urls: &[String],
+    ) -> Result<AiCallPreview, AiError> {
         let prompt = normalize_prompt(&input.prompt)?;
+        validate_image_data_urls(image_data_urls)?;
         self.repository.ensure_defaults(current_utc_millis()?)?;
         let (provider, model, budget) = self.repository.load_configuration()?;
         if input.max_output_tokens == 0
@@ -408,7 +431,9 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
         {
             return Err(AiError::InvalidInput);
         }
-        let input_token_estimate = estimate_tokens(&prompt);
+        let input_token_estimate = estimate_tokens(&prompt).saturating_add(
+            ESTIMATED_TOKENS_PER_IMAGE.saturating_mul(image_data_urls.len() as u64),
+        );
         let projected_tokens = input_token_estimate + u64::from(input.max_output_tokens);
         if projected_tokens >= u64::from(model.context_limit) {
             return Err(AiError::InvalidInput);
@@ -424,6 +449,7 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
             provider.base_url.as_deref(),
             &model.model_name,
             &prompt,
+            image_data_urls,
             input.max_output_tokens,
         );
         Ok(AiCallPreview {
@@ -447,13 +473,57 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
         self.execute_for(input, AiCallPurpose::FoundationTest, None)
     }
 
+    pub(crate) fn preview_question_analysis(
+        &self,
+        input: &AiImagePreviewInput,
+    ) -> Result<AiCallPreview, AiError> {
+        if input.image_data_urls.is_empty() {
+            return Err(AiError::InvalidInput);
+        }
+        self.preview_with_images(
+            &AiPreviewInput {
+                prompt: input.prompt.clone(),
+                max_output_tokens: input.max_output_tokens,
+            },
+            &input.image_data_urls,
+        )
+    }
+
+    pub(crate) fn execute_question_analysis(
+        &self,
+        input: &AiImagePreviewInput,
+    ) -> Result<AiCallResult, AiError> {
+        if input.image_data_urls.is_empty() {
+            return Err(AiError::InvalidInput);
+        }
+        self.execute_for_images(
+            &AiPreviewInput {
+                prompt: input.prompt.clone(),
+                max_output_tokens: input.max_output_tokens,
+            },
+            &input.image_data_urls,
+            AiCallPurpose::QuestionAnalysis,
+            None,
+        )
+    }
+
     pub(crate) fn execute_for(
         &self,
         input: &AiPreviewInput,
         purpose: AiCallPurpose,
         conversation_id: Option<String>,
     ) -> Result<AiCallResult, AiError> {
-        let preview = self.preview(input)?;
+        self.execute_for_images(input, &[], purpose, conversation_id)
+    }
+
+    fn execute_for_images(
+        &self,
+        input: &AiPreviewInput,
+        image_data_urls: &[String],
+        purpose: AiCallPurpose,
+        conversation_id: Option<String>,
+    ) -> Result<AiCallResult, AiError> {
+        let preview = self.preview_with_images(input, image_data_urls)?;
         if !preview.allowed {
             return Err(AiError::BudgetBlocked);
         }
@@ -514,6 +584,7 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
             &provider,
             &model,
             &preview.prompt,
+            image_data_urls,
             input.max_output_tokens,
             secret.as_deref(),
         );
@@ -666,6 +737,7 @@ fn request_fingerprint(
     base_url: Option<&str>,
     model_name: &str,
     prompt: &str,
+    image_data_urls: &[String],
     max_output_tokens: u32,
 ) -> String {
     let mut hasher = Sha256::new();
@@ -679,8 +751,36 @@ fn request_fingerprint(
         hasher.update(value.as_bytes());
         hasher.update([0]);
     }
+    for image in image_data_urls {
+        hasher.update(image.as_bytes());
+        hasher.update([0]);
+    }
     hasher.update(max_output_tokens.to_le_bytes());
     format!("{:X}", hasher.finalize())
+}
+
+fn validate_image_data_urls(values: &[String]) -> Result<(), AiError> {
+    if values.is_empty() {
+        return Ok(());
+    }
+    if values.len() > MAXIMUM_IMAGE_COUNT {
+        return Err(AiError::InvalidInput);
+    }
+    let mut total = 0_usize;
+    for value in values {
+        if value.len() > MAXIMUM_IMAGE_DATA_URL_BYTES
+            || !(value.starts_with("data:image/png;base64,")
+                || value.starts_with("data:image/jpeg;base64,")
+                || value.starts_with("data:image/webp;base64,"))
+        {
+            return Err(AiError::InvalidInput);
+        }
+        total = total.saturating_add(value.len());
+    }
+    if total > MAXIMUM_IMAGE_TOTAL_BYTES {
+        return Err(AiError::InvalidInput);
+    }
+    Ok(())
 }
 
 fn destination_label(provider: &AiProviderConfig) -> String {
@@ -763,8 +863,8 @@ pub(crate) fn default_provider(now: i64) -> (AiProviderConfig, AiModelProfile, A
 #[cfg(test)]
 mod tests {
     use super::{
-        AiBudget, AiUsageSummary, budget_warnings, estimate_tokens, normalize_base_url,
-        usage_period_starts,
+        AiBudget, AiProviderType, AiUsageSummary, budget_warnings, estimate_tokens,
+        normalize_base_url, request_fingerprint, usage_period_starts, validate_image_data_urls,
     };
 
     #[test]
@@ -807,5 +907,33 @@ mod tests {
         let (day, month) = usage_period_starts(1_721_577_600_000);
         assert!(day >= month);
         assert_eq!((day + 8 * 3_600_000) % 86_400_000, 0);
+    }
+
+    #[test]
+    fn image_validation_accepts_supported_data_urls_and_rejects_non_images() {
+        assert!(validate_image_data_urls(&["data:image/png;base64,AAA".to_owned()]).is_ok());
+        assert!(validate_image_data_urls(&["data:application/pdf;base64,AAA".to_owned()]).is_err());
+    }
+
+    #[test]
+    fn request_fingerprint_changes_when_question_image_changes() {
+        let first = request_fingerprint(
+            AiProviderType::OpenAiResponses,
+            Some("https://api.openai.com/v1"),
+            "model",
+            "解析",
+            &["data:image/png;base64,AAA".to_owned()],
+            800,
+        );
+        let second = request_fingerprint(
+            AiProviderType::OpenAiResponses,
+            Some("https://api.openai.com/v1"),
+            "model",
+            "解析",
+            &["data:image/png;base64,BBB".to_owned()],
+            800,
+        );
+
+        assert_ne!(first, second);
     }
 }

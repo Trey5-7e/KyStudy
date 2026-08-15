@@ -11,6 +11,9 @@ importers:
       '@tauri-apps/api':
         specifier: 2.11.1
         version: 2.11.1
+      mind-elixir:
+        specifier: 5.13.0
+        version: 5.13.0
       pdfjs-dist:
         specifier: 6.1.200
         version: 6.1.200
@@ -1004,6 +1007,9 @@ packages:
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
+
+  mind-elixir@5.13.0:
+    resolution: {integrity: sha512-ilvXVwrMmBclwyA+46nIrqOZot4Rv7arxInJwbK4XL83qMoPFb7AbwSYJIsMUSjJ+XPxMYYZ2SoMuT06eWAMRQ==}
 
   minimatch@10.2.5:
     resolution: {integrity: sha512-MULkVLfKGYDFYejP07QOurDLLQpcjk7Fw+7jXS2R2czRQzR56yHRveU5NDJEOviH+hETZKSkIk5c+T23GjFUMg==}
@@ -2206,6 +2212,8 @@ snapshots:
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  mind-elixir@5.13.0: {}
 
   minimatch@10.2.5:
     dependencies:

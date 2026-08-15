@@ -6,11 +6,19 @@ import {
 } from "./resourceClient";
 
 export type AttemptResult = "correct" | "incorrect" | "uncertain";
+export type QuestionType = "choice" | "blank" | "solution" | "other";
+export type ClassificationSource = "pending" | "automatic" | "manual";
 
 export interface Question {
   id: string;
   documentId: string;
   documentTitle: string;
+  subjectId?: string;
+  subjectName?: string;
+  subjectInherited: boolean;
+  questionType?: QuestionType;
+  classificationSource: ClassificationSource;
+  classificationConfidence?: number;
   title: string;
   chapter?: string;
   questionNumber?: string;
@@ -70,6 +78,8 @@ export interface QuestionRegionInput {
 export interface CreateQuestionInput {
   documentId: string;
   title: string;
+  subjectId?: string;
+  questionType?: QuestionType;
   chapter?: string;
   questionNumber?: string;
   difficulty: number;
@@ -81,6 +91,8 @@ export interface CreateQuestionInput {
 export interface UpdateQuestionInput {
   questionId: string;
   title: string;
+  subjectId?: string;
+  questionType?: QuestionType;
   chapter?: string;
   questionNumber?: string;
   difficulty: number;
@@ -96,10 +108,29 @@ export interface AddQuestionAttemptInput {
   answerNote?: string;
 }
 
+export interface WorkbookProfile {
+  documentId: string;
+  defaultSubjectId?: string;
+  defaultSubjectName?: string;
+  pendingClassificationCount: number;
+  updatedAt?: number;
+}
+
 const ATTEMPT_RESULTS = new Set<AttemptResult>([
   "correct",
   "incorrect",
   "uncertain",
+]);
+const QUESTION_TYPES = new Set<QuestionType>([
+  "choice",
+  "blank",
+  "solution",
+  "other",
+]);
+const CLASSIFICATION_SOURCES = new Set<ClassificationSource>([
+  "pending",
+  "automatic",
+  "manual",
 ]);
 
 const ERROR_COPY: Record<string, { message: string; action: string }> = {
@@ -131,6 +162,10 @@ const ERROR_COPY: Record<string, { message: string; action: string }> = {
     message: "关联的知识节点无效。",
     action: "刷新思维导图后重新选择知识节点。",
   },
+  QUESTION_SUBJECT_NOT_FOUND: {
+    message: "所选科目不存在或已经归档。",
+    action: "刷新科目列表，或让题目继续继承习题册科目。",
+  },
 };
 
 export async function listWorkbookQuestions(
@@ -143,6 +178,31 @@ export async function listWorkbookQuestions(
 
 export async function listTrashedQuestions(): Promise<QuestionBundle[]> {
   return parseBundleList(await invoke("list_trashed_questions"));
+}
+
+export async function getWorkbookProfile(
+  documentId: string,
+): Promise<WorkbookProfile> {
+  return parseWorkbookProfile(
+    await invoke("get_workbook_profile", { documentId }),
+  );
+}
+
+export async function setWorkbookDefaultSubject(request: {
+  documentId: string;
+  subjectId?: string;
+}): Promise<WorkbookProfile> {
+  return parseWorkbookProfile(
+    await invoke("set_workbook_default_subject", { request }),
+  );
+}
+
+export async function batchClassifyQuestions(request: {
+  documentId: string;
+  questionIds: string[];
+  questionType: QuestionType;
+}): Promise<QuestionBundle[]> {
+  return parseBundleList(await invoke("batch_classify_questions", { request }));
 }
 
 export async function createQuestion(
@@ -163,6 +223,15 @@ export async function addQuestionRegion(
 ): Promise<QuestionBundle> {
   return parseQuestionBundle(
     await invoke("add_question_region", { request: { questionId, region } }),
+  );
+}
+
+export async function updateQuestionRegion(
+  regionId: string,
+  region: QuestionRegionInput,
+): Promise<QuestionBundle> {
+  return parseQuestionBundle(
+    await invoke("update_question_region", { request: { regionId, region } }),
   );
 }
 
@@ -239,6 +308,18 @@ function parseQuestion(value: unknown): Question {
     typeof value.id !== "string" ||
     typeof value.documentId !== "string" ||
     typeof value.documentTitle !== "string" ||
+    !isOptionalString(value.subjectId) ||
+    !isOptionalString(value.subjectName) ||
+    typeof value.subjectInherited !== "boolean" ||
+    !(
+      value.questionType === null ||
+      value.questionType === undefined ||
+      QUESTION_TYPES.has(value.questionType as QuestionType)
+    ) ||
+    !CLASSIFICATION_SOURCES.has(
+      value.classificationSource as ClassificationSource,
+    ) ||
+    !isOptionalConfidence(value.classificationConfidence) ||
     typeof value.title !== "string" ||
     !isOptionalString(value.chapter) ||
     !isOptionalString(value.questionNumber) ||
@@ -254,6 +335,18 @@ function parseQuestion(value: unknown): Question {
     id: value.id,
     documentId: value.documentId,
     documentTitle: value.documentTitle,
+    subjectId: optionalString(value.subjectId),
+    subjectName: optionalString(value.subjectName),
+    subjectInherited: value.subjectInherited,
+    questionType:
+      typeof value.questionType === "string"
+        ? (value.questionType as QuestionType)
+        : undefined,
+    classificationSource: value.classificationSource as ClassificationSource,
+    classificationConfidence:
+      typeof value.classificationConfidence === "number"
+        ? value.classificationConfidence
+        : undefined,
     title: value.title,
     chapter: optionalString(value.chapter),
     questionNumber: optionalString(value.questionNumber),
@@ -263,6 +356,27 @@ function parseQuestion(value: unknown): Question {
       typeof value.deletedAt === "number" ? value.deletedAt : undefined,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
+  };
+}
+
+export function parseWorkbookProfile(value: unknown): WorkbookProfile {
+  if (
+    !isRecord(value) ||
+    typeof value.documentId !== "string" ||
+    !isOptionalString(value.defaultSubjectId) ||
+    !isOptionalString(value.defaultSubjectName) ||
+    !isNonNegativeInteger(value.pendingClassificationCount) ||
+    !isOptionalNonNegativeInteger(value.updatedAt)
+  ) {
+    throw new Error("WORKBOOK_PROFILE_INVALID");
+  }
+  return {
+    documentId: value.documentId,
+    defaultSubjectId: optionalString(value.defaultSubjectId),
+    defaultSubjectName: optionalString(value.defaultSubjectName),
+    pendingClassificationCount: value.pendingClassificationCount,
+    updatedAt:
+      typeof value.updatedAt === "number" ? value.updatedAt : undefined,
   };
 }
 
@@ -377,6 +491,10 @@ function isNormalized(value: unknown): value is number {
     value >= 0 &&
     value <= 1
   );
+}
+
+function isOptionalConfidence(value: unknown): boolean {
+  return value === undefined || value === null || isNormalized(value);
 }
 
 function isPositiveNormalized(value: unknown): value is number {

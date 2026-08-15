@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { normalizeQuestionError, type QuestionRegion } from "./questionClient";
 import type { ResourceCommandError } from "./resourceClient";
@@ -11,6 +12,19 @@ export interface OcrComponentStatus {
   engine: string;
   modelsBundled: boolean;
   componentSizeBytes?: number;
+}
+
+export interface OcrComponentDownloadInfo {
+  available: boolean;
+  engine: string;
+}
+
+export interface OcrDownloadEvent {
+  operationId: string;
+  state: "running" | "succeeded" | "failed" | "canceled";
+  copiedBytes: number;
+  totalBytes: number;
+  error?: ResourceCommandError;
 }
 
 export interface OcrTextLine {
@@ -40,6 +54,23 @@ export interface OcrRecognition {
   updatedAt: number;
 }
 
+export interface OcrPageLine {
+  text: string;
+  confidence: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  sortOrder: number;
+}
+
+export interface OcrPageRecognition {
+  pageNumber: number;
+  engine: string;
+  meanConfidence: number;
+  lines: OcrPageLine[];
+}
+
 const COMPONENT_STATES = new Set<OcrComponentState>([
   "missing",
   "incomplete",
@@ -50,6 +81,7 @@ const RECOGNITION_STATES = new Set<OcrRecognitionState>([
   "confirmed",
   "superseded",
 ]);
+const OCR_DOWNLOAD_EVENT_NAME = "kystudy-ocr-download-progress";
 
 const ERROR_COPY: Record<string, { message: string; action: string }> = {
   OCR_REGION_NOT_FOUND: {
@@ -84,6 +116,34 @@ const ERROR_COPY: Record<string, { message: string; action: string }> = {
     message: "本地 OCR 组件版本不兼容。",
     action: "安装与当前 KyStudy 匹配的 OCR 组件后重试。",
   },
+  OCR_COMPONENT_SOURCE_INVALID: {
+    message: "所选文件夹不是完整的 KyStudy OCR 组件。",
+    action: "选择包含完整模型文件的 kystudy-ocr-worker 文件夹。",
+  },
+  OCR_COMPONENT_INSTALL_FAILED: {
+    message: "OCR 组件安装或修复未完成。",
+    action: "检查目标磁盘空间和权限后，重新选择完整组件文件夹。",
+  },
+  OCR_COMPONENT_DOWNLOAD_UNAVAILABLE: {
+    message: "在线 OCR 下载资产尚未发布。",
+    action: "当前可继续使用本地安装；发布下载资产后即可在线下载。",
+  },
+  OCR_COMPONENT_DOWNLOAD_FAILED: {
+    message: "OCR 组件在线下载失败。",
+    action: "检查网络连接后重试；现有组件不会被替换。",
+  },
+  OCR_COMPONENT_DOWNLOAD_INTEGRITY: {
+    message: "OCR 组件完整性校验失败。",
+    action: "请重试下载，或使用完整的本地 OCR 组件文件夹。",
+  },
+  OCR_COMPONENT_ARCHIVE_INVALID: {
+    message: "下载的 OCR 组件压缩包无效。",
+    action: "请重试下载，或使用完整的本地 OCR 组件文件夹。",
+  },
+  OCR_COMPONENT_REMOVAL_FAILED: {
+    message: "OCR 组件移除未完成。",
+    action: "关闭正在运行的 OCR 操作后重试。",
+  },
   OCR_CANCELED: {
     message: "OCR 已取消。",
     action: "原题目区域和已确认文本没有改变。",
@@ -110,6 +170,43 @@ export async function getOcrStatus(): Promise<OcrComponentStatus> {
   return parseOcrComponentStatus(await invoke("get_ocr_status"));
 }
 
+export async function getOcrDownloadInfo(): Promise<OcrComponentDownloadInfo> {
+  const value: unknown = await invoke("get_ocr_download_info");
+  if (
+    !isRecord(value) ||
+    typeof value.available !== "boolean" ||
+    typeof value.engine !== "string"
+  ) {
+    throw new Error("OCR_COMPONENT_DOWNLOAD_INFO_INVALID");
+  }
+  return { available: value.available, engine: value.engine };
+}
+
+export async function downloadOcrComponent(
+  operationId: string,
+): Promise<OcrComponentStatus> {
+  return parseOcrComponentStatus(
+    await invoke("download_ocr_component", { request: { operationId } }),
+  );
+}
+
+export function listenToOcrDownloadEvents(
+  onEvent: (event: OcrDownloadEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(OCR_DOWNLOAD_EVENT_NAME, (event) => {
+    onEvent(parseOcrDownloadEvent(event.payload));
+  });
+}
+
+export async function installOcrComponent(): Promise<OcrComponentStatus | null> {
+  const value: unknown = await invoke("install_ocr_component");
+  return value === null ? null : parseOcrComponentStatus(value);
+}
+
+export async function removeOcrComponent(): Promise<OcrComponentStatus> {
+  return parseOcrComponentStatus(await invoke("remove_ocr_component"));
+}
+
 export async function listQuestionOcr(
   questionId: string,
 ): Promise<OcrRecognition[]> {
@@ -130,6 +227,22 @@ export async function recognizeQuestionRegion(
       request: {
         operationId,
         regionId: region.id,
+        imageBytes: Array.from(imageBytes),
+      },
+    }),
+  );
+}
+
+export async function recognizePdfPage(
+  operationId: string,
+  pageNumber: number,
+  imageBytes: Uint8Array,
+): Promise<OcrPageRecognition> {
+  return parseOcrPageRecognition(
+    await invoke("recognize_pdf_page", {
+      request: {
+        operationId,
+        pageNumber,
         imageBytes: Array.from(imageBytes),
       },
     }),
@@ -208,6 +321,38 @@ export function parseOcrComponentStatus(value: unknown): OcrComponentStatus {
   };
 }
 
+export function parseOcrDownloadEvent(value: unknown): OcrDownloadEvent {
+  if (
+    !isRecord(value) ||
+    typeof value.operationId !== "string" ||
+    !["running", "succeeded", "failed", "canceled"].includes(
+      typeof value.state === "string" ? value.state : "",
+    ) ||
+    !isNonNegativeInteger(value.copiedBytes) ||
+    !isNonNegativeInteger(value.totalBytes) ||
+    (value.totalBytes > 0 && value.copiedBytes > value.totalBytes)
+  ) {
+    throw new Error("OCR_DOWNLOAD_EVENT_INVALID");
+  }
+  const error =
+    value.error === null || value.error === undefined
+      ? undefined
+      : normalizeOcrError(value.error);
+  if (
+    (value.state === "failed" || value.state === "canceled") &&
+    error === undefined
+  ) {
+    throw new Error("OCR_DOWNLOAD_EVENT_INVALID");
+  }
+  return {
+    operationId: value.operationId,
+    state: value.state as OcrDownloadEvent["state"],
+    copiedBytes: value.copiedBytes,
+    totalBytes: value.totalBytes,
+    error,
+  };
+}
+
 export function parseOcrRecognition(value: unknown): OcrRecognition {
   if (
     !isRecord(value) ||
@@ -250,6 +395,24 @@ export function parseOcrRecognition(value: unknown): OcrRecognition {
   };
 }
 
+export function parseOcrPageRecognition(value: unknown): OcrPageRecognition {
+  if (
+    !isRecord(value) ||
+    !isPositiveInteger(value.pageNumber) ||
+    typeof value.engine !== "string" ||
+    !isConfidence(value.meanConfidence) ||
+    !Array.isArray(value.lines)
+  ) {
+    throw new Error("OCR_PAGE_RECOGNITION_INVALID");
+  }
+  return {
+    pageNumber: value.pageNumber,
+    engine: value.engine,
+    meanConfidence: value.meanConfidence,
+    lines: value.lines.map(parseOcrPageLine),
+  };
+}
+
 function parseOcrTextLine(value: unknown): OcrTextLine {
   if (
     !isRecord(value) ||
@@ -270,6 +433,33 @@ function parseOcrTextLine(value: unknown): OcrTextLine {
   return {
     id: value.id,
     recognitionId: value.recognitionId,
+    text: value.text,
+    confidence: value.confidence,
+    x: value.x,
+    y: value.y,
+    width: value.width,
+    height: value.height,
+    sortOrder: value.sortOrder,
+  };
+}
+
+function parseOcrPageLine(value: unknown): OcrPageLine {
+  if (
+    !isRecord(value) ||
+    typeof value.text !== "string" ||
+    value.text.trim().length === 0 ||
+    !isConfidence(value.confidence) ||
+    !isNormalized(value.x) ||
+    !isNormalized(value.y) ||
+    !isPositiveNormalized(value.width) ||
+    !isPositiveNormalized(value.height) ||
+    value.x + value.width > 1.000_001 ||
+    value.y + value.height > 1.000_001 ||
+    !isNonNegativeInteger(value.sortOrder)
+  ) {
+    throw new Error("OCR_PAGE_LINE_INVALID");
+  }
+  return {
     text: value.text,
     confidence: value.confidence,
     x: value.x,

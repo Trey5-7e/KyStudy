@@ -7,36 +7,53 @@ use uuid::Uuid;
 
 use crate::application::{
     AddNodeResourceInput, AddPlanReferenceInput, AddQuestionAttemptInput, AddQuestionRegionInput,
-    AiCallPreview, AiCallResult, AiError, AiOverview, AiPreviewInput, AnalyticsBacklog,
-    AnalyticsError, AnalyticsInput, AnalyticsOverview, AnalyticsPeriodSummary, BackupError,
-    BackupReport, BeginResourceIndexInput, ConfirmPlanningChatInput, ConfirmQuestionRegionOcrInput,
-    CreateKnowledgeMapInput, CreateQuestionInput, CreateStudySessionInput, CreateSubjectInput,
-    CreateTaskInput, DailyAnalyticsPoint, GenerateReviewQueueInput, ImportError, ImportProgress,
-    InsertReviewQueueItemInput, KnowledgeAnalytics, KnowledgeError, MoveKnowledgeNodeInput,
-    OcrComponentStatus, OcrError, PinQuestionReviewInput, PlanExecutionProgress, PlanProgressError,
-    PlanProgressInput, PlanProgressSummary, PlanScheduleError, PlanStageProgress, PlanTaskCreation,
-    PlanTaskPreview, PlanTaskPreviewItem, PlanTaskScheduleInput, PlanningChatError,
-    PlanningChatInput, PlanningChatPreview, PlanningChatReply, PlanningContextSelection,
-    PlanningConversation, PlanningError, PlanningMessage, PlanningSource, QuestionError,
-    QuestionRegionInput, RecognizeQuestionRegionInput, RepeatedMistakeAnalytics,
-    RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor, RestoreReport, ReviewError,
-    RuntimeStatus, SaveAiBudgetInput, SaveAiProviderInput, SavePlanInput, SavePlanStageInput,
-    ScheduleError, SearchError, SearchResourcesInput, SetQuestionReviewInput, SplitChildInput,
-    SplitTaskInput, StoreResourcePageTextInput, SubjectAnalytics, SubmitReviewInput,
-    UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput, UpdateQuestionInput,
-    UpdateReviewPreferencesInput, UpdateTaskDetailsInput,
+    AiCallPreview, AiCallResult, AiError, AiImagePreviewInput, AiOverview, AiPreviewInput,
+    AnalyticsBacklog, AnalyticsError, AnalyticsInput, AnalyticsOverview, AnalyticsPeriodSummary,
+    BackupError, BackupReport, BatchClassifyQuestionsInput, BeginResourceIndexInput,
+    BulkQuestionAttemptInput, ConfirmPlanningChatInput, ConfirmQuestionRegionOcrInput,
+    ConfirmShiftCyclePlanInput, CreateKnowledgeMapInput, CreateQuestionInput,
+    CreateStudySessionInput, CreateSubjectInput, CreateTaskInput, CreateWorkbookCategoryInput,
+    CyclePlanError, DailyAnalyticsPoint, GenerateReviewQueueInput, GenerateReviewSchemeQueueInput,
+    ImportError, ImportProgress, ImportQuestionIndexInput, IndexedQuestionDraftInput,
+    IndexedQuestionRegionUpdateInput, InsertIndexedQuestionInput, InsertReviewQueueItemInput,
+    KnowledgeAnalytics, KnowledgeError, MoveKnowledgeNodeInput, OcrComponentStatus, OcrError,
+    OcrPageLine, OcrPageRecognition, PinQuestionReviewInput, PlanExecutionProgress,
+    PlanProgressError, PlanProgressInput, PlanProgressSummary, PlanScheduleError,
+    PlanStageProgress, PlanTaskCreation, PlanTaskPreview, PlanTaskPreviewItem,
+    PlanTaskScheduleInput, PlanningChatError, PlanningChatInput, PlanningChatPreview,
+    PlanningChatReply, PlanningContextSelection, PlanningConversation, PlanningError,
+    PlanningMessage, PlanningSource, QuestionBankError, QuestionError, QuestionRegionInput,
+    ReassignWorkbookSegmentInput, RecognizePdfPageInput, RecognizeQuestionRegionInput,
+    RecordBulkQuestionAttemptsInput, RepeatedMistakeAnalytics, ReplaceIndexedQuestionRegionsInput,
+    RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor,
+    RestoreCyclePlanItemStateInput, RestoreReport, RestoreWorkbookSegmentInput, ReviewError,
+    ReviewSchemeError, ReviewSchemeTypeQuotaInput, RuntimeStatus, SaveAiBudgetInput,
+    SaveAiProviderInput, SaveCyclePlanInput, SavePlanInput, SavePlanStageInput,
+    SaveReviewSchemeInput, ScheduleError, SearchError, SearchResourcesInput,
+    SetCyclePlanItemStateInput, SetCyclePlanItemStateResult, SetQuestionGapAcknowledgementInput,
+    SetQuestionReviewInput, SetWorkbookSubjectInput, ShiftCyclePlanInput, ShiftCyclePlanPreview,
+    ShiftCyclePlanResult, ShiftCyclePlanUndo, SplitChildInput, SplitTaskInput,
+    StoreResourcePageTextInput, SubjectAnalytics, SubmitReviewInput, SubmitReviewSchemeResultInput,
+    TrashWorkbookSegmentInput, UndoReviewSchemeResultInput, UndoShiftCyclePlanInput,
+    UpdateIndexedQuestionInput, UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput,
+    UpdateQuestionInput, UpdateQuestionRegionInput, UpdateReviewPreferencesInput,
+    UpdateTaskDetailsInput, WorkbookSegmentAssignmentInput,
     get_runtime_status as load_runtime_status,
 };
 use crate::bootstrap::AppState;
 use crate::domain::{
-    DailyReviewItem, DailyReviewQueue, KnowledgeMap, KnowledgeMapBundle, KnowledgeNode,
+    CyclePlan, CyclePlanDashboard, CyclePlanItem, CyclePlanOverview, DailyReviewItem,
+    DailyReviewQueue, IndexedQuestion, KnowledgeMap, KnowledgeMapBundle, KnowledgeNode,
     KnowledgeNodeResource, MindMapDraftNode, MindMapImportDraft, MistakeProfile, OcrRecognition,
-    OcrTextLine, PlanReference, PlanStage, Question, QuestionAttempt, QuestionBundle,
-    QuestionKnowledgeLink, QuestionRegion, ResourceIndexSession, ResourceIndexStatus,
-    ResourceSearchResult, ReviewBacklog, ReviewDashboard, ReviewEvent, ReviewPreferences,
-    ReviewQuestion, ReviewReason, ReviewState, StudyPlan, StudyPlanBundle, StudySession,
-    StudyStatistics, Subject, SubjectStatistics, Task, TaskChange, TaskChangeSnapshot, TaskSplit,
-    TaskTransition, TrashedTask, Workspace,
+    OcrTextLine, PlanReference, PlanStage, Question, QuestionAttempt, QuestionBankSnapshot,
+    QuestionBundle, QuestionKnowledgeLink, QuestionRegion, QuestionType, ResourceIndexSession,
+    ResourceIndexStatus, ResourceSearchResult, ReviewBacklog, ReviewDashboard, ReviewEvent,
+    ReviewPreferences, ReviewQuestion, ReviewReason, ReviewScheme, ReviewSchemeDashboard,
+    ReviewSchemeQueue, ReviewSchemeQueueItem, ReviewSchemeToday, ReviewSchemeTypeQuota,
+    ReviewState, StudyPlan, StudyPlanBundle, StudySession, StudyStatistics, Subject,
+    SubjectStatistics, Task, TaskChange, TaskChangeSnapshot, TaskSplit, TaskTransition,
+    TrashedTask, TrashedWorkbookDocumentSegment, WorkbookCategory, WorkbookDocumentSegment,
+    WorkbookProfile, Workspace,
 };
 
 #[tauri::command]
@@ -203,6 +220,34 @@ pub(crate) async fn execute_ai_call(
     let use_cases = state.ai.clone();
     let input = request.into();
     tauri::async_runtime::spawn_blocking(move || use_cases.execute(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn preview_question_ai_analysis(
+    request: AiImagePreviewRequestDto,
+    state: State<'_, AppState>,
+) -> Result<AiCallPreviewDto, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.preview_question_analysis(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn execute_question_ai_analysis(
+    request: AiImagePreviewRequestDto,
+    state: State<'_, AppState>,
+) -> Result<AiCallResultDto, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.execute_question_analysis(&input))
         .await
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)
@@ -1016,6 +1061,7 @@ impl From<CreateStudySessionRequestDto> for CreateStudySessionInput {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct SavePlanRequestDto {
     id: Option<String>,
+    expected_revision: Option<u32>,
     title: String,
     target_exam: Option<String>,
     exam_date: Option<String>,
@@ -1026,6 +1072,7 @@ impl From<SavePlanRequestDto> for SavePlanInput {
     fn from(request: SavePlanRequestDto) -> Self {
         Self {
             id: request.id,
+            expected_revision: request.expected_revision,
             title: request.title,
             target_exam: request.target_exam,
             exam_date: request.exam_date,
@@ -1039,6 +1086,7 @@ impl From<SavePlanRequestDto> for SavePlanInput {
 pub(crate) struct SavePlanStageRequestDto {
     id: Option<String>,
     plan_id: String,
+    expected_plan_revision: u32,
     title: String,
     start_date: String,
     end_date: String,
@@ -1051,6 +1099,7 @@ impl From<SavePlanStageRequestDto> for SavePlanStageInput {
         Self {
             id: request.id,
             plan_id: request.plan_id,
+            expected_plan_revision: request.expected_plan_revision,
             title: request.title,
             start_date: request.start_date,
             end_date: request.end_date,
@@ -1064,6 +1113,7 @@ impl From<SavePlanStageRequestDto> for SavePlanStageInput {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct AddPlanReferenceRequestDto {
     plan_id: String,
+    expected_plan_revision: u32,
     document_id: String,
     page_start: u32,
     page_end: u32,
@@ -1074,6 +1124,7 @@ impl From<AddPlanReferenceRequestDto> for AddPlanReferenceInput {
     fn from(request: AddPlanReferenceRequestDto) -> Self {
         Self {
             plan_id: request.plan_id,
+            expected_plan_revision: request.expected_plan_revision,
             document_id: request.document_id,
             page_start: request.page_start,
             page_end: request.page_end,
@@ -1579,6 +1630,8 @@ impl From<QuestionRegionRequestDto> for QuestionRegionInput {
 pub(crate) struct CreateQuestionRequestDto {
     document_id: String,
     title: String,
+    subject_id: Option<String>,
+    question_type: Option<String>,
     chapter: Option<String>,
     question_number: Option<String>,
     difficulty: u8,
@@ -1592,6 +1645,8 @@ impl From<CreateQuestionRequestDto> for CreateQuestionInput {
         Self {
             document_id: request.document_id,
             title: request.title,
+            subject_id: request.subject_id,
+            question_type: request.question_type,
             chapter: request.chapter,
             question_number: request.question_number,
             difficulty: request.difficulty,
@@ -1607,6 +1662,8 @@ impl From<CreateQuestionRequestDto> for CreateQuestionInput {
 pub(crate) struct UpdateQuestionRequestDto {
     question_id: String,
     title: String,
+    subject_id: Option<String>,
+    question_type: Option<String>,
     chapter: Option<String>,
     question_number: Option<String>,
     difficulty: u8,
@@ -1619,6 +1676,8 @@ impl From<UpdateQuestionRequestDto> for UpdateQuestionInput {
         Self {
             question_id: request.question_id,
             title: request.title,
+            subject_id: request.subject_id,
+            question_type: request.question_type,
             chapter: request.chapter,
             question_number: request.question_number,
             difficulty: request.difficulty,
@@ -1646,6 +1705,22 @@ impl From<AddQuestionRegionRequestDto> for AddQuestionRegionInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UpdateQuestionRegionRequestDto {
+    region_id: String,
+    region: QuestionRegionRequestDto,
+}
+
+impl From<UpdateQuestionRegionRequestDto> for UpdateQuestionRegionInput {
+    fn from(request: UpdateQuestionRegionRequestDto) -> Self {
+        Self {
+            region_id: request.region_id,
+            region: request.region.into(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct AddQuestionAttemptRequestDto {
     question_id: String,
     result: String,
@@ -1666,12 +1741,18 @@ impl From<AddQuestionAttemptRequestDto> for AddQuestionAttemptInput {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct QuestionDto {
     id: String,
     document_id: String,
     document_title: String,
+    subject_id: Option<String>,
+    subject_name: Option<String>,
+    subject_inherited: bool,
+    question_type: Option<&'static str>,
+    classification_source: &'static str,
+    classification_confidence: Option<f64>,
     title: String,
     chapter: Option<String>,
     question_number: Option<String>,
@@ -1688,6 +1769,12 @@ impl From<Question> for QuestionDto {
             id: question.id,
             document_id: question.document_id,
             document_title: question.document_title,
+            subject_id: question.subject_id,
+            subject_name: question.subject_name,
+            subject_inherited: question.subject_inherited,
+            question_type: question.question_type.map(QuestionType::as_str),
+            classification_source: question.classification_source.as_str(),
+            classification_confidence: question.classification_confidence,
             title: question.title,
             chapter: question.chapter,
             question_number: question.number_label,
@@ -1802,6 +1889,499 @@ impl From<QuestionBundle> for QuestionBundleDto {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SetWorkbookSubjectRequestDto {
+    document_id: String,
+    subject_id: Option<String>,
+}
+
+impl From<SetWorkbookSubjectRequestDto> for SetWorkbookSubjectInput {
+    fn from(request: SetWorkbookSubjectRequestDto) -> Self {
+        Self {
+            document_id: request.document_id,
+            subject_id: request.subject_id,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct BatchClassifyQuestionsRequestDto {
+    document_id: String,
+    question_ids: Vec<String>,
+    question_type: String,
+}
+
+impl From<BatchClassifyQuestionsRequestDto> for BatchClassifyQuestionsInput {
+    fn from(request: BatchClassifyQuestionsRequestDto) -> Self {
+        Self {
+            document_id: request.document_id,
+            question_ids: request.question_ids,
+            question_type: request.question_type,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkbookProfileDto {
+    document_id: String,
+    default_subject_id: Option<String>,
+    default_subject_name: Option<String>,
+    pending_classification_count: u32,
+    updated_at: Option<i64>,
+}
+
+impl From<WorkbookProfile> for WorkbookProfileDto {
+    fn from(profile: WorkbookProfile) -> Self {
+        Self {
+            document_id: profile.document_id,
+            default_subject_id: profile.default_subject_id,
+            default_subject_name: profile.default_subject_name,
+            pending_classification_count: profile.pending_classification_count,
+            updated_at: profile.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct CreateWorkbookCategoryRequestDto {
+    name: String,
+}
+
+impl From<CreateWorkbookCategoryRequestDto> for CreateWorkbookCategoryInput {
+    fn from(value: CreateWorkbookCategoryRequestDto) -> Self {
+        Self { name: value.name }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct WorkbookSegmentAssignmentRequestDto {
+    document_id: String,
+    subject_id: String,
+    workbook_id: String,
+    source_heading: String,
+    page_start: u32,
+    page_end: u32,
+}
+
+impl From<WorkbookSegmentAssignmentRequestDto> for WorkbookSegmentAssignmentInput {
+    fn from(value: WorkbookSegmentAssignmentRequestDto) -> Self {
+        Self {
+            document_id: value.document_id,
+            subject_id: value.subject_id,
+            workbook_id: value.workbook_id,
+            source_heading: value.source_heading,
+            page_start: value.page_start,
+            page_end: value.page_end,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RestoreWorkbookSegmentRequestDto {
+    segment_id: String,
+    expected_deleted_at: i64,
+}
+
+impl From<RestoreWorkbookSegmentRequestDto> for RestoreWorkbookSegmentInput {
+    fn from(value: RestoreWorkbookSegmentRequestDto) -> Self {
+        Self {
+            segment_id: value.segment_id,
+            expected_deleted_at: value.expected_deleted_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ReassignWorkbookSegmentRequestDto {
+    segment_id: String,
+    target_workbook_id: String,
+    expected_updated_at: i64,
+    expected_deleted_at: Option<i64>,
+}
+
+impl From<ReassignWorkbookSegmentRequestDto> for ReassignWorkbookSegmentInput {
+    fn from(value: ReassignWorkbookSegmentRequestDto) -> Self {
+        Self {
+            segment_id: value.segment_id,
+            target_workbook_id: value.target_workbook_id,
+            expected_updated_at: value.expected_updated_at,
+            expected_deleted_at: value.expected_deleted_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct IndexedQuestionDraftRequestDto {
+    source_key: String,
+    title: String,
+    chapter: String,
+    section_part: String,
+    question_type: String,
+    question_number: String,
+    index_confidence: f64,
+    regions: Vec<QuestionRegionRequestDto>,
+}
+
+impl From<IndexedQuestionDraftRequestDto> for IndexedQuestionDraftInput {
+    fn from(value: IndexedQuestionDraftRequestDto) -> Self {
+        Self {
+            source_key: value.source_key,
+            title: value.title,
+            chapter: value.chapter,
+            section_part: value.section_part,
+            question_type: value.question_type,
+            question_number: value.question_number,
+            index_confidence: value.index_confidence,
+            regions: value.regions.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ImportQuestionIndexRequestDto {
+    segment_id: String,
+    questions: Vec<IndexedQuestionDraftRequestDto>,
+}
+
+impl From<ImportQuestionIndexRequestDto> for ImportQuestionIndexInput {
+    fn from(value: ImportQuestionIndexRequestDto) -> Self {
+        Self {
+            segment_id: value.segment_id,
+            questions: value.questions.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct BulkQuestionAttemptRequestDto {
+    question_id: String,
+    result: String,
+}
+
+impl From<BulkQuestionAttemptRequestDto> for BulkQuestionAttemptInput {
+    fn from(value: BulkQuestionAttemptRequestDto) -> Self {
+        Self {
+            question_id: value.question_id,
+            result: value.result,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RecordBulkQuestionAttemptsRequestDto {
+    attempted_on: String,
+    entries: Vec<BulkQuestionAttemptRequestDto>,
+}
+
+impl From<RecordBulkQuestionAttemptsRequestDto> for RecordBulkQuestionAttemptsInput {
+    fn from(value: RecordBulkQuestionAttemptsRequestDto) -> Self {
+        Self {
+            attempted_on: value.attempted_on,
+            entries: value.entries.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UpdateIndexedQuestionRequestDto {
+    question_id: String,
+    title: String,
+    chapter: String,
+    section_part: String,
+    question_type: String,
+    question_number: String,
+}
+
+impl From<UpdateIndexedQuestionRequestDto> for UpdateIndexedQuestionInput {
+    fn from(value: UpdateIndexedQuestionRequestDto) -> Self {
+        Self {
+            question_id: value.question_id,
+            title: value.title,
+            chapter: value.chapter,
+            section_part: value.section_part,
+            question_type: value.question_type,
+            question_number: value.question_number,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct IndexedQuestionRegionUpdateRequestDto {
+    region_id: Option<String>,
+    #[serde(flatten)]
+    region: QuestionRegionRequestDto,
+}
+
+impl From<IndexedQuestionRegionUpdateRequestDto> for IndexedQuestionRegionUpdateInput {
+    fn from(value: IndexedQuestionRegionUpdateRequestDto) -> Self {
+        Self {
+            region_id: value.region_id,
+            region: value.region.into(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ReplaceIndexedQuestionRegionsRequestDto {
+    question_id: String,
+    regions: Vec<IndexedQuestionRegionUpdateRequestDto>,
+}
+
+impl From<ReplaceIndexedQuestionRegionsRequestDto> for ReplaceIndexedQuestionRegionsInput {
+    fn from(value: ReplaceIndexedQuestionRegionsRequestDto) -> Self {
+        Self {
+            question_id: value.question_id,
+            regions: value.regions.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct InsertIndexedQuestionRequestDto {
+    anchor_question_id: String,
+    placement: String,
+    title: String,
+    chapter: String,
+    section_part: String,
+    question_type: String,
+    question_number: String,
+    regions: Vec<QuestionRegionRequestDto>,
+}
+
+impl From<InsertIndexedQuestionRequestDto> for InsertIndexedQuestionInput {
+    fn from(value: InsertIndexedQuestionRequestDto) -> Self {
+        Self {
+            anchor_question_id: value.anchor_question_id,
+            placement: value.placement,
+            title: value.title,
+            chapter: value.chapter,
+            section_part: value.section_part,
+            question_type: value.question_type,
+            question_number: value.question_number,
+            regions: value.regions.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkbookCategoryDto {
+    id: String,
+    name: String,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<WorkbookCategory> for WorkbookCategoryDto {
+    fn from(value: WorkbookCategory) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkbookDocumentSegmentDto {
+    id: String,
+    document_id: String,
+    document_title: String,
+    subject_id: String,
+    subject_name: String,
+    workbook_id: String,
+    workbook_name: String,
+    source_heading: String,
+    page_start: u32,
+    page_end: u32,
+    index_state: String,
+    question_count: u32,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<WorkbookDocumentSegment> for WorkbookDocumentSegmentDto {
+    fn from(value: WorkbookDocumentSegment) -> Self {
+        Self {
+            id: value.id,
+            document_id: value.document_id,
+            document_title: value.document_title,
+            subject_id: value.subject_id,
+            subject_name: value.subject_name,
+            workbook_id: value.workbook_id,
+            workbook_name: value.workbook_name,
+            source_heading: value.source_heading,
+            page_start: value.page_start,
+            page_end: value.page_end,
+            index_state: value.index_state,
+            question_count: value.question_count,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TrashedWorkbookDocumentSegmentDto {
+    id: String,
+    document_id: String,
+    document_title: String,
+    subject_id: String,
+    subject_name: String,
+    workbook_id: String,
+    workbook_name: String,
+    source_heading: String,
+    page_start: u32,
+    page_end: u32,
+    index_state: String,
+    question_count: u32,
+    created_at: i64,
+    updated_at: i64,
+    deleted_at: i64,
+    restorable_question_count: u32,
+}
+
+impl From<TrashedWorkbookDocumentSegment> for TrashedWorkbookDocumentSegmentDto {
+    fn from(value: TrashedWorkbookDocumentSegment) -> Self {
+        Self {
+            id: value.id,
+            document_id: value.document_id,
+            document_title: value.document_title,
+            subject_id: value.subject_id,
+            subject_name: value.subject_name,
+            workbook_id: value.workbook_id,
+            workbook_name: value.workbook_name,
+            source_heading: value.source_heading,
+            page_start: value.page_start,
+            page_end: value.page_end,
+            index_state: value.index_state,
+            question_count: value.question_count,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+            deleted_at: value.deleted_at,
+            restorable_question_count: value.restorable_question_count,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IndexedQuestionDto {
+    id: String,
+    document_id: String,
+    document_title: String,
+    subject_id: String,
+    subject_name: String,
+    workbook_id: String,
+    workbook_name: String,
+    segment_id: String,
+    chapter: String,
+    section_part: String,
+    question_type: &'static str,
+    question_number: String,
+    title: String,
+    index_confidence: f64,
+    sort_order: u32,
+    current_result: Option<&'static str>,
+    attempt_count: u32,
+    incorrect_count: u32,
+    partial_count: u32,
+    regions: Vec<QuestionRegionDto>,
+}
+
+impl From<IndexedQuestion> for IndexedQuestionDto {
+    fn from(value: IndexedQuestion) -> Self {
+        Self {
+            id: value.id,
+            document_id: value.document_id,
+            document_title: value.document_title,
+            subject_id: value.subject_id,
+            subject_name: value.subject_name,
+            workbook_id: value.workbook_id,
+            workbook_name: value.workbook_name,
+            segment_id: value.segment_id,
+            chapter: value.chapter,
+            section_part: value.section_part,
+            question_type: value.question_type.as_str(),
+            question_number: value.question_number,
+            title: value.title,
+            index_confidence: value.index_confidence,
+            sort_order: value.sort_order,
+            current_result: value
+                .current_result
+                .map(crate::domain::AttemptResult::as_str),
+            attempt_count: value.attempt_count,
+            incorrect_count: value.incorrect_count,
+            partial_count: value.partial_count,
+            regions: value.regions.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct QuestionBankSnapshotDto {
+    workbooks: Vec<WorkbookCategoryDto>,
+    segments: Vec<WorkbookDocumentSegmentDto>,
+    questions: Vec<IndexedQuestionDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct QuestionGapAcknowledgementsDto {
+    issue_keys: Vec<String>,
+}
+
+impl From<Vec<String>> for QuestionGapAcknowledgementsDto {
+    fn from(issue_keys: Vec<String>) -> Self {
+        Self { issue_keys }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SetQuestionGapAcknowledgementRequestDto {
+    issue_key: String,
+    acknowledged: bool,
+}
+
+impl From<SetQuestionGapAcknowledgementRequestDto> for SetQuestionGapAcknowledgementInput {
+    fn from(request: SetQuestionGapAcknowledgementRequestDto) -> Self {
+        Self {
+            issue_key: request.issue_key,
+            acknowledged: request.acknowledged,
+        }
+    }
+}
+
+impl From<QuestionBankSnapshot> for QuestionBankSnapshotDto {
+    fn from(value: QuestionBankSnapshot) -> Self {
+        Self {
+            workbooks: value.workbooks.into_iter().map(Into::into).collect(),
+            segments: value.segments.into_iter().map(Into::into).collect(),
+            questions: value.questions.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RecognizeQuestionRegionRequestDto {
     operation_id: String,
     region_id: String,
@@ -1812,6 +2392,29 @@ impl From<RecognizeQuestionRegionRequestDto> for RecognizeQuestionRegionInput {
     fn from(request: RecognizeQuestionRegionRequestDto) -> Self {
         Self {
             region_id: request.region_id,
+            image_bytes: request.image_bytes,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RecognizePdfPageRequestDto {
+    operation_id: String,
+    page_number: u32,
+    image_bytes: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct DownloadOcrComponentRequestDto {
+    operation_id: String,
+}
+
+impl From<RecognizePdfPageRequestDto> for RecognizePdfPageInput {
+    fn from(request: RecognizePdfPageRequestDto) -> Self {
+        Self {
+            page_number: request.page_number,
             image_bytes: request.image_bytes,
         }
     }
@@ -1840,6 +2443,23 @@ pub(crate) struct OcrComponentStatusDto {
     engine: &'static str,
     models_bundled: bool,
     component_size_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OcrComponentDownloadInfoDto {
+    available: bool,
+    engine: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OcrDownloadEventDto {
+    operation_id: String,
+    state: &'static str,
+    copied_bytes: u64,
+    total_bytes: u64,
+    error: Option<AppErrorDto>,
 }
 
 impl From<OcrComponentStatus> for OcrComponentStatusDto {
@@ -1915,6 +2535,52 @@ impl From<OcrRecognition> for OcrRecognitionDto {
             lines: recognition.lines.into_iter().map(Into::into).collect(),
             created_at: recognition.created_at,
             updated_at: recognition.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OcrPageLineDto {
+    text: String,
+    confidence: f64,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    sort_order: u32,
+}
+
+impl From<OcrPageLine> for OcrPageLineDto {
+    fn from(line: OcrPageLine) -> Self {
+        Self {
+            text: line.text,
+            confidence: line.confidence,
+            x: line.x,
+            y: line.y,
+            width: line.width,
+            height: line.height,
+            sort_order: line.sort_order,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OcrPageRecognitionDto {
+    page_number: u32,
+    engine: String,
+    mean_confidence: f64,
+    lines: Vec<OcrPageLineDto>,
+}
+
+impl From<OcrPageRecognition> for OcrPageRecognitionDto {
+    fn from(recognition: OcrPageRecognition) -> Self {
+        Self {
+            page_number: recognition.page_number,
+            engine: recognition.engine,
+            mean_confidence: recognition.mean_confidence,
+            lines: recognition.lines.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -2287,6 +2953,576 @@ impl From<ReviewDashboard> for ReviewDashboardDto {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ReviewSchemeTypeQuotaRequestDto {
+    question_type: String,
+    quota: u32,
+}
+
+impl From<ReviewSchemeTypeQuotaRequestDto> for ReviewSchemeTypeQuotaInput {
+    fn from(request: ReviewSchemeTypeQuotaRequestDto) -> Self {
+        Self {
+            question_type: request.question_type,
+            quota: request.quota,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SaveReviewSchemeRequestDto {
+    scheme_id: Option<String>,
+    name: String,
+    subject_id: String,
+    all_subject_workbooks: bool,
+    daily_quota: u32,
+    enabled: bool,
+    document_ids: Vec<String>,
+    type_quotas: Vec<ReviewSchemeTypeQuotaRequestDto>,
+    today: String,
+}
+
+impl From<SaveReviewSchemeRequestDto> for SaveReviewSchemeInput {
+    fn from(request: SaveReviewSchemeRequestDto) -> Self {
+        Self {
+            scheme_id: request.scheme_id,
+            name: request.name,
+            subject_id: request.subject_id,
+            all_subject_workbooks: request.all_subject_workbooks,
+            daily_quota: request.daily_quota,
+            enabled: request.enabled,
+            document_ids: request.document_ids,
+            type_quotas: request.type_quotas.into_iter().map(Into::into).collect(),
+            today: request.today,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct GenerateReviewSchemeQueueRequestDto {
+    scheme_id: String,
+    queue_date: String,
+    temporary_document_id: Option<String>,
+}
+
+impl From<GenerateReviewSchemeQueueRequestDto> for GenerateReviewSchemeQueueInput {
+    fn from(request: GenerateReviewSchemeQueueRequestDto) -> Self {
+        Self {
+            scheme_id: request.scheme_id,
+            queue_date: request.queue_date,
+            temporary_document_id: request.temporary_document_id,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SubmitReviewSchemeResultRequestDto {
+    queue_id: String,
+    question_id: String,
+    rating: String,
+    today: String,
+}
+
+impl From<SubmitReviewSchemeResultRequestDto> for SubmitReviewSchemeResultInput {
+    fn from(request: SubmitReviewSchemeResultRequestDto) -> Self {
+        Self {
+            queue_id: request.queue_id,
+            question_id: request.question_id,
+            rating: request.rating,
+            today: request.today,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UndoReviewSchemeResultRequestDto {
+    queue_id: String,
+    today: String,
+}
+
+impl From<UndoReviewSchemeResultRequestDto> for UndoReviewSchemeResultInput {
+    fn from(request: UndoReviewSchemeResultRequestDto) -> Self {
+        Self {
+            queue_id: request.queue_id,
+            today: request.today,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReviewSchemeTypeQuotaDto {
+    question_type: &'static str,
+    quota: u32,
+}
+
+impl From<ReviewSchemeTypeQuota> for ReviewSchemeTypeQuotaDto {
+    fn from(value: ReviewSchemeTypeQuota) -> Self {
+        Self {
+            question_type: value.question_type.as_str(),
+            quota: value.quota,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReviewSchemeDto {
+    id: String,
+    name: String,
+    subject_id: String,
+    subject_name: String,
+    all_subject_workbooks: bool,
+    daily_quota: u32,
+    enabled: bool,
+    document_ids: Vec<String>,
+    type_quotas: Vec<ReviewSchemeTypeQuotaDto>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<ReviewScheme> for ReviewSchemeDto {
+    fn from(value: ReviewScheme) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            subject_id: value.subject_id,
+            subject_name: value.subject_name,
+            all_subject_workbooks: value.all_subject_workbooks,
+            daily_quota: value.daily_quota,
+            enabled: value.enabled,
+            document_ids: value.document_ids,
+            type_quotas: value.type_quotas.into_iter().map(Into::into).collect(),
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReviewSchemeQueueItemDto {
+    question: QuestionBundleDto,
+    position: u32,
+    origin_date: String,
+    carried: bool,
+    state: &'static str,
+    review_event: Option<ReviewEventDto>,
+    inserted_at: i64,
+    completed_at: Option<i64>,
+}
+
+impl From<ReviewSchemeQueueItem> for ReviewSchemeQueueItemDto {
+    fn from(value: ReviewSchemeQueueItem) -> Self {
+        Self {
+            question: value.question.into(),
+            position: value.position,
+            origin_date: value.origin_date.as_str().to_owned(),
+            carried: value.carried,
+            state: value.state.as_str(),
+            review_event: value.review_event.map(Into::into),
+            inserted_at: value.inserted_at,
+            completed_at: value.completed_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReviewSchemeQueueDto {
+    id: String,
+    scheme_id: String,
+    queue_date: String,
+    quota: u32,
+    generated_at: i64,
+    completed_count: u32,
+    items: Vec<ReviewSchemeQueueItemDto>,
+}
+
+impl From<ReviewSchemeQueue> for ReviewSchemeQueueDto {
+    fn from(value: ReviewSchemeQueue) -> Self {
+        Self {
+            id: value.id,
+            scheme_id: value.scheme_id,
+            queue_date: value.queue_date.as_str().to_owned(),
+            quota: value.quota,
+            generated_at: value.generated_at,
+            completed_count: value.completed_count,
+            items: value.items.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReviewSchemeTodayDto {
+    scheme: ReviewSchemeDto,
+    is_rest_day: bool,
+    due_count: u32,
+    pending_classification_count: u32,
+    queue: Option<ReviewSchemeQueueDto>,
+}
+
+impl From<ReviewSchemeToday> for ReviewSchemeTodayDto {
+    fn from(value: ReviewSchemeToday) -> Self {
+        Self {
+            scheme: value.scheme.into(),
+            is_rest_day: value.is_rest_day,
+            due_count: value.due_count,
+            pending_classification_count: value.pending_classification_count,
+            queue: value.queue.map(Into::into),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReviewSchemeDashboardDto {
+    rest_weekdays: Vec<u8>,
+    schemes: Vec<ReviewSchemeTodayDto>,
+}
+
+impl From<ReviewSchemeDashboard> for ReviewSchemeDashboardDto {
+    fn from(value: ReviewSchemeDashboard) -> Self {
+        Self {
+            rest_weekdays: value.rest_weekdays,
+            schemes: value.schemes.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SaveCyclePlanRequestDto {
+    plan_id: Option<String>,
+    expected_updated_at: Option<i64>,
+    name: String,
+    total_units: u32,
+    unit_label: String,
+    start_date: String,
+    deadline: String,
+    study_days_per_unit: u32,
+    schedule_mode: String,
+    calendar_visible: bool,
+}
+
+impl From<SaveCyclePlanRequestDto> for SaveCyclePlanInput {
+    fn from(value: SaveCyclePlanRequestDto) -> Self {
+        Self {
+            plan_id: value.plan_id,
+            expected_updated_at: value.expected_updated_at,
+            name: value.name,
+            total_units: value.total_units,
+            unit_label: value.unit_label,
+            start_date: value.start_date,
+            deadline: value.deadline,
+            study_days_per_unit: value.study_days_per_unit,
+            schedule_mode: value.schedule_mode,
+            calendar_visible: value.calendar_visible,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SetCyclePlanItemStateRequestDto {
+    item_id: String,
+    target_state: String,
+    expected_updated_at: i64,
+}
+
+impl From<SetCyclePlanItemStateRequestDto> for SetCyclePlanItemStateInput {
+    fn from(value: SetCyclePlanItemStateRequestDto) -> Self {
+        Self {
+            item_id: value.item_id,
+            target_state: value.target_state,
+            expected_updated_at: value.expected_updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RestoreCyclePlanItemStateRequestDto {
+    item_id: String,
+    state: String,
+    completed_at: Option<i64>,
+    skipped_at: Option<i64>,
+    expected_updated_at: i64,
+}
+
+impl From<RestoreCyclePlanItemStateRequestDto> for RestoreCyclePlanItemStateInput {
+    fn from(value: RestoreCyclePlanItemStateRequestDto) -> Self {
+        Self {
+            item_id: value.item_id,
+            original_state: value.state,
+            original_completed_at: value.completed_at,
+            original_skipped_at: value.skipped_at,
+            expected_updated_at: value.expected_updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ShiftCyclePlanRequestDto {
+    plan_id: String,
+    from_date: String,
+    study_days: u32,
+}
+
+impl From<ShiftCyclePlanRequestDto> for ShiftCyclePlanInput {
+    fn from(value: ShiftCyclePlanRequestDto) -> Self {
+        Self {
+            plan_id: value.plan_id,
+            from_date: value.from_date,
+            study_days: value.study_days,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ConfirmShiftCyclePlanRequestDto {
+    plan_id: String,
+    from_date: String,
+    study_days: u32,
+    preview_token: String,
+}
+
+impl From<ConfirmShiftCyclePlanRequestDto> for ConfirmShiftCyclePlanInput {
+    fn from(value: ConfirmShiftCyclePlanRequestDto) -> Self {
+        Self {
+            plan_id: value.plan_id,
+            from_date: value.from_date,
+            study_days: value.study_days,
+            preview_token: value.preview_token,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UndoShiftCyclePlanRequestDto {
+    plan_id: String,
+    undo_token: String,
+}
+
+impl From<UndoShiftCyclePlanRequestDto> for UndoShiftCyclePlanInput {
+    fn from(value: UndoShiftCyclePlanRequestDto) -> Self {
+        Self {
+            plan_id: value.plan_id,
+            undo_token: value.undo_token,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CyclePlanDto {
+    id: String,
+    name: String,
+    total_units: u32,
+    unit_label: String,
+    start_date: String,
+    deadline: String,
+    study_days_per_unit: u32,
+    schedule_mode: &'static str,
+    calendar_visible: bool,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<CyclePlan> for CyclePlanDto {
+    fn from(value: CyclePlan) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            total_units: value.total_units,
+            unit_label: value.unit_label,
+            start_date: value.start_date.as_str().to_owned(),
+            deadline: value.deadline.as_str().to_owned(),
+            study_days_per_unit: value.study_days_per_unit,
+            schedule_mode: value.schedule_mode.as_str(),
+            calendar_visible: value.calendar_visible,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CyclePlanItemDto {
+    id: String,
+    plan_id: String,
+    unit_index: u32,
+    planned_start_date: String,
+    planned_end_date: String,
+    original_start_date: String,
+    original_end_date: String,
+    state: &'static str,
+    completed_at: Option<i64>,
+    skipped_at: Option<i64>,
+    shift_count: u32,
+    updated_at: i64,
+}
+
+impl From<CyclePlanItem> for CyclePlanItemDto {
+    fn from(value: CyclePlanItem) -> Self {
+        Self {
+            id: value.id,
+            plan_id: value.plan_id,
+            unit_index: value.unit_index,
+            planned_start_date: value.planned_start_date.as_str().to_owned(),
+            planned_end_date: value.planned_end_date.as_str().to_owned(),
+            original_start_date: value.original_start_date.as_str().to_owned(),
+            original_end_date: value.original_end_date.as_str().to_owned(),
+            state: value.state.as_str(),
+            completed_at: value.completed_at,
+            skipped_at: value.skipped_at,
+            shift_count: value.shift_count,
+            updated_at: value.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CyclePlanOverviewDto {
+    plan: CyclePlanDto,
+    items: Vec<CyclePlanItemDto>,
+    completed_count: u32,
+    skipped_count: u32,
+    progress_percent: u32,
+    estimated_end_date: String,
+    exceeds_deadline: bool,
+    recommended_study_days_per_unit: Option<u32>,
+    recommended_total_units: Option<u32>,
+}
+
+impl From<CyclePlanOverview> for CyclePlanOverviewDto {
+    fn from(value: CyclePlanOverview) -> Self {
+        Self {
+            plan: value.plan.into(),
+            items: value.items.into_iter().map(Into::into).collect(),
+            completed_count: value.completed_count,
+            skipped_count: value.skipped_count,
+            progress_percent: value.progress_percent,
+            estimated_end_date: value.estimated_end_date.as_str().to_owned(),
+            exceeds_deadline: value.exceeds_deadline,
+            recommended_study_days_per_unit: value.recommended_study_days_per_unit,
+            recommended_total_units: value.recommended_total_units,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CyclePlanDashboardDto {
+    rest_weekdays: Vec<u8>,
+    plans: Vec<CyclePlanOverviewDto>,
+}
+
+impl From<CyclePlanDashboard> for CyclePlanDashboardDto {
+    fn from(value: CyclePlanDashboard) -> Self {
+        Self {
+            rest_weekdays: value.rest_weekdays,
+            plans: value.plans.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ShiftCyclePlanUndoDto {
+    plan_id: String,
+    undo_token: String,
+    expires_at: i64,
+}
+
+impl From<ShiftCyclePlanUndo> for ShiftCyclePlanUndoDto {
+    fn from(value: ShiftCyclePlanUndo) -> Self {
+        Self {
+            plan_id: value.plan_id,
+            undo_token: value.undo_token,
+            expires_at: value.expires_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ShiftCyclePlanResultDto {
+    dashboard: CyclePlanDashboardDto,
+    shifted_item_count: u32,
+    undo: Option<ShiftCyclePlanUndoDto>,
+}
+
+impl From<ShiftCyclePlanResult> for ShiftCyclePlanResultDto {
+    fn from(value: ShiftCyclePlanResult) -> Self {
+        Self {
+            dashboard: value.dashboard.into(),
+            shifted_item_count: value.shifted_item_count,
+            undo: value.undo.map(Into::into),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ShiftCyclePlanPreviewDto {
+    plan_id: String,
+    from_date: String,
+    study_days: u32,
+    affected_item_count: u32,
+    current_estimated_end_date: String,
+    new_estimated_end_date: String,
+    deadline: String,
+    exceeds_deadline_by_days: u32,
+    rest_weekdays: Vec<u8>,
+    preview_token: Option<String>,
+}
+
+impl From<ShiftCyclePlanPreview> for ShiftCyclePlanPreviewDto {
+    fn from(value: ShiftCyclePlanPreview) -> Self {
+        Self {
+            plan_id: value.plan_id,
+            from_date: value.from_date.as_str().to_owned(),
+            study_days: value.study_days,
+            affected_item_count: value.affected_item_count,
+            current_estimated_end_date: value.current_estimated_end_date.as_str().to_owned(),
+            new_estimated_end_date: value.new_estimated_end_date.as_str().to_owned(),
+            deadline: value.deadline.as_str().to_owned(),
+            exceeds_deadline_by_days: value.exceeds_deadline_by_days,
+            rest_weekdays: value.rest_weekdays,
+            preview_token: value.preview_token,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SetCyclePlanItemStateResultDto {
+    dashboard: CyclePlanDashboardDto,
+    item_id: String,
+    item_updated_at: i64,
+}
+
+impl From<SetCyclePlanItemStateResult> for SetCyclePlanItemStateResultDto {
+    fn from(value: SetCyclePlanItemStateResult) -> Self {
+        Self {
+            dashboard: value.dashboard.into(),
+            item_id: value.item_id,
+            item_updated_at: value.item_updated_at,
+        }
+    }
+}
+
 /// Imported resource metadata that deliberately excludes every local path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -2591,6 +3827,24 @@ impl From<AiPreviewRequestDto> for AiPreviewInput {
     fn from(request: AiPreviewRequestDto) -> Self {
         Self {
             prompt: request.prompt,
+            max_output_tokens: request.max_output_tokens,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct AiImagePreviewRequestDto {
+    prompt: String,
+    image_data_urls: Vec<String>,
+    max_output_tokens: u32,
+}
+
+impl From<AiImagePreviewRequestDto> for AiImagePreviewInput {
+    fn from(request: AiImagePreviewRequestDto) -> Self {
+        Self {
+            prompt: request.prompt,
+            image_data_urls: request.image_data_urls,
             max_output_tokens: request.max_output_tokens,
         }
     }
@@ -2951,6 +4205,7 @@ impl From<PlanningChatReply> for PlanningChatReplyDto {
 }
 
 const IMPORT_EVENT_NAME: &str = "kystudy-import-progress";
+const OCR_DOWNLOAD_EVENT_NAME: &str = "kystudy-ocr-download-progress";
 
 /// Stable, non-sensitive command failure returned to the `WebView`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -3091,7 +4346,7 @@ impl AppErrorDto {
             ),
             ImportError::MindMapSourceTooLarge => (
                 "思维导图源文件超过当前安全上限。",
-                "请把源文件精简到 4 MiB 以内，或拆分为多张导图后重试。",
+                "请把源文件精简到 100 MiB 以内，或拆分为多张导图后重试。",
             ),
             ImportError::File { .. } => (
                 "无法读取来源文件或写入本地资料库。",
@@ -3244,6 +4499,10 @@ impl AppErrorDto {
                 "检查标题、日期范围和文字长度后重试。",
             ),
             PlanningError::PlanNotFound => ("找不到这份个人计划。", "刷新计划列表后重新选择。"),
+            PlanningError::PlanSaveStale => (
+                "个人计划已在其他窗口发生变化。",
+                "刷新计划后重新核对考试信息再保存。",
+            ),
             PlanningError::StageNotFound => ("找不到这个计划阶段。", "刷新计划后重新编辑阶段。"),
             PlanningError::ReferenceNotFound => {
                 ("找不到这条资料引用。", "刷新计划后重新选择引用。")
@@ -3327,7 +4586,7 @@ impl AppErrorDto {
             ),
             KnowledgeError::UnsupportedFormat => (
                 "当前不能直接解析这种思维导图格式。",
-                "XMind 请先导出为 OPML；本批次正式支持 OPML 和 FreeMind .mm。",
+                "请确认文件是 XMind、OPML 或 FreeMind .mm，并重新生成草案。",
             ),
             KnowledgeError::InvalidImportSource => (
                 "思维导图源文件结构无效或包含不安全声明。",
@@ -3374,7 +4633,71 @@ impl AppErrorDto {
             QuestionError::InvalidKnowledgeLink => {
                 ("关联的知识节点无效。", "刷新思维导图后重新选择知识节点。")
             }
+            QuestionError::SubjectNotFound => (
+                "所选科目不存在或已经归档。",
+                "刷新科目列表，或让题目继续继承习题册科目。",
+            ),
             QuestionError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    fn from_question_bank(error: &QuestionBankError) -> Self {
+        let (message, action) = match error {
+            QuestionBankError::WorkspaceNotInitialized => {
+                ("尚未创建本地工作区。", "先创建本地工作区，再建立题库索引。")
+            }
+            QuestionBankError::InvalidInput => (
+                "题库索引或做题记录格式无效。",
+                "检查页面范围、题号和分类后重新提交。",
+            ),
+            QuestionBankError::WorkbookAlreadyExists => (
+                "已经有同名练习册。",
+                "直接选择已有练习册，或换一个能够区分版本的名称。",
+            ),
+            QuestionBankError::WorkbookNotFound => {
+                ("找不到所选练习册分类。", "刷新题库，或重新创建练习册分类。")
+            }
+            QuestionBankError::DocumentNotFound => (
+                "找不到要解析的 PDF。",
+                "确认资料仍在资料库中，然后重新选择。",
+            ),
+            QuestionBankError::SubjectNotFound => {
+                ("找不到所选科目。", "刷新科目列表，或先新建科目分类。")
+            }
+            QuestionBankError::SegmentNotFound => (
+                "找不到这段 PDF 科目内容。",
+                "重新分析 PDF 并确认科目和练习册归类。",
+            ),
+            QuestionBankError::SegmentNotActive => (
+                "这段 PDF 科目内容已经移入回收站。",
+                "重新保存同一分段以恢复可见索引，或刷新题库后重试。",
+            ),
+            QuestionBankError::SegmentNotTrashed => (
+                "该 PDF 科目分段当前不在回收站",
+                "刷新题库后确认分段状态，再重试恢复。",
+            ),
+            QuestionBankError::SegmentRestoreStale => (
+                "该 PDF 科目分段的回收站状态已变化",
+                "刷新回收站列表后重新选择该分段，避免覆盖新的删除状态。",
+            ),
+            QuestionBankError::SegmentReassignStale => (
+                "PDF segment assignment changed",
+                "Refresh the question bank and retry the reassignment.",
+            ),
+            QuestionBankError::SegmentAssignmentConflict { .. } => (
+                "这段 PDF 科目内容已经归属于另一个练习册。",
+                "保留已有归类，或先更正已有分段后再重试。",
+            ),
+            QuestionBankError::QuestionNotFound => {
+                ("找不到要登记的索引题目。", "刷新题库后重新选择题号。")
+            }
+            QuestionBankError::Persistence(error) => return Self::from_persistence(error),
         };
         Self {
             code: error.code(),
@@ -3417,7 +4740,34 @@ impl AppErrorDto {
                 "本地 OCR 组件版本不兼容。",
                 "安装与当前 KyStudy 匹配的 OCR 组件后重试。",
             ),
+            OcrError::ComponentSourceInvalid => (
+                "所选文件夹不是完整的 KyStudy OCR 组件。",
+                "选择包含完整模型文件的 kystudy-ocr-worker 文件夹。",
+            ),
+            OcrError::ComponentInstallFailed => (
+                "OCR 组件安装或修复未完成。",
+                "检查目标磁盘空间和权限后，重新选择完整组件文件夹。",
+            ),
+            OcrError::ComponentRemovalFailed => {
+                ("OCR 组件移除未完成。", "关闭正在运行的 OCR 操作后重试。")
+            }
             OcrError::Canceled => ("OCR 已取消。", "原题目区域保持不变，可以稍后重新识别。"),
+            OcrError::ComponentDownloadUnavailable => (
+                "OCR online download unavailable.",
+                "Use local installation or retry later.",
+            ),
+            OcrError::ComponentDownloadFailed => (
+                "OCR component download failed.",
+                "Check the network connection and retry; the existing component was kept.",
+            ),
+            OcrError::ComponentDownloadIntegrity => (
+                "OCR component integrity verification failed.",
+                "Retry the download or use a complete local component folder.",
+            ),
+            OcrError::ComponentArchiveInvalid => (
+                "The downloaded OCR component archive is invalid.",
+                "Retry the download or use a complete local component folder.",
+            ),
             OcrError::Timeout => (
                 "本地 OCR 处理超时。",
                 "缩小框选区域后重试；原 PDF 和已确认文本不受影响。",
@@ -3473,6 +4823,93 @@ impl AppErrorDto {
                 "检查配额、重要度、耗时和日期后重试。",
             ),
             ReviewError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    fn from_review_scheme(error: &ReviewSchemeError) -> Self {
+        let (message, action) = match error {
+            ReviewSchemeError::WorkspaceNotInitialized => {
+                ("尚未创建本地工作区。", "先创建本地工作区，再设置错题方案。")
+            }
+            ReviewSchemeError::SchemeNotFound => {
+                ("找不到这份复习方案。", "刷新错题页后重新选择方案。")
+            }
+            ReviewSchemeError::SchemeConflict => (
+                "复习方案名称或队列状态发生冲突。",
+                "更换方案名称或刷新今日队列后重试。",
+            ),
+            ReviewSchemeError::SubjectNotFound => {
+                ("方案选择的科目不存在或已归档。", "刷新科目列表后重新选择。")
+            }
+            ReviewSchemeError::WorkbookNotFound => (
+                "方案中的习题册不可用或不在当前范围。",
+                "刷新习题册列表并重新选择范围。",
+            ),
+            ReviewSchemeError::QueueItemNotFound => {
+                ("今日队列中找不到这道题。", "刷新错题页后从当前题继续。")
+            }
+            ReviewSchemeError::QueueItemCompleted => {
+                ("这道题已经提交反馈。", "继续下一题，不要重复提交。")
+            }
+            ReviewSchemeError::UndoUnavailable => {
+                ("没有可以撤销的反馈。", "继续当前复习，或刷新后重试。")
+            }
+            ReviewSchemeError::InvalidInput => (
+                "复习方案、题型配额或日期无效。",
+                "确认题型数量之和等于每日总量后重试。",
+            ),
+            ReviewSchemeError::Persistence(error) => return Self::from_persistence(error),
+        };
+        Self {
+            code: error.code(),
+            message,
+            action,
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    fn from_cycle_plan(error: &CyclePlanError) -> Self {
+        let (message, action) = match error {
+            CyclePlanError::WorkspaceNotInitialized => {
+                ("尚未创建本地工作区。", "先创建本地工作区，再添加周期计划。")
+            }
+            CyclePlanError::PlanNotFound => ("找不到这份周期计划。", "刷新计划页后重新选择。"),
+            CyclePlanError::ItemNotFound => ("找不到这个计划事项。", "刷新月历后重新操作。"),
+            CyclePlanError::ItemStateStale => (
+                "Cycle-plan item state changed in another window.",
+                "Refresh the cycle plan and retry.",
+            ),
+            CyclePlanError::ShiftUndoUnavailable => (
+                "This cycle-plan shift can no longer be undone.",
+                "Undo is available for five seconds after the latest shift.",
+            ),
+            CyclePlanError::ShiftUndoStale => (
+                "The cycle-plan changed in another window.",
+                "Refresh the cycle plan; the shift was not partially undone.",
+            ),
+            CyclePlanError::ShiftPreviewStale => (
+                "顺延预览已与当前计划不一致。",
+                "刷新预览并确认最新排程后重试。",
+            ),
+            CyclePlanError::SaveStale => (
+                "周期计划已在其他窗口发生变化。",
+                "刷新计划并重新核对编辑内容后再保存。",
+            ),
+            CyclePlanError::InvalidInput | CyclePlanError::Validation(_) => (
+                "周期计划的数量、日期或节奏无效。",
+                "检查开始日、截止日、总量和每个单位所需学习日。",
+            ),
+            CyclePlanError::CompletedProgressConflict => (
+                "已有完成或跳过事项的序号超出新的总量。",
+                "请增大总量，保留所有完成或跳过事项后再保存。",
+            ),
+            CyclePlanError::Persistence(error) => return Self::from_persistence(error),
         };
         Self {
             code: error.code(),
@@ -3879,6 +5316,18 @@ pub(crate) async fn update_resource_role(
 }
 
 #[tauri::command]
+pub(crate) async fn trash_resource(
+    document_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppErrorDto> {
+    let use_cases = state.resources.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.trash(&document_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map_err(|error| AppErrorDto::from_import(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn save_resource_reading_progress(
     document_id: String,
     page_count: u32,
@@ -4026,15 +5475,18 @@ pub(crate) async fn save_study_plan(
 #[tauri::command]
 pub(crate) async fn set_study_plan_status(
     plan_id: String,
+    expected_revision: u32,
     status: String,
     state: State<'_, AppState>,
 ) -> Result<StudyPlanBundleDto, AppErrorDto> {
     let use_cases = state.planning.clone();
-    tauri::async_runtime::spawn_blocking(move || use_cases.set_status(&plan_id, &status))
-        .await
-        .map_err(|_| AppErrorDto::task_failed())?
-        .map(StudyPlanBundleDto::from)
-        .map_err(|error| AppErrorDto::from_planning(&error))
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.set_status(&plan_id, expected_revision, &status)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(StudyPlanBundleDto::from)
+    .map_err(|error| AppErrorDto::from_planning(&error))
 }
 
 #[tauri::command]
@@ -4053,13 +5505,16 @@ pub(crate) async fn save_plan_stage(
 #[tauri::command]
 pub(crate) async fn delete_plan_stage(
     stage_id: String,
+    expected_plan_revision: u32,
     state: State<'_, AppState>,
 ) -> Result<(), AppErrorDto> {
     let use_cases = state.planning.clone();
-    tauri::async_runtime::spawn_blocking(move || use_cases.delete_stage(&stage_id))
-        .await
-        .map_err(|_| AppErrorDto::task_failed())?
-        .map_err(|error| AppErrorDto::from_planning(&error))
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.delete_stage(&stage_id, expected_plan_revision)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map_err(|error| AppErrorDto::from_planning(&error))
 }
 
 #[tauri::command]
@@ -4078,13 +5533,16 @@ pub(crate) async fn add_plan_reference(
 #[tauri::command]
 pub(crate) async fn delete_plan_reference(
     reference_id: String,
+    expected_plan_revision: u32,
     state: State<'_, AppState>,
 ) -> Result<(), AppErrorDto> {
     let use_cases = state.planning.clone();
-    tauri::async_runtime::spawn_blocking(move || use_cases.delete_reference(&reference_id))
-        .await
-        .map_err(|_| AppErrorDto::task_failed())?
-        .map_err(|error| AppErrorDto::from_planning(&error))
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.delete_reference(&reference_id, expected_plan_revision)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map_err(|error| AppErrorDto::from_planning(&error))
 }
 
 #[tauri::command]
@@ -4361,12 +5819,251 @@ pub(crate) async fn reject_mindmap_import_draft(
 }
 
 #[tauri::command]
+pub(crate) async fn get_question_bank(
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.snapshot())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_trashed_workbook_segments(
+    state: State<'_, AppState>,
+) -> Result<Vec<TrashedWorkbookDocumentSegmentDto>, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_trashed_workbook_segments())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|segments| segments.into_iter().map(Into::into).collect())
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn get_question_gap_acknowledgements(
+    state: State<'_, AppState>,
+) -> Result<QuestionGapAcknowledgementsDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.question_gap_acknowledgements())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn set_question_gap_acknowledgement(
+    request: SetQuestionGapAcknowledgementRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionGapAcknowledgementsDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.set_question_gap_acknowledgement(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn create_workbook_category(
+    request: CreateWorkbookCategoryRequestDto,
+    state: State<'_, AppState>,
+) -> Result<WorkbookCategoryDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.create_workbook(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn save_workbook_segments(
+    assignments: Vec<WorkbookSegmentAssignmentRequestDto>,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkbookDocumentSegmentDto>, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    let input = assignments.into_iter().map(Into::into).collect();
+    tauri::async_runtime::spawn_blocking(move || use_cases.save_segments(input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|segments| segments.into_iter().map(Into::into).collect())
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn import_question_index(
+    request: ImportQuestionIndexRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.import_index(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn record_bulk_question_attempts(
+    request: RecordBulkQuestionAttemptsRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.record_attempts(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn update_indexed_question(
+    request: UpdateIndexedQuestionRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.update_question(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn replace_indexed_question_regions(
+    request: ReplaceIndexedQuestionRegionsRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.replace_question_regions(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn insert_indexed_question(
+    request: InsertIndexedQuestionRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.insert_question_relative(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn trash_indexed_question(
+    question_id: String,
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.trash_question(&question_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn trash_workbook_segment(
+    segment_id: String,
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    let input = TrashWorkbookSegmentInput { segment_id };
+    tauri::async_runtime::spawn_blocking(move || use_cases.trash_segment(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn restore_workbook_segment(
+    input: RestoreWorkbookSegmentRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    let input = input.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.restore_workbook_segment(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn reassign_workbook_segment(
+    input: ReassignWorkbookSegmentRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    let input = input.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.reassign_workbook_segment(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn list_workbook_questions(
     document_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<QuestionBundleDto>, AppErrorDto> {
     let use_cases = state.questions.clone();
     tauri::async_runtime::spawn_blocking(move || use_cases.list_for_document(&document_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|questions| questions.into_iter().map(Into::into).collect())
+        .map_err(|error| AppErrorDto::from_question(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn get_workbook_profile(
+    document_id: String,
+    state: State<'_, AppState>,
+) -> Result<WorkbookProfileDto, AppErrorDto> {
+    let use_cases = state.questions.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.workbook_profile(&document_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn set_workbook_default_subject(
+    request: SetWorkbookSubjectRequestDto,
+    state: State<'_, AppState>,
+) -> Result<WorkbookProfileDto, AppErrorDto> {
+    let use_cases = state.questions.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.set_workbook_subject(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn batch_classify_questions(
+    request: BatchClassifyQuestionsRequestDto,
+    state: State<'_, AppState>,
+) -> Result<Vec<QuestionBundleDto>, AppErrorDto> {
+    let use_cases = state.questions.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.batch_classify(&input))
         .await
         .map_err(|_| AppErrorDto::task_failed())?
         .map(|questions| questions.into_iter().map(Into::into).collect())
@@ -4418,6 +6115,19 @@ pub(crate) async fn add_question_region(
 ) -> Result<QuestionBundleDto, AppErrorDto> {
     let use_cases = state.questions.clone();
     tauri::async_runtime::spawn_blocking(move || use_cases.add_region(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn update_question_region(
+    request: UpdateQuestionRegionRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBundleDto, AppErrorDto> {
+    let use_cases = state.questions.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.update_region(request.into()))
         .await
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)
@@ -4487,6 +6197,134 @@ pub(crate) async fn get_ocr_status(
 }
 
 #[tauri::command]
+pub(crate) async fn get_ocr_download_info(
+    state: State<'_, AppState>,
+) -> Result<OcrComponentDownloadInfoDto, AppErrorDto> {
+    let use_cases = state.ocr.clone();
+    tauri::async_runtime::spawn_blocking(move || OcrComponentDownloadInfoDto {
+        available: use_cases.download_available(),
+        engine: crate::application::OCR_ENGINE_NAME,
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())
+}
+
+#[tauri::command]
+pub(crate) async fn download_ocr_component(
+    app: AppHandle,
+    request: DownloadOcrComponentRequestDto,
+    state: State<'_, AppState>,
+) -> Result<OcrComponentStatusDto, AppErrorDto> {
+    let operation_id = request.operation_id;
+    if Uuid::parse_str(&operation_id).is_err() {
+        return Err(AppErrorDto::from_ocr(&OcrError::InvalidInput));
+    }
+    let coordinator = state.ocr_jobs.clone();
+    let canceled = coordinator
+        .register(operation_id.clone())
+        .ok_or_else(|| AppErrorDto::from_ocr(&OcrError::OperationConflict))?;
+    let use_cases = state.ocr.clone();
+    let task_operation_id = operation_id.clone();
+    let task_app = app.clone();
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        let mut last_progress = (0_u64, 0_u64);
+        let result = {
+            let mut observe = |copied_bytes: u64, total_bytes: u64| {
+                last_progress = (copied_bytes, total_bytes);
+                emit_ocr_download_event(
+                    &task_app,
+                    OcrDownloadEventDto {
+                        operation_id: task_operation_id.clone(),
+                        state: "running",
+                        copied_bytes,
+                        total_bytes,
+                        error: None,
+                    },
+                );
+            };
+            use_cases.download_component(&canceled, &mut observe)
+        };
+        (result, last_progress)
+    })
+    .await;
+    coordinator.finish(&operation_id);
+
+    let (result, (copied_bytes, total_bytes)) = outcome.map_err(|_| AppErrorDto::task_failed())?;
+    match result {
+        Ok(status) => {
+            emit_ocr_download_event(
+                &app,
+                OcrDownloadEventDto {
+                    operation_id,
+                    state: "succeeded",
+                    copied_bytes,
+                    total_bytes,
+                    error: None,
+                },
+            );
+            Ok(status.into())
+        }
+        Err(error) => {
+            let app_error = AppErrorDto::from_ocr(&error);
+            emit_ocr_download_event(
+                &app,
+                OcrDownloadEventDto {
+                    operation_id,
+                    state: if matches!(error, OcrError::Canceled) {
+                        "canceled"
+                    } else {
+                        "failed"
+                    },
+                    copied_bytes,
+                    total_bytes,
+                    error: Some(app_error.clone()),
+                },
+            );
+            Err(app_error)
+        }
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn install_ocr_component(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<OcrComponentStatusDto>, AppErrorDto> {
+    if state.ocr_jobs.is_active() {
+        return Err(AppErrorDto::from_ocr(&OcrError::OperationConflict));
+    }
+    let Some(source) = pick_local_folder(&app, "选择 KyStudy OCR 组件文件夹").await? else {
+        return Ok(None);
+    };
+    let use_cases = state.ocr.clone();
+    let operations = state.operations.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        operations.run(|| use_cases.install_component(&source))
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(OcrComponentStatusDto::from)
+    .map(Some)
+    .map_err(|error| AppErrorDto::from_ocr(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn remove_ocr_component(
+    state: State<'_, AppState>,
+) -> Result<OcrComponentStatusDto, AppErrorDto> {
+    if state.ocr_jobs.is_active() {
+        return Err(AppErrorDto::from_ocr(&OcrError::OperationConflict));
+    }
+    let use_cases = state.ocr.clone();
+    let operations = state.operations.clone();
+    tauri::async_runtime::spawn_blocking(move || operations.run(|| use_cases.remove_component()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(OcrComponentStatusDto::from)
+        .map_err(|error| AppErrorDto::from_ocr(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn list_question_ocr(
     question_id: String,
     state: State<'_, AppState>,
@@ -4525,9 +6363,38 @@ pub(crate) async fn recognize_question_region(
 }
 
 #[tauri::command]
+pub(crate) async fn recognize_pdf_page(
+    request: RecognizePdfPageRequestDto,
+    state: State<'_, AppState>,
+) -> Result<OcrPageRecognitionDto, AppErrorDto> {
+    let operation_id = request.operation_id.clone();
+    if Uuid::parse_str(&operation_id).is_err() {
+        return Err(AppErrorDto::from_ocr(&OcrError::InvalidInput));
+    }
+    let coordinator = state.ocr_jobs.clone();
+    let canceled = coordinator
+        .register(operation_id.clone())
+        .ok_or_else(|| AppErrorDto::from_ocr(&OcrError::OperationConflict))?;
+    let use_cases = state.ocr.clone();
+    let input = request.into();
+    let outcome =
+        tauri::async_runtime::spawn_blocking(move || use_cases.recognize_page(&input, &canceled))
+            .await;
+    coordinator.finish(&operation_id);
+    outcome
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ocr(&error))
+}
+
+#[tauri::command]
 #[allow(clippy::needless_pass_by_value)] // Tauri owns deserialized command arguments and state guards.
 pub(crate) fn cancel_ocr(operation_id: String, state: State<'_, AppState>) -> bool {
     Uuid::parse_str(&operation_id).is_ok() && state.ocr_jobs.cancel(&operation_id)
+}
+
+fn emit_ocr_download_event(app: &AppHandle, event: OcrDownloadEventDto) {
+    let _ = app.emit(OCR_DOWNLOAD_EVENT_NAME, event);
 }
 
 #[tauri::command]
@@ -4650,6 +6517,233 @@ pub(crate) async fn submit_review_result(
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)
         .map_err(|error| AppErrorDto::from_review(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn get_review_scheme_dashboard(
+    today: String,
+    state: State<'_, AppState>,
+) -> Result<ReviewSchemeDashboardDto, AppErrorDto> {
+    let use_cases = state.review_schemes.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.dashboard(&today))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_review_scheme(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn save_review_scheme(
+    request: SaveReviewSchemeRequestDto,
+    state: State<'_, AppState>,
+) -> Result<ReviewSchemeDashboardDto, AppErrorDto> {
+    let use_cases = state.review_schemes.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.save_scheme(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_review_scheme(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn archive_review_scheme(
+    scheme_id: String,
+    today: String,
+    state: State<'_, AppState>,
+) -> Result<ReviewSchemeDashboardDto, AppErrorDto> {
+    let use_cases = state.review_schemes.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.archive_scheme(&scheme_id, &today))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_review_scheme(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn set_review_rest_weekdays(
+    rest_weekdays: Vec<u8>,
+    today: String,
+    state: State<'_, AppState>,
+) -> Result<ReviewSchemeDashboardDto, AppErrorDto> {
+    let review_schemes = state.review_schemes.clone();
+    let dashboard = tauri::async_runtime::spawn_blocking(move || {
+        review_schemes.set_rest_weekdays(&rest_weekdays, &today)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map_err(|error| AppErrorDto::from_review_scheme(&error))?;
+    let cycle_plans = state.cycle_plans.clone();
+    tauri::async_runtime::spawn_blocking(move || cycle_plans.refresh_schedules())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map_err(|error| AppErrorDto::from_cycle_plan(&error))?;
+    Ok(dashboard.into())
+}
+
+#[tauri::command]
+pub(crate) async fn generate_review_scheme_queue(
+    request: GenerateReviewSchemeQueueRequestDto,
+    state: State<'_, AppState>,
+) -> Result<ReviewSchemeDashboardDto, AppErrorDto> {
+    let use_cases = state.review_schemes.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.generate_queue(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_review_scheme(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn submit_review_scheme_result(
+    request: SubmitReviewSchemeResultRequestDto,
+    state: State<'_, AppState>,
+) -> Result<ReviewSchemeDashboardDto, AppErrorDto> {
+    let use_cases = state.review_schemes.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.submit_review(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_review_scheme(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn undo_review_scheme_result(
+    request: UndoReviewSchemeResultRequestDto,
+    state: State<'_, AppState>,
+) -> Result<ReviewSchemeDashboardDto, AppErrorDto> {
+    let use_cases = state.review_schemes.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.undo_last_review(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_review_scheme(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn get_cycle_plan_dashboard(
+    state: State<'_, AppState>,
+) -> Result<CyclePlanDashboardDto, AppErrorDto> {
+    let use_cases = state.cycle_plans.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.dashboard())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_cycle_plan(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn save_cycle_plan(
+    request: SaveCyclePlanRequestDto,
+    state: State<'_, AppState>,
+) -> Result<CyclePlanDashboardDto, AppErrorDto> {
+    let use_cases = state.cycle_plans.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.save_plan(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_cycle_plan(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn set_cycle_plan_item_state(
+    request: SetCyclePlanItemStateRequestDto,
+    state: State<'_, AppState>,
+) -> Result<SetCyclePlanItemStateResultDto, AppErrorDto> {
+    let use_cases = state.cycle_plans.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.set_item_state(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_cycle_plan(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn restore_cycle_plan_item_state(
+    request: RestoreCyclePlanItemStateRequestDto,
+    state: State<'_, AppState>,
+) -> Result<CyclePlanDashboardDto, AppErrorDto> {
+    let use_cases = state.cycle_plans.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.restore_item_state(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_cycle_plan(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn preview_cycle_plan_shift(
+    request: ShiftCyclePlanRequestDto,
+    state: State<'_, AppState>,
+) -> Result<ShiftCyclePlanPreviewDto, AppErrorDto> {
+    let use_cases = state.cycle_plans.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.preview_shift_plan(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_cycle_plan(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn confirm_cycle_plan_shift(
+    request: ConfirmShiftCyclePlanRequestDto,
+    state: State<'_, AppState>,
+) -> Result<ShiftCyclePlanResultDto, AppErrorDto> {
+    let use_cases = state.cycle_plans.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.confirm_shift_plan(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_cycle_plan(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn undo_shift_cycle_plan(
+    request: UndoShiftCyclePlanRequestDto,
+    state: State<'_, AppState>,
+) -> Result<CyclePlanDashboardDto, AppErrorDto> {
+    let use_cases = state.cycle_plans.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.undo_shift_plan(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_cycle_plan(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn archive_cycle_plan(
+    plan_id: String,
+    expected_updated_at: i64,
+    state: State<'_, AppState>,
+) -> Result<CyclePlanDashboardDto, AppErrorDto> {
+    let use_cases = state.cycle_plans.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.archive_plan(&plan_id, expected_updated_at)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(Into::into)
+    .map_err(|error| AppErrorDto::from_cycle_plan(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn refresh_cycle_plan_schedules(
+    state: State<'_, AppState>,
+) -> Result<CyclePlanDashboardDto, AppErrorDto> {
+    let use_cases = state.cycle_plans.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.refresh_schedules())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_cycle_plan(&error))
 }
 
 #[tauri::command]
@@ -4818,23 +6912,31 @@ fn emit_import_event(app: &AppHandle, event: ImportEventDto) {
 #[cfg(test)]
 mod tests {
     use super::{
-        AiOverviewDto, AppErrorDto, BackupReportDto, KnowledgeMapBundleDto, OcrRecognitionDto,
+        AiOverviewDto, AppErrorDto, BackupReportDto, ConfirmShiftCyclePlanRequestDto,
+        CyclePlanItemDto, KnowledgeMapBundleDto, OcrPageRecognitionDto, OcrRecognitionDto,
         PlanExecutionProgressDto, PlanProgressRequestDto, PlanTaskScheduleRequestDto,
-        QuestionBundleDto, RescheduleTaskRequestDto, ResourceDocumentDto, ResourceSearchResultDto,
-        ReviewReasonDto, SubjectDto, TaskChangeDto, TaskDto, UpdateTaskDetailsRequestDto,
-        get_runtime_status,
+        QuestionBundleDto, ReassignWorkbookSegmentRequestDto, RescheduleTaskRequestDto,
+        ResourceDocumentDto, ResourceSearchResultDto, RestoreCyclePlanItemStateRequestDto,
+        ReviewReasonDto, SaveCyclePlanRequestDto, SetCyclePlanItemStateRequestDto,
+        SetCyclePlanItemStateResultDto, ShiftCyclePlanPreviewDto, ShiftCyclePlanResultDto,
+        SubjectDto, TaskChangeDto, TaskDto, UndoShiftCyclePlanRequestDto,
+        UpdateTaskDetailsRequestDto, get_runtime_status,
     };
     use crate::application::{
-        AiOverview, AiProviderOverview, BackupReport, PersistenceError, PlanExecutionProgress,
-        PlanProgressCounts, PlanProgressSummary, PlanStageProgress, ResourceDocument,
-        ScheduleError, default_provider,
+        AiOverview, AiProviderOverview, BackupReport, CyclePlanError, OcrPageLine,
+        OcrPageRecognition, PersistenceError, PlanExecutionProgress, PlanProgressCounts,
+        PlanProgressSummary, PlanStageProgress, QuestionBankError, ReassignWorkbookSegmentInput,
+        ResourceDocument, RestoreCyclePlanItemStateInput, ScheduleError,
+        SetCyclePlanItemStateResult, ShiftCyclePlanPreview, ShiftCyclePlanResult,
+        ShiftCyclePlanUndo, UndoShiftCyclePlanInput, default_provider,
     };
     use crate::domain::{
-        AttemptResult, KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource,
-        LocalDate, MasteryState, OcrRecognition, OcrRecognitionState, OcrTextLine, PlanStatus,
-        Question, QuestionAttempt, QuestionBundle, QuestionRegion, ResourceSearchMatchKind,
-        ResourceSearchResult, ReviewReason, ReviewSelectionKind, Subject, SubjectColor, Task,
-        TaskChange, TaskChangeSnapshot, TaskChangeType, TaskPriority, TaskStatus,
+        AttemptResult, CyclePlanDashboard, CyclePlanItem, CyclePlanItemState, KnowledgeMap,
+        KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource, LocalDate, MasteryState,
+        OcrRecognition, OcrRecognitionState, OcrTextLine, PlanStatus, Question, QuestionAttempt,
+        QuestionBundle, QuestionRegion, ResourceSearchMatchKind, ResourceSearchResult,
+        ReviewReason, ReviewSelectionKind, Subject, SubjectColor, Task, TaskChange,
+        TaskChangeSnapshot, TaskChangeType, TaskPriority, TaskStatus,
     };
 
     #[test]
@@ -5096,6 +7198,12 @@ mod tests {
                 id: question_id.clone(),
                 document_id: document_id.clone(),
                 document_title: "408 习题册".to_owned(),
+                subject_id: None,
+                subject_name: None,
+                subject_inherited: false,
+                question_type: Some(crate::domain::QuestionType::Solution),
+                classification_source: crate::domain::ClassificationSource::Manual,
+                classification_confidence: Some(1.0),
                 title: "线性表综合题".to_owned(),
                 chapter: Some("数据结构".to_owned()),
                 number_label: Some("1".to_owned()),
@@ -5169,6 +7277,35 @@ mod tests {
         let value = serde_json::to_value(dto).expect("OCR DTO should serialize");
 
         assert_eq!(value["lines"][0]["confidence"], 0.98);
+        assert!(value.get("componentPath").is_none());
+        assert!(value.get("temporaryImage").is_none());
+        assert!(value.get("stderr").is_none());
+        assert!(value.get("workerResponse").is_none());
+    }
+
+    #[test]
+    fn pdf_page_ocr_dto_exposes_only_safe_normalized_lines() {
+        let dto = OcrPageRecognitionDto::from(OcrPageRecognition {
+            page_number: 3,
+            engine: "local-ocr".to_owned(),
+            mean_confidence: 0.98,
+            lines: vec![OcrPageLine {
+                text: "绾挎€ц〃".to_owned(),
+                confidence: 0.98,
+                x: 0.1,
+                y: 0.2,
+                width: 0.5,
+                height: 0.1,
+                sort_order: 0,
+            }],
+        });
+
+        let value = serde_json::to_value(dto).expect("page OCR DTO should serialize");
+
+        assert_eq!(value["pageNumber"], 3);
+        assert_eq!(value["lines"][0]["confidence"], 0.98);
+        assert!(value["lines"][0].get("id").is_none());
+        assert!(value["lines"][0].get("recognitionId").is_none());
         assert!(value.get("componentPath").is_none());
         assert!(value.get("temporaryImage").is_none());
         assert!(value.get("stderr").is_none());
@@ -5262,6 +7399,281 @@ mod tests {
         let dto = AppErrorDto::from_schedule(&ScheduleError::InvalidStoredData);
 
         assert_eq!(dto.message, "本地日程数据未通过完整性校验。");
+    }
+
+    #[test]
+    fn segment_assignment_conflict_maps_to_stable_safe_error() {
+        let error = QuestionBankError::segment_assignment_conflicts(vec![(
+            "document-id".to_owned(),
+            "subject-id".to_owned(),
+            3,
+            98,
+            "workbook-1000".to_owned(),
+            "segment-880".to_owned(),
+            "workbook-880".to_owned(),
+        )]);
+
+        let dto = AppErrorDto::from_question_bank(&error);
+
+        assert_eq!(dto.code, "QUESTION_BANK_SEGMENT_ASSIGNMENT_CONFLICT");
+        assert_eq!(dto.message, "这段 PDF 科目内容已经归属于另一个练习册。");
+        assert_eq!(dto.action, "保留已有归类，或先更正已有分段后再重试。");
+        assert!(uuid::Uuid::parse_str(&dto.operation_id).is_ok());
+        let serialized = serde_json::to_value(&dto).expect("error DTO should serialize");
+        assert!(serialized.get("conflicts").is_none());
+        assert!(serialized.get("databasePath").is_none());
+    }
+
+    #[test]
+    fn segment_restore_state_errors_map_to_stable_codes() {
+        let not_trashed = AppErrorDto::from_question_bank(&QuestionBankError::SegmentNotTrashed);
+        assert_eq!(not_trashed.code, "QUESTION_BANK_SEGMENT_NOT_TRASHED");
+        let stale = AppErrorDto::from_question_bank(&QuestionBankError::SegmentRestoreStale);
+        assert_eq!(stale.code, "QUESTION_BANK_SEGMENT_RESTORE_STALE");
+        let serialized = serde_json::to_value(stale).expect("restore error should serialize");
+        assert!(serialized.get("path").is_none());
+        assert!(serialized.get("sql").is_none());
+    }
+
+    #[test]
+    fn segment_reassignment_stale_maps_to_a_stable_safe_code() {
+        let stale = AppErrorDto::from_question_bank(&QuestionBankError::SegmentReassignStale);
+
+        assert_eq!(stale.code, "QUESTION_BANK_SEGMENT_REASSIGN_STALE");
+        let serialized = serde_json::to_value(stale).expect("reassignment error should serialize");
+        assert!(serialized.get("path").is_none());
+        assert!(serialized.get("sql").is_none());
+    }
+
+    #[test]
+    fn cycle_plan_item_dto_exposes_version_and_restore_request_maps_exact_timestamp() {
+        let dto = CyclePlanItemDto::from(CyclePlanItem {
+            id: "019f7328-4b66-7613-9729-e3570fc41525".to_owned(),
+            plan_id: "019f7328-4b66-7613-9729-e3570fc41526".to_owned(),
+            unit_index: 1,
+            planned_start_date: LocalDate::parse("2026-07-29").expect("date should parse"),
+            planned_end_date: LocalDate::parse("2026-07-30").expect("date should parse"),
+            original_start_date: LocalDate::parse("2026-07-29").expect("date should parse"),
+            original_end_date: LocalDate::parse("2026-07-30").expect("date should parse"),
+            state: CyclePlanItemState::Completed,
+            completed_at: Some(1_700_000_000_100),
+            skipped_at: None,
+            shift_count: 0,
+            created_at: 1_700_000_000_000,
+            updated_at: 1_700_000_000_200,
+        });
+        let value = serde_json::to_value(dto).expect("cycle item DTO should serialize");
+        assert_eq!(value["updatedAt"], 1_700_000_000_200_i64);
+        assert!(value["skippedAt"].is_null());
+
+        let set_request =
+            serde_json::from_value::<SetCyclePlanItemStateRequestDto>(serde_json::json!({
+                "itemId": "019f7328-4b66-7613-9729-e3570fc41525",
+                "targetState": "skipped",
+                "expectedUpdatedAt": 1_700_000_000_200_i64
+            }))
+            .expect("set state request should deserialize");
+        let set_input: crate::application::SetCyclePlanItemStateInput = set_request.into();
+        assert_eq!(set_input.target_state, "skipped");
+
+        let request =
+            serde_json::from_value::<RestoreCyclePlanItemStateRequestDto>(serde_json::json!({
+                "itemId": "019f7328-4b66-7613-9729-e3570fc41525",
+                "state": "completed",
+                "completedAt": 1_700_000_000_100_i64,
+                "skippedAt": null,
+                "expectedUpdatedAt": 1_700_000_000_200_i64
+            }))
+            .expect("restore request should deserialize");
+        let input: RestoreCyclePlanItemStateInput = request.into();
+        assert_eq!(input.original_state, "completed");
+        assert_eq!(input.original_completed_at, Some(1_700_000_000_100));
+        assert_eq!(input.original_skipped_at, None);
+        assert_eq!(input.expected_updated_at, 1_700_000_000_200);
+        assert!(
+            serde_json::from_value::<RestoreCyclePlanItemStateRequestDto>(serde_json::json!({
+                "itemId": "019f7328-4b66-7613-9729-e3570fc41525",
+                "originalState": "completed",
+                "completedAt": 1_700_000_000_100_i64,
+                "skippedAt": null,
+                "expectedUpdatedAt": 1_700_000_000_200_i64
+            }))
+            .is_err()
+        );
+
+        let stale = AppErrorDto::from_cycle_plan(&CyclePlanError::ItemStateStale);
+        assert_eq!(stale.code, "CYCLE_PLAN_ITEM_STATE_STALE");
+        let serialized = serde_json::to_value(stale).expect("cycle plan error should serialize");
+        assert!(serialized.get("sql").is_none());
+    }
+
+    #[test]
+    fn shift_cycle_plan_result_exposes_only_backend_undo_token() {
+        let dto = ShiftCyclePlanResultDto::from(ShiftCyclePlanResult {
+            dashboard: CyclePlanDashboard {
+                rest_weekdays: Vec::new(),
+                plans: Vec::new(),
+            },
+            shifted_item_count: 2,
+            undo: Some(ShiftCyclePlanUndo {
+                plan_id: "019f7328-4b66-7613-9729-e3570fc41525".to_owned(),
+                undo_token: "019f7328-4b66-7613-9729-e3570fc41526".to_owned(),
+                expires_at: 1_700_000_005_000,
+            }),
+        });
+        let value = serde_json::to_value(dto).expect("shift result should serialize");
+        assert_eq!(value["shiftedItemCount"], 2);
+        assert_eq!(value["undo"]["expiresAt"], 1_700_000_005_000_i64);
+        assert!(value["undo"].get("beforeDates").is_none());
+
+        let request = serde_json::from_value::<UndoShiftCyclePlanRequestDto>(serde_json::json!({
+            "planId": "019f7328-4b66-7613-9729-e3570fc41525",
+            "undoToken": "opaque-shift-token"
+        }))
+        .expect("undo request should deserialize");
+        let input: UndoShiftCyclePlanInput = request.into();
+        assert_eq!(input.plan_id, "019f7328-4b66-7613-9729-e3570fc41525");
+        assert_eq!(input.undo_token, "opaque-shift-token");
+    }
+
+    #[test]
+    fn shift_undo_errors_use_stable_cycle_plan_codes() {
+        assert_eq!(
+            AppErrorDto::from_cycle_plan(&CyclePlanError::ShiftUndoUnavailable).code,
+            "CYCLE_PLAN_SHIFT_UNDO_UNAVAILABLE"
+        );
+        assert_eq!(
+            AppErrorDto::from_cycle_plan(&CyclePlanError::ShiftUndoStale).code,
+            "CYCLE_PLAN_SHIFT_UNDO_STALE"
+        );
+    }
+
+    #[test]
+    fn shift_preview_and_confirm_dtos_expose_only_the_frozen_contract() {
+        let dto = ShiftCyclePlanPreviewDto::from(ShiftCyclePlanPreview {
+            plan_id: "019f7328-4b66-7613-9729-e3570fc41525".to_owned(),
+            from_date: LocalDate::parse("2026-08-01").expect("date should parse"),
+            study_days: 2,
+            affected_item_count: 3,
+            current_estimated_end_date: LocalDate::parse("2026-08-20").expect("date should parse"),
+            new_estimated_end_date: LocalDate::parse("2026-08-24").expect("date should parse"),
+            deadline: LocalDate::parse("2026-08-22").expect("date should parse"),
+            exceeds_deadline_by_days: 2,
+            rest_weekdays: vec![5, 6],
+            preview_token: Some(format!("cpsp1_{}", "a".repeat(64))),
+        });
+        let value = serde_json::to_value(dto).expect("preview should serialize");
+        assert_eq!(value["affectedItemCount"], 3);
+        assert_eq!(value["currentEstimatedEndDate"], "2026-08-20");
+        assert_eq!(value["newEstimatedEndDate"], "2026-08-24");
+        assert_eq!(value["exceedsDeadlineByDays"], 2);
+        assert!(value.get("expiresAt").is_none());
+
+        let request =
+            serde_json::from_value::<ConfirmShiftCyclePlanRequestDto>(serde_json::json!({
+                "planId": "019f7328-4b66-7613-9729-e3570fc41525",
+                "fromDate": "2026-08-01",
+                "studyDays": 2,
+                "previewToken": format!("cpsp1_{}", "a".repeat(64))
+            }))
+            .expect("frozen confirm request should deserialize");
+        let input: crate::application::ConfirmShiftCyclePlanInput = request.into();
+        assert_eq!(input.study_days, 2);
+        assert!(
+            serde_json::from_value::<ConfirmShiftCyclePlanRequestDto>(serde_json::json!({
+                "planId": "019f7328-4b66-7613-9729-e3570fc41525",
+                "fromDate": "2026-08-01",
+                "studyDays": 2,
+                "previewToken": format!("cpsp1_{}", "a".repeat(64)),
+                "beforeDates": []
+            }))
+            .is_err()
+        );
+        let stale = AppErrorDto::from_cycle_plan(&CyclePlanError::ShiftPreviewStale);
+        assert_eq!(stale.code, "CYCLE_PLAN_SHIFT_PREVIEW_STALE");
+        assert_eq!(stale.message, "顺延预览已与当前计划不一致。");
+        assert_eq!(stale.action, "刷新预览并确认最新排程后重试。");
+    }
+
+    #[test]
+    fn completed_progress_conflict_matches_the_cycle_plan_client_contract() {
+        let dto = AppErrorDto::from_cycle_plan(&CyclePlanError::CompletedProgressConflict);
+
+        assert_eq!(dto.code, "CYCLE_PLAN_COMPLETED_CONFLICT");
+        assert_eq!(dto.message, "已有完成或跳过事项的序号超出新的总量。");
+        assert_eq!(dto.action, "请增大总量，保留所有完成或跳过事项后再保存。");
+    }
+
+    #[test]
+    fn cycle_plan_save_dto_uses_camel_case_cas_and_stable_stale_copy() {
+        let request = serde_json::from_value::<SaveCyclePlanRequestDto>(serde_json::json!({
+            "planId": "019f7328-4b66-7613-9729-e3570fc41525",
+            "expectedUpdatedAt": 1_700_000_000_100_i64,
+            "name": "cycle",
+            "totalUnits": 3,
+            "unitLabel": "unit",
+            "startDate": "2026-08-01",
+            "deadline": "2026-12-31",
+            "studyDaysPerUnit": 1,
+            "scheduleMode": "rhythm",
+            "calendarVisible": true
+        }))
+        .expect("save request should deserialize");
+        let input: crate::application::SaveCyclePlanInput = request.into();
+        assert_eq!(input.expected_updated_at, Some(1_700_000_000_100));
+        assert!(
+            serde_json::from_value::<SaveCyclePlanRequestDto>(serde_json::json!({
+                "planId": null,
+                "expectedUpdatedAt": null,
+                "name": "cycle",
+                "totalUnits": 3,
+                "unitLabel": "unit",
+                "startDate": "2026-08-01",
+                "deadline": "2026-12-31",
+                "studyDaysPerUnit": 1,
+                "scheduleMode": "rhythm",
+                "calendarVisible": true,
+                "expected_updated_at": 1
+            }))
+            .is_err()
+        );
+        let stale = AppErrorDto::from_cycle_plan(&CyclePlanError::SaveStale);
+        assert_eq!(stale.code, "CYCLE_PLAN_SAVE_STALE");
+        assert_eq!(stale.message, "周期计划已在其他窗口发生变化。");
+        assert_eq!(stale.action, "刷新计划并重新核对编辑内容后再保存。");
+    }
+
+    #[test]
+    fn cycle_plan_state_result_dto_exposes_the_atomic_mutation_token() {
+        let dto = SetCyclePlanItemStateResultDto::from(SetCyclePlanItemStateResult {
+            dashboard: CyclePlanDashboard {
+                rest_weekdays: Vec::new(),
+                plans: Vec::new(),
+            },
+            item_id: "019f7328-4b66-7613-9729-e3570fc41525".to_owned(),
+            item_updated_at: 1_700_000_000_200,
+        });
+
+        let value = serde_json::to_value(dto).expect("mutation result should serialize");
+
+        assert_eq!(value["itemUpdatedAt"], 1_700_000_000_200_i64);
+        assert_eq!(value["itemId"], "019f7328-4b66-7613-9729-e3570fc41525");
+        assert!(value["dashboard"].is_object());
+    }
+
+    #[test]
+    fn reassign_workbook_segment_request_uses_camel_case_tokens() {
+        let dto: ReassignWorkbookSegmentRequestDto = serde_json::from_value(serde_json::json!({
+            "segmentId": "019fc6fa-ff79-74c3-ba08-f8673cc939bf",
+            "targetWorkbookId": "019fc6fb-01f4-76b3-9498-754a9461230b",
+            "expectedUpdatedAt": 1_700_000_000_000_i64,
+            "expectedDeletedAt": null
+        }))
+        .expect("reassignment request should deserialize");
+        let input: ReassignWorkbookSegmentInput = dto.into();
+
+        assert_eq!(input.expected_updated_at, 1_700_000_000_000);
+        assert_eq!(input.expected_deleted_at, None);
     }
 
     #[test]

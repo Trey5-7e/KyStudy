@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 
 use crate::application::{OcrError, OcrRegionSource, OcrRepository};
-use crate::domain::{OcrRecognition, OcrRecognitionState, OcrTextLine};
+use crate::domain::{
+    ClassificationSource, OcrRecognition, OcrRecognitionState, OcrTextLine, QuestionType,
+    classify_question_text,
+};
 
 use super::sqlite_workspace::{SqliteWorkspaceRepository, database_error, migrate, open_database};
 
@@ -117,15 +120,21 @@ impl OcrRepository for SqliteOcrRepository {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(database_error)?;
-        let (region_id, state) = transaction
+        let (region_id, question_id, state) = transaction
             .query_row(
-                "SELECT o.region_id, o.state
+                "SELECT o.region_id, r.question_id, o.state
                  FROM question_region_ocr o
                  JOIN question_region r ON r.id = o.region_id
                  JOIN question q ON q.id = r.question_id
                  WHERE o.id = ?1 AND q.deleted_at IS NULL",
                 [recognition_id],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                },
             )
             .optional()
             .map_err(database_error)?
@@ -152,6 +161,27 @@ impl OcrRepository for SqliteOcrRepository {
         if changed != 1 {
             return Err(OcrError::RecognitionNotFound);
         }
+        let suggestion = classify_question_text(confirmed_text);
+        let source = if suggestion.question_type.is_some() {
+            ClassificationSource::Automatic
+        } else {
+            ClassificationSource::Pending
+        };
+        transaction
+            .execute(
+                "UPDATE question
+                 SET question_type = ?2, classification_source = ?3,
+                     classification_confidence = ?4, updated_at = MAX(updated_at, ?5)
+                 WHERE id = ?1 AND classification_source != 'manual'",
+                params![
+                    question_id,
+                    suggestion.question_type.map(QuestionType::as_str),
+                    source.as_str(),
+                    suggestion.confidence,
+                    updated_at
+                ],
+            )
+            .map_err(database_error)?;
         transaction.commit().map_err(database_error)?;
         load_recognition(&connection, recognition_id)
     }
@@ -410,6 +440,8 @@ mod tests {
             .create_question(CreateQuestionInput {
                 document_id: document.id,
                 title: "二叉树遍历".to_owned(),
+                subject_id: None,
+                question_type: None,
                 chapter: None,
                 question_number: None,
                 difficulty: 3,
@@ -479,6 +511,38 @@ mod tests {
         );
         assert_eq!(confirmed.lines.len(), 1);
         assert_eq!(listed, vec![confirmed]);
+    }
+
+    #[test]
+    fn confirmed_ocr_updates_only_the_local_question_classification() {
+        let (directory, question_id, region_id) = fixture();
+        let repository = SqliteOcrRepository::new(directory.path());
+        let draft = repository
+            .replace_draft(recognition(question_id.clone(), region_id))
+            .expect("draft should persist");
+
+        repository
+            .confirm_draft(
+                &draft.id,
+                "下列说法正确的是 A. 先序 B. 中序",
+                1_700_000_000_200,
+            )
+            .expect("draft should confirm");
+        let connection =
+            Connection::open(directory.path().join("workspaces/default/kystudy.sqlite3"))
+                .expect("database should open");
+        let classification: (Option<String>, String) = connection
+            .query_row(
+                "SELECT question_type, classification_source FROM question WHERE id = ?1",
+                [question_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("classification should read");
+
+        assert_eq!(
+            classification,
+            (Some("choice".to_owned()), "automatic".to_owned())
+        );
     }
 
     #[test]

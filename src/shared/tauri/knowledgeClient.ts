@@ -60,7 +60,7 @@ export interface MindMapDraftNode {
 export interface MindMapImportDraft {
   id: string;
   sourceResourceId: string;
-  sourceFormat: "opml" | "freemind";
+  sourceFormat: "opml" | "freemind" | "xmind";
   title: string;
   tree: MindMapDraftNode;
   warnings: string[];
@@ -121,6 +121,7 @@ const DRAFT_STATES = new Set<MindMapImportDraft["state"]>([
 const SOURCE_FORMATS = new Set<MindMapImportDraft["sourceFormat"]>([
   "opml",
   "freemind",
+  "xmind",
 ]);
 
 const KNOWLEDGE_ERROR_COPY: Record<
@@ -161,7 +162,7 @@ const KNOWLEDGE_ERROR_COPY: Record<
   },
   MINDMAP_FORMAT_UNSUPPORTED: {
     message: "当前不能直接解析这种思维导图格式。",
-    action: "XMind 请先导出为 OPML；也可以使用 FreeMind .mm。",
+    action: "确认文件是 XMind、OPML 或 FreeMind .mm，并重新生成草案。",
   },
   MINDMAP_SOURCE_INVALID: {
     message: "源文件结构无效或包含不安全声明。",

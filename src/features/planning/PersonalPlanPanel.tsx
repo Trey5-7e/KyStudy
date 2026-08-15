@@ -25,8 +25,9 @@ import { getWorkspaceStatus } from "../../shared/tauri/workspaceClient";
 import { PlanProgressPanel } from "./PlanProgressPanel";
 import { PlanSchedulePanel } from "./PlanSchedulePanel";
 import { PlanningChatPanel } from "./PlanningChatPanel";
+import { EditorDialog } from "../../shared/components/EditorDialog";
 
-interface PersonalPlanPanelProps {
+interface LegacyPlanCompatibilityPanelProps {
   onOpenReference(documentId: string, page: number): void;
   onOpenSchedule(): void;
 }
@@ -60,10 +61,57 @@ const EMPTY_STAGE: StageForm = {
   focus: "",
 };
 
-export function PersonalPlanPanel({
+export function LegacyPlanCompatibilityPanel({
   onOpenReference,
   onOpenSchedule,
-}: PersonalPlanPanelProps) {
+}: LegacyPlanCompatibilityPanelProps) {
+  const [legacyOpen, setLegacyOpen] = useState(false);
+  return (
+    <>
+      <section className="legacy-plan-entry">
+        <div>
+          <strong>历史详细规划数据</strong>
+          <p>仅用于查看和维护旧版计划、阶段、资料引用与规划对话。</p>
+        </div>
+        <div className="legacy-plan-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setLegacyOpen(true)}
+          >
+            打开兼容工具
+          </button>
+          <button
+            type="button"
+            className="text-button"
+            onClick={onOpenSchedule}
+          >
+            查看旧日程
+          </button>
+        </div>
+      </section>
+      {legacyOpen ? (
+        <EditorDialog
+          title="历史详细规划"
+          description="兼容已有计划、阶段、资料引用和规划对话。"
+          dirty={false}
+          onRequestClose={() => setLegacyOpen(false)}
+          size="large"
+        >
+          <LegacyPersonalPlanPanel
+            onOpenReference={onOpenReference}
+            onOpenSchedule={onOpenSchedule}
+          />
+        </EditorDialog>
+      ) : null}
+    </>
+  );
+}
+
+function LegacyPersonalPlanPanel({
+  onOpenReference,
+  onOpenSchedule,
+}: LegacyPlanCompatibilityPanelProps) {
   const [plans, setPlans] = useState<StudyPlanBundle[]>([]);
   const [pdfResources, setPdfResources] = useState<ResourceDocument[]>([]);
   const [subjects, setSubjects] = useState<StudySubject[]>([]);
@@ -76,6 +124,8 @@ export function PersonalPlanPanel({
   const [pageStart, setPageStart] = useState("1");
   const [pageEnd, setPageEnd] = useState("1");
   const [referenceNote, setReferenceNote] = useState("");
+  const [confirmStageId, setConfirmStageId] = useState<string>();
+  const [confirmReferenceId, setConfirmReferenceId] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ResourceCommandError | null>(null);
@@ -123,6 +173,8 @@ export function PersonalPlanPanel({
   const choosePlan = (bundle: StudyPlanBundle) => {
     selectBundle(bundle, setSelectedId, setPlanForm);
     setStageForm(EMPTY_STAGE);
+    setConfirmStageId(undefined);
+    setConfirmReferenceId(undefined);
     setError(null);
   };
 
@@ -130,6 +182,8 @@ export function PersonalPlanPanel({
     setSelectedId(undefined);
     setPlanForm(EMPTY_PLAN);
     setStageForm(EMPTY_STAGE);
+    setConfirmStageId(undefined);
+    setConfirmReferenceId(undefined);
     setError(null);
   };
 
@@ -140,6 +194,7 @@ export function PersonalPlanPanel({
     try {
       const saved = await saveStudyPlan({
         id: selectedId,
+        expectedRevision: selected?.plan.revision,
         title: planForm.title,
         targetExam: planForm.targetExam || undefined,
         examDate: planForm.examDate || undefined,
@@ -160,7 +215,11 @@ export function PersonalPlanPanel({
     }
     setSaving(true);
     try {
-      const updated = await setStudyPlanStatus(selected.plan.id, status);
+      const updated = await setStudyPlanStatus(
+        selected.plan.id,
+        selected.plan.revision,
+        status,
+      );
       const refreshed = await listStudyPlans();
       setPlans(refreshed);
       choosePlan(updated);
@@ -182,6 +241,7 @@ export function PersonalPlanPanel({
       await savePlanStage({
         id: stageForm.id,
         planId: selected.plan.id,
+        expectedPlanRevision: selected.plan.revision,
         title: stageForm.title,
         startDate: stageForm.startDate,
         endDate: stageForm.endDate,
@@ -194,6 +254,7 @@ export function PersonalPlanPanel({
       });
       await reloadSelected(selected.plan.id);
       setStageForm(EMPTY_STAGE);
+      setConfirmStageId(undefined);
       setError(null);
     } catch (stageError: unknown) {
       setError(normalizePlanningError(stageError));
@@ -207,8 +268,9 @@ export function PersonalPlanPanel({
       return;
     }
     try {
-      await deletePlanStage(stageId);
+      await deletePlanStage(stageId, selected.plan.revision);
       await reloadSelected(selected.plan.id);
+      setConfirmStageId(undefined);
       setStageForm(EMPTY_STAGE);
     } catch (stageError: unknown) {
       setError(normalizePlanningError(stageError));
@@ -223,6 +285,7 @@ export function PersonalPlanPanel({
     try {
       await addPlanReference({
         planId: selected.plan.id,
+        expectedPlanRevision: selected.plan.revision,
         documentId: referenceDocumentId,
         pageStart: Number(pageStart),
         pageEnd: Number(pageEnd),
@@ -241,8 +304,9 @@ export function PersonalPlanPanel({
       return;
     }
     try {
-      await deletePlanReference(referenceId);
+      await deletePlanReference(referenceId, selected.plan.revision);
       await reloadSelected(selected.plan.id);
+      setConfirmReferenceId(undefined);
     } catch (referenceError: unknown) {
       setError(normalizePlanningError(referenceError));
     }
@@ -319,6 +383,8 @@ export function PersonalPlanPanel({
                 <label>
                   计划标题
                   <input
+                    name="legacy-plan-title"
+                    autoComplete="off"
                     required
                     maxLength={120}
                     value={planForm.title}
@@ -333,8 +399,10 @@ export function PersonalPlanPanel({
                 <label>
                   目标考试
                   <input
+                    name="legacy-plan-exam"
+                    autoComplete="off"
                     maxLength={120}
-                    placeholder="例如：2027 计算机考研"
+                    placeholder="例如：2027 计算机考研…"
                     value={planForm.targetExam}
                     onChange={(event) =>
                       setPlanForm((current) => ({
@@ -347,6 +415,8 @@ export function PersonalPlanPanel({
                 <label>
                   考试日期
                   <input
+                    name="legacy-plan-exam-date"
+                    autoComplete="off"
                     type="date"
                     value={planForm.examDate}
                     onChange={(event) =>
@@ -360,6 +430,8 @@ export function PersonalPlanPanel({
                 <label className="plan-overview-field">
                   总体思路
                   <textarea
+                    name="legacy-plan-overview"
+                    autoComplete="off"
                     rows={5}
                     maxLength={8000}
                     value={planForm.overview}
@@ -430,13 +502,32 @@ export function PersonalPlanPanel({
                           >
                             编辑
                           </button>
-                          <button
-                            type="button"
-                            className="danger-button"
-                            onClick={() => void removeStage(stage.id)}
-                          >
-                            删除
-                          </button>
+                          {confirmStageId === stage.id ? (
+                            <>
+                              <button
+                                type="button"
+                                className="danger-button"
+                                onClick={() => void removeStage(stage.id)}
+                              >
+                                确认删除
+                              </button>
+                              <button
+                                type="button"
+                                className="text-button"
+                                onClick={() => setConfirmStageId(undefined)}
+                              >
+                                取消
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className="danger-button"
+                              onClick={() => setConfirmStageId(stage.id)}
+                            >
+                              删除
+                            </button>
+                          )}
                         </div>
                       </li>
                     ))}
@@ -448,6 +539,8 @@ export function PersonalPlanPanel({
                     <label>
                       阶段名称
                       <input
+                        name="legacy-stage-title"
+                        autoComplete="off"
                         required
                         maxLength={120}
                         value={stageForm.title}
@@ -462,6 +555,8 @@ export function PersonalPlanPanel({
                     <label>
                       开始日期
                       <input
+                        name="legacy-stage-start"
+                        autoComplete="off"
                         required
                         type="date"
                         value={stageForm.startDate}
@@ -476,6 +571,8 @@ export function PersonalPlanPanel({
                     <label>
                       结束日期
                       <input
+                        name="legacy-stage-end"
+                        autoComplete="off"
                         required
                         type="date"
                         value={stageForm.endDate}
@@ -490,6 +587,8 @@ export function PersonalPlanPanel({
                     <label className="stage-focus-field">
                       阶段重点
                       <textarea
+                        name="legacy-stage-focus"
+                        autoComplete="off"
                         rows={3}
                         maxLength={4000}
                         value={stageForm.focus}
@@ -576,13 +675,36 @@ export function PersonalPlanPanel({
                           {reference.note === undefined ? null : (
                             <p>{reference.note}</p>
                           )}
-                          <button
-                            type="button"
-                            className="danger-button"
-                            onClick={() => void removeReference(reference.id)}
-                          >
-                            删除引用
-                          </button>
+                          {confirmReferenceId === reference.id ? (
+                            <div className="plan-item-actions">
+                              <button
+                                type="button"
+                                className="danger-button"
+                                onClick={() =>
+                                  void removeReference(reference.id)
+                                }
+                              >
+                                确认删除引用
+                              </button>
+                              <button
+                                type="button"
+                                className="text-button"
+                                onClick={() => setConfirmReferenceId(undefined)}
+                              >
+                                取消
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="danger-button"
+                              onClick={() =>
+                                setConfirmReferenceId(reference.id)
+                              }
+                            >
+                              删除引用
+                            </button>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -594,6 +716,8 @@ export function PersonalPlanPanel({
                     <label>
                       PDF 资料
                       <select
+                        name="legacy-reference-document"
+                        autoComplete="off"
                         required
                         value={referenceDocumentId}
                         onChange={(event) =>
@@ -613,6 +737,9 @@ export function PersonalPlanPanel({
                     <label>
                       起始页
                       <input
+                        name="legacy-reference-page-start"
+                        inputMode="numeric"
+                        autoComplete="off"
                         required
                         type="number"
                         min={1}
@@ -623,6 +750,9 @@ export function PersonalPlanPanel({
                     <label>
                       结束页
                       <input
+                        name="legacy-reference-page-end"
+                        inputMode="numeric"
+                        autoComplete="off"
                         required
                         type="number"
                         min={1}
@@ -633,8 +763,10 @@ export function PersonalPlanPanel({
                     <label className="reference-note-field">
                       引用说明
                       <input
+                        name="legacy-reference-note"
+                        autoComplete="off"
                         maxLength={1000}
-                        placeholder="例如：参考阶段划分，需结合自己的数学基础调整"
+                        placeholder="例如：参考阶段划分，需结合自己的数学基础调整…"
                         value={referenceNote}
                         onChange={(event) =>
                           setReferenceNote(event.target.value)

@@ -48,6 +48,7 @@ export interface StudyPlanBundle {
 
 export interface SavePlanInput {
   id?: string;
+  expectedRevision?: number;
   title: string;
   targetExam?: string;
   examDate?: string;
@@ -57,6 +58,7 @@ export interface SavePlanInput {
 export interface SavePlanStageInput {
   id?: string;
   planId: string;
+  expectedPlanRevision: number;
   title: string;
   startDate: string;
   endDate: string;
@@ -66,6 +68,7 @@ export interface SavePlanStageInput {
 
 export interface AddPlanReferenceInput {
   planId: string;
+  expectedPlanRevision: number;
   documentId: string;
   pageStart: number;
   pageEnd: number;
@@ -80,6 +83,10 @@ const PLAN_ERROR_COPY: Record<string, { message: string; action: string }> = {
   PLAN_NOT_FOUND: {
     message: "找不到这份个人计划。",
     action: "刷新计划列表后重新选择。",
+  },
+  PLAN_SAVE_STALE: {
+    message: "个人计划已在其他窗口发生变化。",
+    action: "刷新计划后重新核对考试信息再保存。",
   },
   PLAN_STAGE_NOT_FOUND: {
     message: "找不到这个计划阶段。",
@@ -111,10 +118,11 @@ export async function saveStudyPlan(
 
 export async function setStudyPlanStatus(
   planId: string,
+  expectedRevision: number,
   status: StudyPlan["status"],
 ): Promise<StudyPlanBundle> {
   return parseStudyPlanBundle(
-    await invoke("set_study_plan_status", { planId, status }),
+    await invoke("set_study_plan_status", { planId, expectedRevision, status }),
   );
 }
 
@@ -124,8 +132,11 @@ export async function savePlanStage(
   return parsePlanStage(await invoke("save_plan_stage", { request }));
 }
 
-export async function deletePlanStage(stageId: string): Promise<void> {
-  await invoke("delete_plan_stage", { stageId });
+export async function deletePlanStage(
+  stageId: string,
+  expectedPlanRevision: number,
+): Promise<void> {
+  await invoke("delete_plan_stage", { stageId, expectedPlanRevision });
 }
 
 export async function addPlanReference(
@@ -134,8 +145,14 @@ export async function addPlanReference(
   return parsePlanReference(await invoke("add_plan_reference", { request }));
 }
 
-export async function deletePlanReference(referenceId: string): Promise<void> {
-  await invoke("delete_plan_reference", { referenceId });
+export async function deletePlanReference(
+  referenceId: string,
+  expectedPlanRevision: number,
+): Promise<void> {
+  await invoke("delete_plan_reference", {
+    referenceId,
+    expectedPlanRevision,
+  });
 }
 
 export function normalizePlanningError(error: unknown): ResourceCommandError {

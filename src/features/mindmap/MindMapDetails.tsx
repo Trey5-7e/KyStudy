@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import type {
   AddKnowledgeNodeResourceInput,
@@ -16,6 +16,7 @@ interface MindMapSettingsProps {
   map: KnowledgeMap;
   subjects: StudySubject[];
   busy: boolean;
+  onDirtyChange?(dirty: boolean): void;
   onSave(input: UpdateKnowledgeMapInput): Promise<boolean>;
 }
 
@@ -25,9 +26,12 @@ interface MindMapNodeEditorProps {
   subjects: StudySubject[];
   resources: ResourceDocument[];
   links: KnowledgeNodeResource[];
+  moveTargets: KnowledgeNode[];
   busy: boolean;
+  onDirtyChange?(dirty: boolean): void;
   onSave(input: UpdateKnowledgeNodeInput): Promise<boolean>;
   onDelete(): void;
+  onMove(newParentId: string): Promise<boolean>;
   onAddResource(input: AddKnowledgeNodeResourceInput): Promise<boolean>;
   onDeleteResource(resourceId: string): void;
   onOpenResource(documentId: string, page?: number): void;
@@ -44,10 +48,14 @@ export function MindMapSettings({
   map,
   subjects,
   busy,
+  onDirtyChange,
   onSave,
 }: MindMapSettingsProps) {
   const [title, setTitle] = useState(map.title);
   const [subjectId, setSubjectId] = useState(map.subjectId ?? "");
+  useEffect(() => {
+    onDirtyChange?.(title !== map.title || subjectId !== (map.subjectId ?? ""));
+  }, [map.subjectId, map.title, onDirtyChange, subjectId, title]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -64,6 +72,8 @@ export function MindMapSettings({
       <label>
         导图名称
         <input
+          name="mindmap-title"
+          autoComplete="off"
           required
           maxLength={120}
           value={title}
@@ -73,6 +83,8 @@ export function MindMapSettings({
       <label>
         默认科目
         <select
+          name="mindmap-subject"
+          autoComplete="off"
           value={subjectId}
           onChange={(event) => setSubjectId(event.target.value)}
         >
@@ -97,9 +109,12 @@ export function MindMapNodeEditor({
   subjects,
   resources,
   links,
+  moveTargets,
   busy,
+  onDirtyChange,
   onSave,
   onDelete,
+  onMove,
   onAddResource,
   onDeleteResource,
   onOpenResource,
@@ -117,6 +132,7 @@ export function MindMapNodeEditor({
   const [pageEnd, setPageEnd] = useState("");
   const [resourceNote, setResourceNote] = useState("");
   const [resourceError, setResourceError] = useState<string>();
+  const [moveParentId, setMoveParentId] = useState(node.parentId ?? "");
   const effectiveDocumentId = resources.some(
     (resource) => resource.id === selectedDocumentId,
   )
@@ -125,6 +141,36 @@ export function MindMapNodeEditor({
   const selectedResource = resources.find(
     (resource) => resource.id === effectiveDocumentId,
   );
+  useEffect(() => {
+    onDirtyChange?.(
+      title !== node.title ||
+        noteMarkdown !== (node.noteMarkdown ?? "") ||
+        masteryState !== node.masteryState ||
+        importance !== String(node.importance) ||
+        subjectId !== (node.subjectId ?? "") ||
+        pageStart !== "" ||
+        pageEnd !== "" ||
+        resourceNote !== "" ||
+        moveParentId !== (node.parentId ?? ""),
+    );
+  }, [
+    importance,
+    masteryState,
+    moveParentId,
+    node.importance,
+    node.masteryState,
+    node.noteMarkdown,
+    node.parentId,
+    node.subjectId,
+    node.title,
+    noteMarkdown,
+    onDirtyChange,
+    pageEnd,
+    pageStart,
+    resourceNote,
+    subjectId,
+    title,
+  ]);
 
   const submitNode = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -185,6 +231,8 @@ export function MindMapNodeEditor({
         <label>
           标题
           <input
+            name="mindmap-node-title"
+            autoComplete="off"
             required
             maxLength={200}
             value={title}
@@ -194,9 +242,11 @@ export function MindMapNodeEditor({
         <label>
           节点笔记
           <textarea
+            name="mindmap-node-note"
+            autoComplete="off"
             rows={6}
             maxLength={10_000}
-            placeholder="记录定义、易错点、推导过程或复习提醒"
+            placeholder="记录定义、易错点、推导过程或复习提醒…"
             value={noteMarkdown}
             onChange={(event) => setNoteMarkdown(event.target.value)}
           />
@@ -205,6 +255,8 @@ export function MindMapNodeEditor({
           <label>
             掌握状态
             <select
+              name="mindmap-node-mastery"
+              autoComplete="off"
               value={masteryState}
               onChange={(event) =>
                 setMasteryState(event.target.value as MasteryState)
@@ -220,6 +272,8 @@ export function MindMapNodeEditor({
           <label>
             重要度
             <select
+              name="mindmap-node-importance"
+              autoComplete="off"
               value={importance}
               onChange={(event) => setImportance(event.target.value)}
             >
@@ -234,6 +288,8 @@ export function MindMapNodeEditor({
         <label>
           所属科目
           <select
+            name="mindmap-node-subject"
+            autoComplete="off"
             value={subjectId}
             onChange={(event) => setSubjectId(event.target.value)}
           >
@@ -279,6 +335,35 @@ export function MindMapNodeEditor({
             </button>
           )}
         </div>
+        {isRoot ? null : (
+          <div className="mindmap-node-move">
+            <label>
+              移到其他节点下
+              <select
+                name="mindmap-node-parent"
+                autoComplete="off"
+                value={moveParentId}
+                onChange={(event) => setMoveParentId(event.target.value)}
+              >
+                {moveTargets.map((target) => (
+                  <option key={target.id} value={target.id}>
+                    {target.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={
+                busy || moveParentId === "" || moveParentId === node.parentId
+              }
+              onClick={() => void onMove(moveParentId)}
+            >
+              移动节点
+            </button>
+          </div>
+        )}
       </form>
 
       <section
@@ -342,6 +427,8 @@ export function MindMapNodeEditor({
           <label>
             本地资料
             <select
+              name="mindmap-resource-document"
+              autoComplete="off"
               value={effectiveDocumentId}
               disabled={resources.length === 0}
               onChange={(event) => {
@@ -365,6 +452,8 @@ export function MindMapNodeEditor({
               <label>
                 起始页（可选）
                 <input
+                  name="mindmap-resource-page-start"
+                  autoComplete="off"
                   type="number"
                   min={1}
                   value={pageStart}
@@ -374,6 +463,8 @@ export function MindMapNodeEditor({
               <label>
                 结束页（可选）
                 <input
+                  name="mindmap-resource-page-end"
+                  autoComplete="off"
                   type="number"
                   min={1}
                   value={pageEnd}
@@ -385,8 +476,10 @@ export function MindMapNodeEditor({
           <label>
             关联说明
             <input
+              name="mindmap-resource-note"
+              autoComplete="off"
               maxLength={1000}
-              placeholder="例如：第 3 章例题与这个节点对应"
+              placeholder="例如：第 3 章例题与这个节点对应…"
               value={resourceNote}
               onChange={(event) => setResourceNote(event.target.value)}
             />

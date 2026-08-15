@@ -6,16 +6,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crate::application::{
-    AiUseCases, AnalyticsUseCases, BackupUseCases, KnowledgeUseCases, OcrUseCases,
-    PlanProgressUseCases, PlanScheduleUseCases, PlanningChatUseCases, PlanningUseCases,
-    QuestionUseCases, ResourceUseCases, ReviewUseCases, ScheduleUseCases, SearchUseCases,
-    WorkspaceUseCases,
+    AiUseCases, AnalyticsUseCases, BackupUseCases, CyclePlanUseCases, KnowledgeUseCases,
+    OcrUseCases, PlanProgressUseCases, PlanScheduleUseCases, PlanningChatUseCases,
+    PlanningUseCases, QuestionBankUseCases, QuestionUseCases, ResourceUseCases,
+    ReviewSchemeUseCases, ReviewUseCases, ScheduleUseCases, SearchUseCases, WorkspaceUseCases,
 };
 use crate::infrastructure::{
     LocalOcrWorker, ProviderRouter, SqliteAiRepository, SqliteAnalyticsRepository,
-    SqliteBackupStore, SqliteBlobStore, SqliteKnowledgeRepository, SqliteOcrRepository,
-    SqlitePlanProgressRepository, SqlitePlanningChatRepository, SqlitePlanningRepository,
-    SqliteQuestionRepository, SqliteReviewRepository, SqliteScheduleRepository,
+    SqliteBackupStore, SqliteBlobStore, SqliteCyclePlanRepository, SqliteKnowledgeRepository,
+    SqliteOcrRepository, SqlitePlanProgressRepository, SqlitePlanningChatRepository,
+    SqlitePlanningRepository, SqliteQuestionBankRepository, SqliteQuestionRepository,
+    SqliteReviewRepository, SqliteReviewSchemeRepository, SqliteScheduleRepository,
     SqliteSearchRepository, SqliteWorkspaceRepository, SystemSecretStore,
 };
 
@@ -99,6 +100,11 @@ impl OcrCoordinator {
         self.active_jobs().remove(operation_id);
     }
 
+    /// Reports whether a worker is still using the installed component.
+    pub(crate) fn is_active(&self) -> bool {
+        !self.active_jobs().is_empty()
+    }
+
     fn active_jobs(&self) -> MutexGuard<'_, HashMap<String, Arc<AtomicBool>>> {
         self.active.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -114,8 +120,11 @@ pub(crate) struct AppState {
     pub(crate) planning: PlanningUseCases<SqlitePlanningRepository>,
     pub(crate) knowledge: KnowledgeUseCases<SqliteKnowledgeRepository, SqliteBlobStore>,
     pub(crate) questions: QuestionUseCases<SqliteQuestionRepository>,
+    pub(crate) question_bank: QuestionBankUseCases<SqliteQuestionBankRepository>,
     pub(crate) ocr: OcrUseCases<SqliteOcrRepository, LocalOcrWorker>,
     pub(crate) reviews: ReviewUseCases<SqliteReviewRepository>,
+    pub(crate) review_schemes: ReviewSchemeUseCases<SqliteReviewSchemeRepository>,
+    pub(crate) cycle_plans: CyclePlanUseCases<SqliteCyclePlanRepository>,
     pub(crate) search: SearchUseCases<SqliteSearchRepository>,
     pub(crate) ai: AiUseCases<SqliteAiRepository, SystemSecretStore, ProviderRouter>,
     pub(crate) analytics: AnalyticsUseCases<SqliteAnalyticsRepository>,
@@ -142,8 +151,13 @@ impl AppState {
             SqlitePlanProgressRepository::new(application_data_directory);
         let knowledge_repository = SqliteKnowledgeRepository::new(application_data_directory);
         let question_repository = SqliteQuestionRepository::new(application_data_directory);
+        let question_bank_repository =
+            SqliteQuestionBankRepository::new(application_data_directory);
         let ocr_repository = SqliteOcrRepository::new(application_data_directory);
         let review_repository = SqliteReviewRepository::new(application_data_directory);
+        let review_scheme_repository =
+            SqliteReviewSchemeRepository::new(application_data_directory);
+        let cycle_plan_repository = SqliteCyclePlanRepository::new(application_data_directory);
         let search_repository = SqliteSearchRepository::new(application_data_directory);
         let ai_repository = SqliteAiRepository::new(application_data_directory);
         let analytics_repository = SqliteAnalyticsRepository::new(application_data_directory);
@@ -163,11 +177,14 @@ impl AppState {
                 ResourceUseCases::new(blob_store),
             ),
             questions: QuestionUseCases::new(question_repository),
+            question_bank: QuestionBankUseCases::new(question_bank_repository),
             ocr: OcrUseCases::new(
                 ocr_repository,
                 LocalOcrWorker::new(application_data_directory),
             ),
             reviews: ReviewUseCases::new(review_repository),
+            review_schemes: ReviewSchemeUseCases::new(review_scheme_repository),
+            cycle_plans: CyclePlanUseCases::new(cycle_plan_repository),
             search: SearchUseCases::new(search_repository),
             planning_chat: PlanningChatUseCases::new(planning_chat_repository, ai.clone()),
             ai,

@@ -14,6 +14,8 @@ export interface ViewportRectangle {
   height: number;
 }
 
+export type RegionEditHandle = "move" | "nw" | "ne" | "sw" | "se";
+
 export interface OcrRegionRenderSpec {
   scale: number;
   width: number;
@@ -21,6 +23,41 @@ export interface OcrRegionRenderSpec {
 }
 
 export const OCR_REGION_LONG_EDGE_PIXELS = 1600;
+
+export function adjustRegionRectangle(
+  origin: ViewportRectangle,
+  dx: number,
+  dy: number,
+  handle: RegionEditHandle,
+  pageWidth: number,
+  pageHeight: number,
+): ViewportRectangle {
+  const minimumSize = 12;
+  if (handle === "move") {
+    return {
+      ...origin,
+      left: clamp(origin.left + dx, 0, Math.max(0, pageWidth - origin.width)),
+      top: clamp(origin.top + dy, 0, Math.max(0, pageHeight - origin.height)),
+    };
+  }
+  const originalRight = origin.left + origin.width;
+  const originalBottom = origin.top + origin.height;
+  const changesLeft = handle === "nw" || handle === "sw";
+  const changesTop = handle === "nw" || handle === "ne";
+  const left = changesLeft
+    ? clamp(origin.left + dx, 0, originalRight - minimumSize)
+    : origin.left;
+  const right = changesLeft
+    ? originalRight
+    : clamp(originalRight + dx, origin.left + minimumSize, pageWidth);
+  const top = changesTop
+    ? clamp(origin.top + dy, 0, originalBottom - minimumSize)
+    : origin.top;
+  const bottom = changesTop
+    ? originalBottom
+    : clamp(originalBottom + dy, origin.top + minimumSize, pageHeight);
+  return { left, top, width: right - left, height: bottom - top };
+}
 
 export function normalizePdfSelection(
   pageNumber: number,

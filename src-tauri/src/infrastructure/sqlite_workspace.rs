@@ -94,6 +94,51 @@ const MIGRATION_014: Migration = Migration {
     name: "plan_stage_tasks",
     sql: include_str!("../../migrations/0014_plan_stage_tasks.sql"),
 };
+const MIGRATION_015: Migration = Migration {
+    version: 15,
+    name: "review_schemes",
+    sql: include_str!("../../migrations/0015_review_schemes.sql"),
+};
+const MIGRATION_016: Migration = Migration {
+    version: 16,
+    name: "review_cards_and_cycle_plans",
+    sql: include_str!("../../migrations/0016_review_cards_and_cycle_plans.sql"),
+};
+const MIGRATION_017: Migration = Migration {
+    version: 17,
+    name: "question_bank_index",
+    sql: include_str!("../../migrations/0017_question_bank_index.sql"),
+};
+const MIGRATION_018: Migration = Migration {
+    version: 18,
+    name: "resource_trash",
+    sql: include_str!("../../migrations/0018_resource_trash.sql"),
+};
+const MIGRATION_019: Migration = Migration {
+    version: 19,
+    name: "question_gap_acknowledgements",
+    sql: include_str!("../../migrations/0019_question_gap_acknowledgements.sql"),
+};
+const MIGRATION_020: Migration = Migration {
+    version: 20,
+    name: "question_bank_segment_trash",
+    sql: include_str!("../../migrations/0020_question_bank_segment_trash.sql"),
+};
+const MIGRATION_021: Migration = Migration {
+    version: 21,
+    name: "cycle_plan_shift_undo",
+    sql: include_str!("../../migrations/0021_cycle_plan_shift_undo.sql"),
+};
+const MIGRATION_022: Migration = Migration {
+    version: 22,
+    name: "cycle_plan_item_skipped",
+    sql: include_str!("../../migrations/0022_cycle_plan_item_skipped.sql"),
+};
+const MIGRATION_023: Migration = Migration {
+    version: 23,
+    name: "xmind_import_format",
+    sql: include_str!("../../migrations/0023_xmind_import_format.sql"),
+};
 const MIGRATIONS: &[Migration] = &[
     MIGRATION_001,
     MIGRATION_002,
@@ -109,6 +154,15 @@ const MIGRATIONS: &[Migration] = &[
     MIGRATION_012,
     MIGRATION_013,
     MIGRATION_014,
+    MIGRATION_015,
+    MIGRATION_016,
+    MIGRATION_017,
+    MIGRATION_018,
+    MIGRATION_019,
+    MIGRATION_020,
+    MIGRATION_021,
+    MIGRATION_022,
+    MIGRATION_023,
 ];
 
 /// `rusqlite` adapter for the single local workspace used in M1.
@@ -484,14 +538,16 @@ pub(crate) fn database_error(source: rusqlite::Error) -> PersistenceError {
 
 #[cfg(test)]
 mod tests {
-    use rusqlite::Connection;
+    use rusqlite::{Connection, OptionalExtension};
     use tempfile::tempdir;
 
     use super::{
         APPLICATION_ID, MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004, MIGRATION_005,
         MIGRATION_006, MIGRATION_007, MIGRATION_008, MIGRATION_009, MIGRATION_013,
-        MIGRATION_013_LEGACY_CHECKSUMS, MIGRATION_014, MIGRATIONS, Migration,
-        SqliteWorkspaceRepository, apply_migrations, configure_connection, migration_checksum,
+        MIGRATION_013_LEGACY_CHECKSUMS, MIGRATION_014, MIGRATION_015, MIGRATION_016, MIGRATION_019,
+        MIGRATION_020, MIGRATION_021, MIGRATION_022, MIGRATION_023, MIGRATIONS, Migration,
+        SqliteWorkspaceRepository, apply_migrations, configure_connection, migrate,
+        migration_checksum,
     };
     use crate::application::{PersistenceError, WorkspaceRepository};
     use crate::domain::{LATEST_SCHEMA_VERSION, NewWorkspace};
@@ -506,6 +562,177 @@ mod tests {
             .expect("workspace should initialize");
 
         assert_eq!(workspace.schema_version, LATEST_SCHEMA_VERSION);
+    }
+
+    #[test]
+    // The populated migration fixture intentionally keeps the full v21 SQL and
+    // post-migration integrity assertions together as one executable contract.
+    #[expect(clippy::too_many_lines)]
+    fn v21_populated_cycle_items_upgrade_to_v22_and_clear_ephemeral_undo() {
+        let mut connection = Connection::open_in_memory().expect("database should open");
+        connection
+            .pragma_update(None, "foreign_keys", true)
+            .expect("foreign keys should enable");
+        apply_migrations(&mut connection, &MIGRATIONS[..21]).expect("v21 schema should create");
+        connection
+            .execute_batch(
+                "INSERT INTO workspace(
+                    singleton_key, id, name, exam_name, exam_date, timezone,
+                    daily_review_quota, early_fill_enabled, created_at, updated_at, revision
+                 ) VALUES (
+                    1, '019f7328-4b66-7613-9729-e3570fc41525', 'test', NULL, NULL,
+                    'Asia/Shanghai', 5, 0, 100, 100, 1
+                 );
+                 INSERT INTO cycle_plan(
+                    id, workspace_id, name, total_units, unit_label, start_date, deadline,
+                    study_days_per_unit, schedule_mode, calendar_visible, archived_at,
+                    created_at, updated_at
+                 ) VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41526',
+                    '019f7328-4b66-7613-9729-e3570fc41525', 'cycle', 2, 'unit',
+                    '2026-08-01', '2026-09-01', 1, 'rhythm', 1, NULL, 100, 200
+                 );
+                 INSERT INTO cycle_plan_item(
+                    id, plan_id, unit_index, planned_start_date, planned_end_date,
+                    original_start_date, original_end_date, state, completed_at,
+                    shift_count, created_at, updated_at
+                 ) VALUES
+                    ('019f7328-4b66-7613-9729-e3570fc41527',
+                     '019f7328-4b66-7613-9729-e3570fc41526', 1,
+                     '2026-08-01', '2026-08-01', '2026-08-01', '2026-08-01',
+                     'completed', 150, 2, 100, 150),
+                    ('019f7328-4b66-7613-9729-e3570fc41528',
+                     '019f7328-4b66-7613-9729-e3570fc41526', 2,
+                     '2026-08-02', '2026-08-02', '2026-08-02', '2026-08-02',
+                     'pending', NULL, 3, 100, 160);
+                 INSERT INTO cycle_plan_shift_undo(
+                    undo_token, plan_id, shifted_item_count, created_at, expires_at
+                 ) VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41529',
+                    '019f7328-4b66-7613-9729-e3570fc41526', 1, 170, 5170
+                 );
+                 INSERT INTO cycle_plan_shift_undo_item(
+                    undo_token, item_id, before_planned_start_date, before_planned_end_date,
+                    before_shift_count, before_updated_at, shifted_planned_start_date,
+                    shifted_planned_end_date, shifted_shift_count, shifted_updated_at
+                 ) VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41529',
+                    '019f7328-4b66-7613-9729-e3570fc41528',
+                    '2026-08-01', '2026-08-01', 2, 150,
+                    '2026-08-02', '2026-08-02', 3, 160
+                 );",
+            )
+            .expect("v21 cycle data should insert");
+
+        apply_migrations(&mut connection, &[MIGRATION_022]).expect("v22 should migrate safely");
+
+        let items = connection
+            .prepare(
+                "SELECT id, state, completed_at, skipped_at, shift_count, created_at, updated_at
+                 FROM cycle_plan_item ORDER BY unit_index",
+            )
+            .expect("items should prepare")
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                    row.get::<_, Option<i64>>(3)?,
+                    row.get::<_, i64>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, i64>(6)?,
+                ))
+            })
+            .expect("items should query")
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .expect("items should load");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].1, "completed");
+        assert_eq!(items[0].2, Some(150));
+        assert_eq!(items[0].3, None);
+        assert_eq!((items[0].4, items[0].5, items[0].6), (2, 100, 150));
+        assert_eq!(items[1].1, "pending");
+        assert_eq!(items[1].2, None);
+        assert_eq!(items[1].3, None);
+        connection
+            .execute(
+                "UPDATE cycle_plan_item
+                 SET state = 'skipped', skipped_at = 170, updated_at = 170
+                 WHERE id = '019f7328-4b66-7613-9729-e3570fc41528'",
+                [],
+            )
+            .expect("valid skipped state should satisfy the v22 check");
+        let invalid = connection.execute(
+            "UPDATE cycle_plan_item SET completed_at = 170
+             WHERE id = '019f7328-4b66-7613-9729-e3570fc41528'",
+            [],
+        );
+        assert!(invalid.is_err());
+        let undo_count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM cycle_plan_shift_undo", [], |row| {
+                row.get(0)
+            })
+            .expect("undo count should load");
+        assert_eq!(undo_count, 0);
+        let foreign_key_target: String = connection
+            .query_row(
+                "PRAGMA foreign_key_list(cycle_plan_shift_undo_item)",
+                [],
+                |row| row.get(2),
+            )
+            .expect("undo item foreign key should exist");
+        assert_eq!(foreign_key_target, "cycle_plan_item");
+        let foreign_key_error: Option<String> = connection
+            .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
+            .optional()
+            .expect("foreign key check should run");
+        assert!(foreign_key_error.is_none());
+    }
+
+    #[test]
+    fn v14_upgrade_to_latest_preserves_legacy_questions_and_adds_cycle_plans() {
+        let mut connection = Connection::open_in_memory().expect("database should open");
+        apply_migrations(&mut connection, &MIGRATIONS[..14]).expect("v14 schema should create");
+        let workspace_id = "019f7328-4b66-7613-9729-e3570fc41525";
+        let blob_id = "019f7328-4b66-7613-9729-e3570fc41526";
+        let document_id = "019f7328-4b66-7613-9729-e3570fc41527";
+        let question_id = "019f7328-4b66-7613-9729-e3570fc41528";
+        connection
+            .execute_batch(&format!(
+                "INSERT INTO workspace(
+                    singleton_key, id, name, exam_name, exam_date, timezone,
+                    daily_review_quota, early_fill_enabled, created_at, updated_at, revision
+                 ) VALUES (1, '{workspace_id}', '测试', NULL, NULL, 'Asia/Shanghai', 5, 0, 1, 1, 1);
+                 INSERT INTO blob(id, workspace_id, sha256, size_bytes, storage_key, created_at)
+                 VALUES ('{blob_id}', '{workspace_id}', '{}', 1, 'blobs/test', 1);
+                 INSERT INTO resource_document(
+                    id, workspace_id, blob_id, title, original_name, kind, mime_type,
+                    created_at, updated_at, revision, role, page_count
+                 ) VALUES ('{document_id}', '{workspace_id}', '{blob_id}', '旧习题册',
+                           'old.pdf', 'pdf', 'application/pdf', 1, 1, 1, 'workbook', 10);
+                 INSERT INTO question(
+                    id, workspace_id, document_id, title, chapter, question_number,
+                    difficulty, analysis_markdown, deleted_at, created_at, updated_at
+                 ) VALUES ('{question_id}', '{workspace_id}', '{document_id}', '旧错题',
+                           NULL, NULL, 3, NULL, NULL, 1, 1);",
+                "A".repeat(64)
+            ))
+            .expect("legacy data should insert");
+
+        migrate(&mut connection).expect("pending migrations should apply");
+        let classification: (Option<String>, String, i64, i64) = connection
+            .query_row(
+                "SELECT question_type, classification_source,
+                        (SELECT COUNT(*) FROM question WHERE id = ?1),
+                        (SELECT COUNT(*) FROM sqlite_schema
+                         WHERE type = 'table' AND name = 'cycle_plan')
+                 FROM question WHERE id = ?1",
+                [question_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("legacy question should remain readable");
+
+        assert_eq!(classification, (None, "pending".to_owned(), 1, 1));
     }
 
     #[test]
@@ -769,6 +996,110 @@ mod tests {
                 .contains("CREATE TABLE question_region_ocr_line")
         );
         assert!(MIGRATION_014.sql.contains("CREATE TABLE plan_stage_task"));
+        assert!(MIGRATION_015.sql.contains("CREATE TABLE review_scheme"));
+        assert!(MIGRATION_016.sql.contains("CREATE TABLE cycle_plan"));
+        assert!(
+            MIGRATION_016
+                .sql
+                .contains("CREATE TABLE review_scheme_undo")
+        );
+        assert!(
+            MIGRATION_019
+                .sql
+                .contains("CREATE TABLE question_gap_acknowledgement")
+        );
+        assert!(
+            MIGRATION_020
+                .sql
+                .contains("CREATE TABLE workbook_segment_question_trash")
+        );
+        assert!(
+            MIGRATION_021
+                .sql
+                .contains("CREATE TABLE cycle_plan_shift_undo")
+        );
+        assert!(
+            MIGRATION_022
+                .sql
+                .contains("CREATE TABLE cycle_plan_item_new")
+        );
+        assert!(MIGRATION_023.sql.contains("'xmind'"));
+    }
+
+    #[test]
+    fn find_default_upgrades_v22_mindmap_drafts_to_allow_xmind() {
+        let directory = tempdir().expect("temporary directory should exist");
+        let repository = SqliteWorkspaceRepository::new(directory.path());
+        std::fs::create_dir_all(repository.workspace_directory())
+            .expect("workspace directory should exist");
+        let mut connection =
+            Connection::open(repository.database_path()).expect("workspace database should open");
+        configure_connection(&connection).expect("connection should configure");
+        apply_migrations(&mut connection, &MIGRATIONS[..22]).expect("v22 schema should create");
+        connection
+            .execute_batch(
+                "INSERT INTO workspace(
+                    singleton_key, id, name, exam_name, exam_date, timezone,
+                    daily_review_quota, early_fill_enabled, created_at, updated_at, revision
+                 ) VALUES (
+                    1, '019f7328-4b66-7613-9729-e3570fc41525', 'test', NULL, NULL,
+                    'Asia/Shanghai', 5, 0, 1, 1, 1
+                 );
+                 INSERT INTO blob(id, workspace_id, sha256, size_bytes, storage_key, created_at)
+                 VALUES ('019f7328-4b66-7613-9729-e3570fc41526',
+                         '019f7328-4b66-7613-9729-e3570fc41525',
+                        'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+                        1, 'blobs/test', 1);
+                 INSERT INTO resource_document(
+                    id, workspace_id, blob_id, title, original_name, kind, mime_type,
+                    created_at, updated_at, revision, role
+                 )
+                 VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41527',
+                    '019f7328-4b66-7613-9729-e3570fc41525',
+                    '019f7328-4b66-7613-9729-e3570fc41526', 'xmind', 'xmind.xmind',
+                    'mindmap_source', 'application/x-xmind', 1, 1, 1, 'other'
+                 );
+                 INSERT INTO map_import_draft(
+                    id, workspace_id, source_resource_id, source_format, title,
+                    draft_tree_json, warnings_json, node_count, state, accepted_map_id,
+                    created_at, updated_at
+                 )
+                 VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41528',
+                    '019f7328-4b66-7613-9729-e3570fc41525',
+                    '019f7328-4b66-7613-9729-e3570fc41527', 'opml', '旧草案',
+                    '{\"title\":\"根\",\"children\":[]}', '[]', 1, 'generated', NULL, 1, 1
+                 );",
+            )
+            .expect("v22 fixture should insert");
+        drop(connection);
+
+        repository
+            .find_default()
+            .expect("v22 workspace should upgrade");
+
+        let connection =
+            Connection::open(repository.database_path()).expect("upgraded database should open");
+        let version: u32 = connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .expect("schema version should be readable");
+        connection
+            .execute(
+                "INSERT INTO map_import_draft(
+                    id, workspace_id, source_resource_id, source_format, title,
+                    draft_tree_json, warnings_json, node_count, state, accepted_map_id,
+                    created_at, updated_at
+                 )
+                 SELECT '019f7328-4b66-7613-9729-e3570fc41529', id,
+                        '019f7328-4b66-7613-9729-e3570fc41527', 'xmind', 'XMind 草案',
+                        '{\"title\":\"根\",\"children\":[]}', '[]', 1, 'generated', NULL, 2, 2
+                 FROM workspace",
+                [],
+            )
+            .expect("upgraded schema should accept XMind drafts");
+
+        assert_eq!(version, LATEST_SCHEMA_VERSION);
     }
 
     #[test]

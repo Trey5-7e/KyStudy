@@ -9,6 +9,7 @@ use crate::domain::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SavePlanInput {
     pub(crate) id: Option<String>,
+    pub(crate) expected_revision: Option<u32>,
     pub(crate) title: String,
     pub(crate) target_exam: Option<String>,
     pub(crate) exam_date: Option<String>,
@@ -20,6 +21,7 @@ pub(crate) struct SavePlanInput {
 pub(crate) struct SavePlanStageInput {
     pub(crate) id: Option<String>,
     pub(crate) plan_id: String,
+    pub(crate) expected_plan_revision: u32,
     pub(crate) title: String,
     pub(crate) start_date: String,
     pub(crate) end_date: String,
@@ -31,6 +33,7 @@ pub(crate) struct SavePlanStageInput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AddPlanReferenceInput {
     pub(crate) plan_id: String,
+    pub(crate) expected_plan_revision: u32,
     pub(crate) document_id: String,
     pub(crate) page_start: u32,
     pub(crate) page_end: u32,
@@ -46,6 +49,8 @@ pub(crate) enum PlanningError {
     InvalidInput,
     #[error("study plan was not found")]
     PlanNotFound,
+    #[error("study plan was changed by another window")]
+    PlanSaveStale,
     #[error("plan stage was not found")]
     StageNotFound,
     #[error("plan reference was not found")]
@@ -63,6 +68,7 @@ impl PlanningError {
             Self::WorkspaceNotInitialized => "WORKSPACE_NOT_INITIALIZED",
             Self::InvalidInput => "PLAN_INPUT_INVALID",
             Self::PlanNotFound => "PLAN_NOT_FOUND",
+            Self::PlanSaveStale => "PLAN_SAVE_STALE",
             Self::StageNotFound => "PLAN_STAGE_NOT_FOUND",
             Self::ReferenceNotFound => "PLAN_REFERENCE_NOT_FOUND",
             Self::InvalidReference => "PLAN_REFERENCE_INVALID",
@@ -74,17 +80,40 @@ impl PlanningError {
 /// Persistence operations required by manual plan editing.
 pub(crate) trait PlanningRepository: Clone + Send + Sync + 'static {
     fn list_plans(&self) -> Result<Vec<StudyPlanBundle>, PlanningError>;
-    fn save_plan(&self, plan: StudyPlan) -> Result<StudyPlanBundle, PlanningError>;
+    fn save_plan(
+        &self,
+        plan: StudyPlan,
+        expected_revision: Option<u32>,
+    ) -> Result<StudyPlanBundle, PlanningError>;
     fn set_plan_status(
         &self,
         plan_id: &str,
+        expected_revision: u32,
         status: PlanStatus,
         updated_at: i64,
     ) -> Result<StudyPlanBundle, PlanningError>;
-    fn save_stage(&self, stage: PlanStage) -> Result<PlanStage, PlanningError>;
-    fn delete_stage(&self, stage_id: &str) -> Result<(), PlanningError>;
-    fn add_reference(&self, reference: PlanReference) -> Result<PlanReference, PlanningError>;
-    fn delete_reference(&self, reference_id: &str) -> Result<(), PlanningError>;
+    fn save_stage(
+        &self,
+        stage: PlanStage,
+        expected_plan_revision: u32,
+    ) -> Result<PlanStage, PlanningError>;
+    fn delete_stage(
+        &self,
+        stage_id: &str,
+        expected_plan_revision: u32,
+        updated_at: i64,
+    ) -> Result<(), PlanningError>;
+    fn add_reference(
+        &self,
+        reference: PlanReference,
+        expected_plan_revision: u32,
+    ) -> Result<PlanReference, PlanningError>;
+    fn delete_reference(
+        &self,
+        reference_id: &str,
+        expected_plan_revision: u32,
+        updated_at: i64,
+    ) -> Result<(), PlanningError>;
 }
 
 /// Manual personal-planning use cases with explicit confirmation transitions.
@@ -116,26 +145,34 @@ impl<R: PlanningRepository> PlanningUseCases<R> {
             ),
             _ => None,
         };
+        let updating = input.id.is_some();
         let id = input.id.unwrap_or_else(|| Uuid::now_v7().to_string());
         if !is_identifier(&id) {
             return Err(PlanningError::InvalidInput);
         }
-        self.repository.save_plan(StudyPlan {
-            id,
-            title,
-            target_exam,
-            exam_date,
-            overview,
-            status: PlanStatus::Draft,
-            revision: 1,
-            created_at: now,
-            updated_at: now,
-        })
+        if updating != input.expected_revision.is_some() {
+            return Err(PlanningError::InvalidInput);
+        }
+        self.repository.save_plan(
+            StudyPlan {
+                id,
+                title,
+                target_exam,
+                exam_date,
+                overview,
+                status: PlanStatus::Draft,
+                revision: 1,
+                created_at: now,
+                updated_at: now,
+            },
+            input.expected_revision,
+        )
     }
 
     pub(crate) fn set_status(
         &self,
         plan_id: &str,
+        expected_revision: u32,
         status: &str,
     ) -> Result<StudyPlanBundle, PlanningError> {
         if !is_identifier(plan_id) {
@@ -143,7 +180,7 @@ impl<R: PlanningRepository> PlanningUseCases<R> {
         }
         let status = PlanStatus::parse(status).ok_or(PlanningError::InvalidInput)?;
         self.repository
-            .set_plan_status(plan_id, status, current_utc_millis()?)
+            .set_plan_status(plan_id, expected_revision, status, current_utc_millis()?)
     }
 
     pub(crate) fn save_stage(&self, input: SavePlanStageInput) -> Result<PlanStage, PlanningError> {
@@ -160,24 +197,32 @@ impl<R: PlanningRepository> PlanningUseCases<R> {
             return Err(PlanningError::InvalidInput);
         }
         let now = current_utc_millis()?;
-        self.repository.save_stage(PlanStage {
-            id,
-            plan_id: input.plan_id,
-            title: required_text(&input.title, 120)?,
-            start_date: start.as_str().to_owned(),
-            end_date: end.as_str().to_owned(),
-            focus: optional_text(input.focus, 4000)?,
-            sort_order: input.sort_order,
-            created_at: now,
-            updated_at: now,
-        })
+        self.repository.save_stage(
+            PlanStage {
+                id,
+                plan_id: input.plan_id,
+                title: required_text(&input.title, 120)?,
+                start_date: start.as_str().to_owned(),
+                end_date: end.as_str().to_owned(),
+                focus: optional_text(input.focus, 4000)?,
+                sort_order: input.sort_order,
+                created_at: now,
+                updated_at: now,
+            },
+            input.expected_plan_revision,
+        )
     }
 
-    pub(crate) fn delete_stage(&self, stage_id: &str) -> Result<(), PlanningError> {
+    pub(crate) fn delete_stage(
+        &self,
+        stage_id: &str,
+        expected_plan_revision: u32,
+    ) -> Result<(), PlanningError> {
         if !is_identifier(stage_id) {
             return Err(PlanningError::InvalidInput);
         }
-        self.repository.delete_stage(stage_id)
+        self.repository
+            .delete_stage(stage_id, expected_plan_revision, current_utc_millis()?)
     }
 
     pub(crate) fn add_reference(
@@ -191,23 +236,34 @@ impl<R: PlanningRepository> PlanningUseCases<R> {
         {
             return Err(PlanningError::InvalidReference);
         }
-        self.repository.add_reference(PlanReference {
-            id: Uuid::now_v7().to_string(),
-            plan_id: input.plan_id,
-            document_id: input.document_id,
-            document_title: String::new(),
-            page_start: input.page_start,
-            page_end: input.page_end,
-            note: optional_text(input.note, 1000)?,
-            created_at: current_utc_millis()?,
-        })
+        self.repository.add_reference(
+            PlanReference {
+                id: Uuid::now_v7().to_string(),
+                plan_id: input.plan_id,
+                document_id: input.document_id,
+                document_title: String::new(),
+                page_start: input.page_start,
+                page_end: input.page_end,
+                note: optional_text(input.note, 1000)?,
+                created_at: current_utc_millis()?,
+            },
+            input.expected_plan_revision,
+        )
     }
 
-    pub(crate) fn delete_reference(&self, reference_id: &str) -> Result<(), PlanningError> {
+    pub(crate) fn delete_reference(
+        &self,
+        reference_id: &str,
+        expected_plan_revision: u32,
+    ) -> Result<(), PlanningError> {
         if !is_identifier(reference_id) {
             return Err(PlanningError::InvalidInput);
         }
-        self.repository.delete_reference(reference_id)
+        self.repository.delete_reference(
+            reference_id,
+            expected_plan_revision,
+            current_utc_millis()?,
+        )
     }
 }
 

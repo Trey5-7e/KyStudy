@@ -3,6 +3,7 @@ import {
   useImperativeHandle,
   useRef,
   useState,
+  type KeyboardEvent,
   type PointerEvent,
   type Ref,
 } from "react";
@@ -16,10 +17,13 @@ import { openPdf, type PdfSession } from "./pdfEngine";
 import { HttpRangeSource } from "./rangeSource";
 import { RenderCoordinator } from "./renderCoordinator";
 import {
+  adjustRegionRectangle,
   buildOcrRegionRenderSpec,
   normalizePdfSelection,
   projectNormalizedRegion,
   type PdfPageView,
+  type RegionEditHandle,
+  type ViewportRectangle,
 } from "./pdfRegions";
 
 export interface PdfRegionOverlay {
@@ -43,6 +47,8 @@ interface PdfReaderProps {
   regions?: PdfRegionOverlay[];
   captureMode?: boolean;
   onRegionCapture?(region: Omit<PdfRegionOverlay, "id">): void;
+  editableRegions?: boolean;
+  onRegionChange?(region: PdfRegionOverlay): void;
 }
 
 interface RenderedPage {
@@ -56,6 +62,21 @@ interface PointerSelection {
   current: readonly [number, number];
 }
 
+interface RegionAdjustment {
+  regionId: string;
+  handle: RegionEditHandle;
+  start: readonly [number, number];
+  origin: ViewportRectangle;
+  current: ViewportRectangle;
+}
+
+const REGION_EDIT_HANDLES: ReadonlyArray<Exclude<RegionEditHandle, "move">> = [
+  "nw",
+  "ne",
+  "sw",
+  "se",
+];
+
 export function PdfReader({
   ref,
   descriptor,
@@ -64,8 +85,11 @@ export function PdfReader({
   regions = [],
   captureMode = false,
   onRegionCapture,
+  editableRegions = false,
+  onRegionChange,
 }: PdfReaderProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const regionLayerRef = useRef<HTMLDivElement>(null);
   const coordinatorRef = useRef(new RenderCoordinator());
   const [session, setSession] = useState<PdfSession>();
   const [pageNumber, setPageNumber] = useState(
@@ -77,6 +101,7 @@ export function PdfReader({
   const [status, setStatus] = useState("正在按范围加载 PDF…");
   const [renderedPage, setRenderedPage] = useState<RenderedPage>();
   const [selection, setSelection] = useState<PointerSelection>();
+  const [regionAdjustment, setRegionAdjustment] = useState<RegionAdjustment>();
 
   useImperativeHandle(
     ref,
@@ -85,7 +110,7 @@ export function PdfReader({
         if (session === undefined) {
           throw new Error("PDF_READER_NOT_READY");
         }
-        return captureRegionPng(session, region);
+        return capturePdfRegionPng(session, region);
       },
     }),
     [session],
@@ -192,9 +217,10 @@ export function PdfReader({
   };
 
   const pointerPosition = (
-    event: PointerEvent<HTMLDivElement>,
+    event: Pick<PointerEvent<HTMLElement>, "clientX" | "clientY">,
   ): readonly [number, number] => {
-    const bounds = event.currentTarget.getBoundingClientRect();
+    const bounds = regionLayerRef.current?.getBoundingClientRect();
+    if (bounds === undefined) return [0, 0];
     return [event.clientX - bounds.left, event.clientY - bounds.top];
   };
 
@@ -225,6 +251,83 @@ export function PdfReader({
     onRegionCapture(region);
     setSelection(undefined);
     setStatus(`已框选第 ${renderedPage.pageNumber} 页区域，等待保存`);
+  };
+
+  const beginRegionAdjustment = (
+    event: PointerEvent<HTMLButtonElement>,
+    regionId: string,
+    handle: RegionEditHandle,
+    origin: ViewportRectangle,
+  ) => {
+    if (!editableRegions || onRegionChange === undefined) return;
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const start = pointerPosition(event);
+    setSelection(undefined);
+    setRegionAdjustment({ regionId, handle, start, origin, current: origin });
+  };
+
+  const adjustedRegionRectangle = (
+    event: Pick<PointerEvent<HTMLElement>, "clientX" | "clientY">,
+    adjustment: RegionAdjustment,
+  ): ViewportRectangle => {
+    const point = pointerPosition(event);
+    const layer = regionLayerRef.current;
+    return adjustRegionRectangle(
+      adjustment.origin,
+      point[0] - adjustment.start[0],
+      point[1] - adjustment.start[1],
+      adjustment.handle,
+      layer?.clientWidth ?? 1,
+      layer?.clientHeight ?? 1,
+    );
+  };
+
+  const commitRegionRectangle = (
+    region: PdfRegionOverlay,
+    rectangle: ViewportRectangle,
+  ) => {
+    if (renderedPage === undefined || onRegionChange === undefined) return;
+    const normalized = normalizePdfSelection(
+      renderedPage.pageNumber,
+      renderedPage.pageView,
+      renderedPage.viewport,
+      [rectangle.left, rectangle.top],
+      [rectangle.left + rectangle.width, rectangle.top + rectangle.height],
+    );
+    onRegionChange({ ...region, ...normalized });
+    setStatus(`已调整第 ${renderedPage.pageNumber} 页区域，等待保存`);
+  };
+
+  const nudgeRegion = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    region: PdfRegionOverlay,
+    handle: RegionEditHandle,
+    origin: ViewportRectangle,
+  ) => {
+    if (!event.key.startsWith("Arrow")) return;
+    event.preventDefault();
+    const delta = event.shiftKey ? 12 : 4;
+    const dx =
+      event.key === "ArrowLeft"
+        ? -delta
+        : event.key === "ArrowRight"
+          ? delta
+          : 0;
+    const dy =
+      event.key === "ArrowUp" ? -delta : event.key === "ArrowDown" ? delta : 0;
+    const layer = regionLayerRef.current;
+    commitRegionRectangle(
+      region,
+      adjustRegionRectangle(
+        origin,
+        dx,
+        dy,
+        handle,
+        layer?.clientWidth ?? 1,
+        layer?.clientHeight ?? 1,
+      ),
+    );
   };
 
   const visibleRegions =
@@ -265,6 +368,9 @@ export function PdfReader({
           页码
           <input
             type="number"
+            name="pdfPageNumber"
+            autoComplete="off"
+            inputMode="numeric"
             min={1}
             max={pageCount}
             value={pageInput}
@@ -303,8 +409,15 @@ export function PdfReader({
         <div className="pdf-page-stage">
           <canvas ref={canvasRef} aria-label={`PDF 第 ${pageNumber} 页`} />
           <div
-            className={`pdf-region-layer${captureMode ? " pdf-region-capture" : ""}`}
-            aria-label={captureMode ? "拖动框选题目区域" : "已保存题目区域"}
+            ref={regionLayerRef}
+            className={`pdf-region-layer${captureMode ? " pdf-region-capture" : ""}${editableRegions ? " pdf-region-edit" : ""}`}
+            aria-label={
+              editableRegions
+                ? "拖动题目区域或边角进行调整"
+                : captureMode
+                  ? "拖动框选题目区域"
+                  : "已保存题目区域"
+            }
             onPointerDown={(event) => {
               if (!captureMode || renderedPage === undefined) {
                 return;
@@ -314,7 +427,17 @@ export function PdfReader({
               setSelection({ start: point, current: point });
             }}
             onPointerMove={(event) => {
-              if (selection !== undefined && captureMode) {
+              if (regionAdjustment !== undefined) {
+                const current = adjustedRegionRectangle(
+                  event,
+                  regionAdjustment,
+                );
+                setRegionAdjustment((adjustment) =>
+                  adjustment === undefined
+                    ? undefined
+                    : { ...adjustment, current },
+                );
+              } else if (selection !== undefined && captureMode) {
                 const point = pointerPosition(event);
                 setSelection((current) =>
                   current === undefined
@@ -323,8 +446,26 @@ export function PdfReader({
                 );
               }
             }}
-            onPointerUp={finishSelection}
-            onPointerCancel={() => setSelection(undefined)}
+            onPointerUp={(event) => {
+              if (regionAdjustment === undefined) {
+                finishSelection(event);
+                return;
+              }
+              const region = regions.find(
+                (item) => item.id === regionAdjustment.regionId,
+              );
+              if (region !== undefined) {
+                commitRegionRectangle(
+                  region,
+                  adjustedRegionRectangle(event, regionAdjustment),
+                );
+              }
+              setRegionAdjustment(undefined);
+            }}
+            onPointerCancel={() => {
+              setSelection(undefined);
+              setRegionAdjustment(undefined);
+            }}
           >
             {renderedPage === undefined
               ? null
@@ -334,6 +475,55 @@ export function PdfReader({
                     renderedPage.viewport,
                     region,
                   );
+                  const visibleRectangle =
+                    regionAdjustment?.regionId === region.id
+                      ? regionAdjustment.current
+                      : rectangle;
+                  if (editableRegions) {
+                    return (
+                      <div
+                        key={region.id}
+                        className="pdf-saved-region pdf-editable-region"
+                        style={visibleRectangle}
+                      >
+                        <button
+                          type="button"
+                          className="pdf-region-move-handle"
+                          aria-label="移动题目区域；方向键微调，Shift 加速"
+                          onPointerDown={(event) =>
+                            beginRegionAdjustment(
+                              event,
+                              region.id,
+                              "move",
+                              rectangle,
+                            )
+                          }
+                          onKeyDown={(event) =>
+                            nudgeRegion(event, region, "move", rectangle)
+                          }
+                        />
+                        {REGION_EDIT_HANDLES.map((handle) => (
+                          <button
+                            key={handle}
+                            type="button"
+                            className={`pdf-region-resize-handle pdf-region-resize-${handle}`}
+                            aria-label={`${regionHandleLabel(handle)}；方向键微调，Shift 加速`}
+                            onPointerDown={(event) =>
+                              beginRegionAdjustment(
+                                event,
+                                region.id,
+                                handle,
+                                rectangle,
+                              )
+                            }
+                            onKeyDown={(event) =>
+                              nudgeRegion(event, region, handle, rectangle)
+                            }
+                          />
+                        ))}
+                      </div>
+                    );
+                  }
                   return (
                     <span
                       key={region.id}
@@ -353,7 +543,17 @@ export function PdfReader({
   );
 }
 
-async function captureRegionPng(
+function regionHandleLabel(handle: Exclude<RegionEditHandle, "move">): string {
+  const labels = {
+    nw: "调整题目区域左上角",
+    ne: "调整题目区域右上角",
+    sw: "调整题目区域左下角",
+    se: "调整题目区域右下角",
+  } as const;
+  return labels[handle];
+}
+
+export async function capturePdfRegionPng(
   session: PdfSession,
   region: PdfRegionOverlay,
 ): Promise<Uint8Array> {

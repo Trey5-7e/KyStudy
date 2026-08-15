@@ -97,4 +97,18 @@ describe("normalizeResourceCommandError", () => {
 
     expect(error.code).toBe("RESOURCE_UNAVAILABLE");
   });
+
+  it("preserves stable workspace failures for mind-map commands", () => {
+    const error = normalizeResourceCommandError({
+      code: "DATABASE_ERROR",
+      operationId: "operation-1",
+    });
+
+    expect(error).toEqual({
+      code: "DATABASE_ERROR",
+      message: "本地工作区暂时无法打开。",
+      action: "重新启动应用；如果仍失败，请导出诊断信息。",
+      operationId: "operation-1",
+    });
+  });
 });

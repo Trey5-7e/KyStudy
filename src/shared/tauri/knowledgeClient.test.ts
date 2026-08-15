@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseKnowledgeMapBundle,
   parseMindMapImportDraft,
+  normalizeKnowledgeError,
 } from "./knowledgeClient";
 
 const VALID_BUNDLE = {
@@ -80,6 +81,17 @@ describe("parseKnowledgeMapBundle", () => {
   });
 });
 
+describe("normalizeKnowledgeError", () => {
+  it("keeps persistence failures actionable instead of hiding them as resource outages", () => {
+    const error = normalizeKnowledgeError({
+      code: "WORKSPACE_STORAGE_UNAVAILABLE",
+    });
+
+    expect(error.code).toBe("WORKSPACE_STORAGE_UNAVAILABLE");
+    expect(error.message).toBe("无法访问本地工作区存储。");
+  });
+});
+
 describe("parseMindMapImportDraft", () => {
   it("accepts a bounded typed preview tree", () => {
     const parsed = parseMindMapImportDraft({
@@ -101,6 +113,23 @@ describe("parseMindMapImportDraft", () => {
     });
 
     expect(parsed.tree.children[0]?.title).toBe("数据结构");
+  });
+
+  it("accepts an XMind preview format", () => {
+    const parsed = parseMindMapImportDraft({
+      id: "xmind-draft",
+      sourceResourceId: "source-id",
+      sourceFormat: "xmind",
+      title: "XMind 大纲",
+      tree: { title: "根主题", children: [] },
+      warnings: ["样式未导入"],
+      nodeCount: 1,
+      state: "generated",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    expect(parsed.sourceFormat).toBe("xmind");
   });
 
   it("rejects a dishonest node count", () => {

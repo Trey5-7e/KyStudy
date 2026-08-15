@@ -12,12 +12,15 @@ import { listKnowledgeMaps } from "../../shared/tauri/knowledgeClient";
 import {
   addQuestionAttempt,
   addQuestionRegion,
+  batchClassifyQuestions,
   createQuestion,
   deleteQuestionRegion,
+  getWorkbookProfile,
   listTrashedQuestions,
   listWorkbookQuestions,
   normalizeQuestionError,
   restoreQuestion,
+  setWorkbookDefaultSubject,
   trashQuestion,
   updateQuestion,
   type AttemptResult,
@@ -25,7 +28,9 @@ import {
   type QuestionBundle,
   type QuestionRegion,
   type QuestionRegionInput,
+  type QuestionType,
   type UpdateQuestionInput,
+  type WorkbookProfile,
 } from "../../shared/tauri/questionClient";
 import {
   getResourceReaderDescriptor,
@@ -39,19 +44,36 @@ import type {
   PdfReaderHandle,
   PdfRegionOverlay,
 } from "../library/pdf/PdfReader";
-import { localDateForTimezone } from "../../shared/tauri/scheduleClient";
+import {
+  listSubjects,
+  localDateForTimezone,
+  type StudySubject,
+} from "../../shared/tauri/scheduleClient";
 import { getWorkspaceStatus } from "../../shared/tauri/workspaceClient";
 import {
   normalizeReviewError,
   setQuestionReview,
 } from "../../shared/tauri/reviewClient";
 import { QuestionOcrPanel } from "./QuestionOcrPanel";
+import { EditorDialog } from "../../shared/components/EditorDialog";
+import { QuestionBankPanel } from "./QuestionBankPanel";
+import type { QuestionBankOpenRequest } from "./questionBankWindowModel";
 
 const PdfReader = lazy(() =>
   import("../library/pdf/PdfReader").then((module) => ({
     default: module.PdfReader,
   })),
 );
+
+const QUESTION_TYPE_OPTIONS: ReadonlyArray<{
+  value: QuestionType;
+  label: string;
+}> = [
+  { value: "choice", label: "选择题" },
+  { value: "blank", label: "填空题" },
+  { value: "solution", label: "解答题" },
+  { value: "other", label: "其他" },
+];
 
 interface KnowledgeOption {
   nodeId: string;
@@ -62,6 +84,7 @@ interface QuestionCreateFormProps {
   documentId: string;
   region: QuestionRegionInput;
   knowledgeOptions: KnowledgeOption[];
+  subjects: StudySubject[];
   busy: boolean;
   onSave(input: CreateQuestionInput): Promise<boolean>;
   onCancel(): void;
@@ -70,6 +93,7 @@ interface QuestionCreateFormProps {
 interface QuestionEditorProps {
   bundle: QuestionBundle;
   knowledgeOptions: KnowledgeOption[];
+  subjects: StudySubject[];
   busy: boolean;
   onSave(input: UpdateQuestionInput): Promise<boolean>;
   onOpenRegion(region: QuestionRegion): void;
@@ -82,18 +106,31 @@ interface QuestionEditorProps {
   onActivateReview(userPriority: number): Promise<boolean>;
   onCaptureRegion(region: QuestionRegion): Promise<Uint8Array>;
   onTrash(): void;
+  onDirtyChange(dirty: boolean): void;
 }
 
-export function WorkbookPanel() {
+export function WorkbookPanel({
+  openRequest,
+}: {
+  openRequest?: QuestionBankOpenRequest;
+}) {
+  return <QuestionBankPanel openRequest={openRequest} />;
+}
+
+export function LegacyManualWorkbookPanel() {
   const [resources, setResources] = useState<ResourceDocument[]>([]);
   const [questions, setQuestions] = useState<QuestionBundle[]>([]);
   const [trashed, setTrashed] = useState<QuestionBundle[]>([]);
   const [knowledgeOptions, setKnowledgeOptions] = useState<KnowledgeOption[]>(
     [],
   );
+  const [subjects, setSubjects] = useState<StudySubject[]>([]);
+  const [workbookProfile, setWorkbookProfile] = useState<WorkbookProfile>();
   const [timezone, setTimezone] = useState("Asia/Shanghai");
   const [selectedWorkbookId, setSelectedWorkbookId] = useState<string>();
   const [selectedQuestionId, setSelectedQuestionId] = useState<string>();
+  const [questionEditorOpen, setQuestionEditorOpen] = useState(false);
+  const [questionEditorDirty, setQuestionEditorDirty] = useState(false);
   const [reader, setReader] = useState<ResourceReaderDescriptor>();
   const [requestedPage, setRequestedPage] = useState<number>();
   const [readerNonce, setReaderNonce] = useState(0);
@@ -135,8 +172,9 @@ export function WorkbookPanel() {
       listKnowledgeMaps(),
       listTrashedQuestions(),
       getWorkspaceStatus(),
+      listSubjects(),
     ]).then(
-      ([loadedResources, maps, loadedTrashed, workspace]) => {
+      ([loadedResources, maps, loadedTrashed, workspace, loadedSubjects]) => {
         if (!active) {
           return;
         }
@@ -151,6 +189,9 @@ export function WorkbookPanel() {
         );
         setTrashed(loadedTrashed);
         setTimezone(workspace?.timezone ?? "Asia/Shanghai");
+        setSubjects(
+          loadedSubjects.filter((subject) => subject.archivedAt === undefined),
+        );
         setSelectedWorkbookId(
           loadedResources.find(
             (resource) =>
@@ -178,11 +219,13 @@ export function WorkbookPanel() {
     void Promise.all([
       getResourceReaderDescriptor(effectiveWorkbookId),
       listWorkbookQuestions(effectiveWorkbookId),
+      getWorkbookProfile(effectiveWorkbookId),
     ]).then(
-      ([descriptor, loadedQuestions]) => {
+      ([descriptor, loadedQuestions, profile]) => {
         if (active) {
           setReader(descriptor);
           setQuestions(loadedQuestions);
+          setWorkbookProfile(profile);
           setSelectedQuestionId((current) =>
             loadedQuestions.some((bundle) => bundle.question.id === current)
               ? current
@@ -207,12 +250,13 @@ export function WorkbookPanel() {
     setBusy(true);
     setError(undefined);
     try {
-      const [loadedResources, maps, loadedTrashed, workspace] =
+      const [loadedResources, maps, loadedTrashed, workspace, loadedSubjects] =
         await Promise.all([
           listResources(),
           listKnowledgeMaps(),
           listTrashedQuestions(),
           getWorkspaceStatus(),
+          listSubjects(),
         ]);
       const nextWorkbooks = loadedResources.filter(
         (resource) => resource.kind === "pdf" && resource.role === "workbook",
@@ -222,12 +266,13 @@ export function WorkbookPanel() {
       )
         ? effectiveWorkbookId
         : nextWorkbooks[0]?.id;
-      const [descriptor, loadedQuestions] =
+      const [descriptor, loadedQuestions, profile] =
         nextWorkbookId === undefined
-          ? [undefined, []]
+          ? [undefined, [], undefined]
           : await Promise.all([
               getResourceReaderDescriptor(nextWorkbookId),
               listWorkbookQuestions(nextWorkbookId),
+              getWorkbookProfile(nextWorkbookId),
             ]);
       setResources(loadedResources);
       setKnowledgeOptions(
@@ -240,9 +285,13 @@ export function WorkbookPanel() {
       );
       setTrashed(loadedTrashed);
       setTimezone(workspace?.timezone ?? "Asia/Shanghai");
+      setSubjects(
+        loadedSubjects.filter((subject) => subject.archivedAt === undefined),
+      );
       setSelectedWorkbookId(nextWorkbookId);
       setReader(descriptor);
       setQuestions(loadedQuestions);
+      setWorkbookProfile(profile);
       setSelectedQuestionId(loadedQuestions[0]?.question.id);
       setCaptureTarget("new");
     } catch (refreshError: unknown) {
@@ -271,6 +320,63 @@ export function WorkbookPanel() {
     } catch (operationError: unknown) {
       setError(normalizeQuestionError(operationError));
       return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveWorkbookSubject = async (subjectId: string) => {
+    if (effectiveWorkbookId === undefined) {
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    try {
+      const profile = await setWorkbookDefaultSubject({
+        documentId: effectiveWorkbookId,
+        ...(subjectId === "" ? {} : { subjectId }),
+      });
+      const loadedQuestions = await listWorkbookQuestions(effectiveWorkbookId);
+      setWorkbookProfile(profile);
+      setQuestions(loadedQuestions);
+    } catch (subjectError: unknown) {
+      setError(normalizeQuestionError(subjectError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const classifyPendingQuestions = async (questionType: QuestionType) => {
+    if (effectiveWorkbookId === undefined) {
+      return;
+    }
+    const questionIds = questions
+      .filter((bundle) => bundle.question.questionType === undefined)
+      .map((bundle) => bundle.question.id);
+    if (questionIds.length === 0) {
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    try {
+      const changed = await batchClassifyQuestions({
+        documentId: effectiveWorkbookId,
+        questionIds,
+        questionType,
+      });
+      const changedById = new Map(
+        changed.map((bundle) => [bundle.question.id, bundle]),
+      );
+      setQuestions((current) =>
+        current.map((bundle) => changedById.get(bundle.question.id) ?? bundle),
+      );
+      setWorkbookProfile((current) =>
+        current === undefined
+          ? current
+          : { ...current, pendingClassificationCount: 0 },
+      );
+    } catch (classificationError: unknown) {
+      setError(normalizeQuestionError(classificationError));
     } finally {
       setBusy(false);
     }
@@ -403,8 +509,7 @@ export function WorkbookPanel() {
     <section className="workbook-card" aria-labelledby="workbook-title">
       <div className="workbook-heading">
         <div>
-          <p className="section-label">M5 · PDF 习题册</p>
-          <h2 id="workbook-title">手动框选题目与作答记录</h2>
+          <h2 id="workbook-title">PDF 习题册与题目</h2>
           <p>
             从原 PDF
             页面直接保存题目区域；缩放、旋转和屏幕像素不会进入正式数据。
@@ -438,6 +543,8 @@ export function WorkbookPanel() {
             <label>
               当前习题册
               <select
+                name="current-workbook"
+                autoComplete="off"
                 value={effectiveWorkbookId}
                 disabled={busy}
                 onChange={(event) => {
@@ -445,6 +552,7 @@ export function WorkbookPanel() {
                   setSelectedWorkbookId(event.target.value);
                   setReader(undefined);
                   setQuestions([]);
+                  setWorkbookProfile(undefined);
                   setSelectedQuestionId(undefined);
                   setRequestedPage(undefined);
                   setPendingRegion(undefined);
@@ -460,8 +568,29 @@ export function WorkbookPanel() {
               </select>
             </label>
             <label>
+              默认科目
+              <select
+                name="workbook-default-subject"
+                autoComplete="off"
+                value={workbookProfile?.defaultSubjectId ?? ""}
+                disabled={busy}
+                onChange={(event) =>
+                  void saveWorkbookSubject(event.target.value)
+                }
+              >
+                <option value="">未设置</option>
+                {subjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
               框选后
               <select
+                name="question-capture-target"
+                autoComplete="off"
                 value={captureTarget}
                 onChange={(event) => setCaptureTarget(event.target.value)}
               >
@@ -487,6 +616,34 @@ export function WorkbookPanel() {
               <span role="status">请在 PDF 页面上按住鼠标拖出矩形。</span>
             ) : null}
           </div>
+
+          {workbookProfile?.pendingClassificationCount === 0 ? null : (
+            <section
+              className="workbook-classification-bar"
+              aria-labelledby="pending-classification-title"
+            >
+              <div>
+                <strong id="pending-classification-title">
+                  {workbookProfile?.pendingClassificationCount ?? 0}{" "}
+                  道旧题待分类
+                </strong>
+                <span>可一次把当前未分类题设为同一题型。</span>
+              </div>
+              <div className="question-type-actions">
+                {QUESTION_TYPE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className="secondary-button"
+                    disabled={busy}
+                    onClick={() => void classifyPendingQuestions(option.value)}
+                  >
+                    全部设为{option.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
           {reader === undefined ? (
             <p className="empty-state">正在打开习题册…</p>
@@ -515,14 +672,23 @@ export function WorkbookPanel() {
 
           {pendingRegion === undefined ||
           effectiveWorkbookId === undefined ? null : (
-            <QuestionCreateForm
-              documentId={effectiveWorkbookId}
-              region={pendingRegion}
-              knowledgeOptions={knowledgeOptions}
-              busy={busy}
-              onSave={(input) => runQuestion(() => createQuestion(input))}
-              onCancel={() => setPendingRegion(undefined)}
-            />
+            <EditorDialog
+              title="新建题目"
+              description={`保存第 ${pendingRegion.pageNumber} 页刚刚框选的题目区域。`}
+              dirty
+              onRequestClose={() => setPendingRegion(undefined)}
+              size="large"
+            >
+              <QuestionCreateForm
+                documentId={effectiveWorkbookId}
+                region={pendingRegion}
+                knowledgeOptions={knowledgeOptions}
+                subjects={subjects}
+                busy={busy}
+                onSave={(input) => runQuestion(() => createQuestion(input))}
+                onCancel={() => setPendingRegion(undefined)}
+              />
+            </EditorDialog>
           )}
 
           <div className="workbook-question-layout">
@@ -545,8 +711,10 @@ export function WorkbookPanel() {
                   >
                     <strong>{bundle.question.title}</strong>
                     <span>
+                      {questionTypeLabel(bundle.question.questionType)} ·{" "}
+                      {bundle.question.subjectName ?? "未设置科目"} ·{" "}
                       {bundle.regions.length} 个区域 · {bundle.attempts.length}{" "}
-                      次作答 · 难度 {bundle.question.difficulty}
+                      次作答
                     </span>
                   </button>
                 ))
@@ -554,13 +722,49 @@ export function WorkbookPanel() {
             </div>
 
             {selectedQuestion === undefined ? null : (
+              <article className="question-summary-card">
+                <div>
+                  <p className="section-label">当前题目</p>
+                  <h3>{selectedQuestion.question.title}</h3>
+                  <p>
+                    {questionTypeLabel(selectedQuestion.question.questionType)}{" "}
+                    · {selectedQuestion.question.subjectName ?? "未设置科目"} ·{" "}
+                    {selectedQuestion.regions.length} 个区域 ·{" "}
+                    {selectedQuestion.attempts.length} 次作答
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuestionEditorDirty(false);
+                    setQuestionEditorOpen(true);
+                  }}
+                >
+                  编辑题目
+                </button>
+              </article>
+            )}
+          </div>
+
+          {selectedQuestion === undefined || !questionEditorOpen ? null : (
+            <EditorDialog
+              title={`编辑题目：${selectedQuestion.question.title}`}
+              description="题目资料、OCR、错题状态和作答记录集中在此弹窗。"
+              dirty={questionEditorDirty}
+              onRequestClose={() => setQuestionEditorOpen(false)}
+              size="large"
+            >
               <QuestionEditor
                 key={`${selectedQuestion.question.id}:${selectedQuestion.question.updatedAt}`}
                 bundle={selectedQuestion}
                 knowledgeOptions={knowledgeOptions}
+                subjects={subjects}
                 busy={busy}
                 onSave={(input) => runQuestion(() => updateQuestion(input))}
-                onOpenRegion={openRegion}
+                onOpenRegion={(region) => {
+                  setQuestionEditorOpen(false);
+                  openRegion(region);
+                }}
                 onDeleteRegion={(regionId) =>
                   void runQuestion(() => deleteQuestionRegion(regionId))
                 }
@@ -579,10 +783,14 @@ export function WorkbookPanel() {
                   activateReview(selectedQuestion.question.id, userPriority)
                 }
                 onCaptureRegion={captureOcrRegion}
-                onTrash={() => void removeQuestion()}
+                onTrash={() => {
+                  setQuestionEditorOpen(false);
+                  void removeQuestion();
+                }}
+                onDirtyChange={setQuestionEditorDirty}
               />
-            )}
-          </div>
+            </EditorDialog>
+          )}
         </>
       )}
 
@@ -618,11 +826,14 @@ function QuestionCreateForm({
   documentId,
   region,
   knowledgeOptions,
+  subjects,
   busy,
   onSave,
   onCancel,
 }: QuestionCreateFormProps) {
   const [title, setTitle] = useState(`第 ${region.pageNumber} 页题目`);
+  const [subjectId, setSubjectId] = useState("");
+  const [questionType, setQuestionType] = useState<QuestionType | "">("");
   const [chapter, setChapter] = useState("");
   const [questionNumber, setQuestionNumber] = useState("");
   const [difficulty, setDifficulty] = useState("3");
@@ -634,6 +845,8 @@ function QuestionCreateForm({
     const saved = await onSave({
       documentId,
       title,
+      subjectId: optionalText(subjectId),
+      questionType: questionType === "" ? undefined : questionType,
       chapter: optionalText(chapter),
       questionNumber: optionalText(questionNumber),
       difficulty: Number(difficulty),
@@ -651,16 +864,20 @@ function QuestionCreateForm({
       className="question-create-form"
       onSubmit={(event) => void submit(event)}
     >
-      <h3>保存刚才框选的区域</h3>
       <QuestionFields
         title={title}
+        subjectId={subjectId}
+        questionType={questionType}
         chapter={chapter}
         questionNumber={questionNumber}
         difficulty={difficulty}
         analysisMarkdown={analysisMarkdown}
         knowledgeNodeId={knowledgeNodeId}
         knowledgeOptions={knowledgeOptions}
+        subjects={subjects}
         onTitle={setTitle}
+        onSubjectId={setSubjectId}
+        onQuestionType={setQuestionType}
         onChapter={setChapter}
         onQuestionNumber={setQuestionNumber}
         onDifficulty={setDifficulty}
@@ -671,9 +888,6 @@ function QuestionCreateForm({
         <button type="submit" disabled={busy}>
           保存题目
         </button>
-        <button type="button" className="secondary-button" onClick={onCancel}>
-          放弃框选
-        </button>
       </div>
     </form>
   );
@@ -682,6 +896,7 @@ function QuestionCreateForm({
 function QuestionEditor({
   bundle,
   knowledgeOptions,
+  subjects,
   busy,
   onSave,
   onOpenRegion,
@@ -690,9 +905,16 @@ function QuestionEditor({
   onActivateReview,
   onCaptureRegion,
   onTrash,
+  onDirtyChange,
 }: QuestionEditorProps) {
   const question = bundle.question;
   const [title, setTitle] = useState(question.title);
+  const [subjectId, setSubjectId] = useState(
+    question.subjectInherited ? "" : (question.subjectId ?? ""),
+  );
+  const [questionType, setQuestionType] = useState<QuestionType | "">(
+    question.questionType ?? "",
+  );
   const [chapter, setChapter] = useState(question.chapter ?? "");
   const [questionNumber, setQuestionNumber] = useState(
     question.questionNumber ?? "",
@@ -712,11 +934,49 @@ function QuestionEditor({
   const [reviewPriority, setReviewPriority] = useState("3");
   const [reviewActivated, setReviewActivated] = useState(false);
 
+  useEffect(() => {
+    const initialSubjectId = question.subjectInherited
+      ? ""
+      : (question.subjectId ?? "");
+    const dirty =
+      title !== question.title ||
+      subjectId !== initialSubjectId ||
+      questionType !== (question.questionType ?? "") ||
+      chapter !== (question.chapter ?? "") ||
+      questionNumber !== (question.questionNumber ?? "") ||
+      difficulty !== String(question.difficulty) ||
+      analysisMarkdown !== (question.analysisMarkdown ?? "") ||
+      knowledgeNodeId !== (bundle.knowledgeLinks[0]?.nodeId ?? "") ||
+      attemptResult !== "incorrect" ||
+      durationMinutes !== "" ||
+      answerNote !== "" ||
+      reviewPriority !== "3";
+    onDirtyChange(dirty);
+  }, [
+    analysisMarkdown,
+    answerNote,
+    attemptResult,
+    bundle.knowledgeLinks,
+    chapter,
+    difficulty,
+    durationMinutes,
+    knowledgeNodeId,
+    onDirtyChange,
+    question,
+    questionNumber,
+    questionType,
+    reviewPriority,
+    subjectId,
+    title,
+  ]);
+
   const submitDetails = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await onSave({
       questionId: question.id,
       title,
+      subjectId: optionalText(subjectId),
+      questionType: questionType === "" ? undefined : questionType,
       chapter: optionalText(chapter),
       questionNumber: optionalText(questionNumber),
       difficulty: Number(difficulty),
@@ -735,6 +995,7 @@ function QuestionEditor({
       optionalText(answerNote),
     );
     if (saved) {
+      setAttemptResult("incorrect");
       setDurationMinutes("");
       setAnswerNote("");
     }
@@ -743,16 +1004,20 @@ function QuestionEditor({
   return (
     <article className="question-editor">
       <form onSubmit={(event) => void submitDetails(event)}>
-        <h3>题目详情</h3>
         <QuestionFields
           title={title}
+          subjectId={subjectId}
+          questionType={questionType}
           chapter={chapter}
           questionNumber={questionNumber}
           difficulty={difficulty}
           analysisMarkdown={analysisMarkdown}
           knowledgeNodeId={knowledgeNodeId}
           knowledgeOptions={knowledgeOptions}
+          subjects={subjects}
           onTitle={setTitle}
+          onSubjectId={setSubjectId}
+          onQuestionType={setQuestionType}
           onChapter={setChapter}
           onQuestionNumber={setQuestionNumber}
           onDifficulty={setDifficulty}
@@ -802,6 +1067,8 @@ function QuestionEditor({
         <label>
           重要度
           <select
+            name="question-review-priority"
+            autoComplete="off"
             value={reviewPriority}
             onChange={(event) => setReviewPriority(event.target.value)}
           >
@@ -817,9 +1084,12 @@ function QuestionEditor({
           className="secondary-button"
           disabled={busy}
           onClick={() => {
-            void onActivateReview(Number(reviewPriority)).then(
-              setReviewActivated,
-            );
+            void onActivateReview(Number(reviewPriority)).then((saved) => {
+              setReviewActivated(saved);
+              if (saved) {
+                setReviewPriority("3");
+              }
+            });
           }}
         >
           加入或更新错题复习
@@ -870,6 +1140,8 @@ function QuestionEditor({
           <label>
             结果
             <select
+              name="question-attempt-result"
+              autoComplete="off"
               value={attemptResult}
               onChange={(event) =>
                 setAttemptResult(event.target.value as AttemptResult)
@@ -883,7 +1155,10 @@ function QuestionEditor({
           <label>
             耗时（分钟，可选）
             <input
+              name="question-attempt-duration"
               type="number"
+              inputMode="decimal"
+              autoComplete="off"
               min="0.1"
               max="1440"
               step="0.1"
@@ -894,6 +1169,8 @@ function QuestionEditor({
           <label className="question-wide-field">
             本次答案与复盘
             <textarea
+              name="question-attempt-note"
+              autoComplete="off"
               rows={3}
               maxLength={10_000}
               value={answerNote}
@@ -930,13 +1207,18 @@ function QuestionEditor({
 
 interface QuestionFieldsProps {
   title: string;
+  subjectId: string;
+  questionType: QuestionType | "";
   chapter: string;
   questionNumber: string;
   difficulty: string;
   analysisMarkdown: string;
   knowledgeNodeId: string;
   knowledgeOptions: KnowledgeOption[];
+  subjects: StudySubject[];
   onTitle(value: string): void;
+  onSubjectId(value: string): void;
+  onQuestionType(value: QuestionType | ""): void;
   onChapter(value: string): void;
   onQuestionNumber(value: string): void;
   onDifficulty(value: string): void;
@@ -950,6 +1232,8 @@ function QuestionFields(props: QuestionFieldsProps) {
       <label className="question-wide-field">
         题目名称
         <input
+          name="question-title"
+          autoComplete="off"
           required
           maxLength={200}
           value={props.title}
@@ -957,8 +1241,49 @@ function QuestionFields(props: QuestionFieldsProps) {
         />
       </label>
       <label>
+        科目
+        <select
+          name="question-subject"
+          autoComplete="off"
+          value={props.subjectId}
+          onChange={(event) => props.onSubjectId(event.target.value)}
+        >
+          <option value="">继承习题册</option>
+          {props.subjects.map((subject) => (
+            <option key={subject.id} value={subject.id}>
+              {subject.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <fieldset className="question-type-field question-wide-field">
+        <legend>题型</legend>
+        <div className="question-type-actions">
+          <button
+            type="button"
+            aria-pressed={props.questionType === ""}
+            onClick={() => props.onQuestionType("")}
+          >
+            自动识别
+          </button>
+          {QUESTION_TYPE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={props.questionType === option.value}
+              onClick={() => props.onQuestionType(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <small>自动识别置信度不足时会标记为“待分类”，不会进入每日队列。</small>
+      </fieldset>
+      <label>
         章节
         <input
+          name="question-chapter"
+          autoComplete="off"
           maxLength={120}
           value={props.chapter}
           onChange={(event) => props.onChapter(event.target.value)}
@@ -967,6 +1292,8 @@ function QuestionFields(props: QuestionFieldsProps) {
       <label>
         题号
         <input
+          name="question-number"
+          autoComplete="off"
           maxLength={60}
           value={props.questionNumber}
           onChange={(event) => props.onQuestionNumber(event.target.value)}
@@ -975,6 +1302,8 @@ function QuestionFields(props: QuestionFieldsProps) {
       <label>
         难度
         <select
+          name="question-difficulty"
+          autoComplete="off"
           value={props.difficulty}
           onChange={(event) => props.onDifficulty(event.target.value)}
         >
@@ -988,6 +1317,8 @@ function QuestionFields(props: QuestionFieldsProps) {
       <label>
         知识节点（可选）
         <select
+          name="question-knowledge-node"
+          autoComplete="off"
           value={props.knowledgeNodeId}
           onChange={(event) => props.onKnowledgeNode(event.target.value)}
         >
@@ -1002,6 +1333,8 @@ function QuestionFields(props: QuestionFieldsProps) {
       <label className="question-wide-field">
         个人解析
         <textarea
+          name="question-analysis"
+          autoComplete="off"
           rows={5}
           maxLength={20_000}
           value={props.analysisMarkdown}
@@ -1015,6 +1348,13 @@ function QuestionFields(props: QuestionFieldsProps) {
 function optionalText(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed === "" ? undefined : trimmed;
+}
+
+function questionTypeLabel(value: QuestionType | undefined): string {
+  return (
+    QUESTION_TYPE_OPTIONS.find((option) => option.value === value)?.label ??
+    "待分类"
+  );
 }
 
 function attemptResultLabel(result: AttemptResult): string {

@@ -1,0 +1,252 @@
+/* The application frame is intentionally independent from feature layouts. */
+.skip-link {
+  position: fixed;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 100;
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-4);
+  color: var(--color-text-inverse);
+  background: var(--color-primary-hover);
+  font-weight: 800;
+  text-decoration: none;
+  transform: translateY(-180%);
+}
+
+.skip-link:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 3px;
+  transform: translateY(0);
+}
+
+.shell {
+  width: min(
+    calc(100% - 2 * var(--content-gutter)),
+    var(--content-width-default)
+  );
+  margin: 0 auto;
+  padding-block: clamp(var(--space-8), 6vw, 5rem);
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  min-height: 100dvh;
+  overflow-x: clip;
+}
+
+.app-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  height: 100dvh;
+  min-height: 100dvh;
+  flex-direction: column;
+  border-right: 1px solid var(--color-border-subtle);
+  padding: max(var(--space-5), var(--safe-top)) max(0.9rem, var(--safe-right))
+    max(var(--space-5), var(--safe-bottom)) max(0.9rem, var(--safe-left));
+  background: var(--color-bg-subtle);
+}
+
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-2) var(--space-5);
+}
+
+.app-brand-icon {
+  display: block;
+  width: 2.7rem;
+  height: 2.7rem;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.app-brand > div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.app-brand strong {
+  font-size: var(--font-size-lg);
+}
+
+.app-brand small {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.app-navigation {
+  display: grid;
+  gap: var(--space-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.app-navigation > a {
+  display: grid;
+  gap: 0.12rem;
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-xs);
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-secondary);
+  text-align: left;
+  background: transparent;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+
+.app-navigation > a:hover {
+  background: var(--color-bg-hover);
+}
+
+.app-navigation > a:focus-visible,
+.app-settings-link:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.app-navigation > .app-nav-active {
+  border-left-color: var(--color-accent);
+  color: var(--color-primary-hover);
+  background: var(--color-bg-surface);
+}
+
+.app-navigation span {
+  color: var(--color-text-muted);
+  font-size: 0.67rem;
+  font-weight: 600;
+}
+
+.app-settings-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: auto;
+  border-top: 1px solid var(--color-border-subtle);
+  padding: 0.85rem var(--space-2) var(--space-1);
+  color: var(--color-text-secondary);
+  background: transparent;
+  font-size: var(--font-size-xs);
+  text-align: left;
+  text-decoration: none;
+}
+
+.app-settings-link > span:first-child {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  place-items: center;
+  color: var(--color-primary);
+  background: var(--color-bg-hover);
+  font-size: var(--font-size-md);
+}
+
+.app-settings-link > span:last-child {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.app-settings-link small {
+  color: var(--color-text-muted);
+  font-size: 0.67rem;
+}
+
+.app-settings-link:hover,
+.app-settings-link-active {
+  color: var(--color-primary-hover);
+  background: var(--color-bg-hover);
+}
+
+.app-content {
+  width: min(calc(100% - 2 * var(--content-gutter)), var(--content-width-wide));
+  min-width: 0;
+  margin: 0 auto;
+  padding: max(var(--space-6), var(--safe-top))
+    max(var(--content-gutter), var(--safe-right)) max(4rem, var(--safe-bottom))
+    max(var(--content-gutter), var(--safe-left));
+  overflow-x: hidden;
+}
+
+.app-content.app-content-wide-view {
+  width: min(
+    calc(100% - 2 * var(--content-gutter)),
+    var(--content-width-expanded)
+  );
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    display: block;
+  }
+
+  .app-sidebar {
+    position: static;
+    height: auto;
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border-subtle);
+    padding: max(var(--space-3), var(--safe-top))
+      max(var(--space-4), var(--safe-right))
+      max(var(--space-3), var(--safe-bottom))
+      max(var(--space-4), var(--safe-left));
+  }
+
+  .app-brand {
+    padding-bottom: var(--space-3);
+  }
+
+  .app-navigation {
+    display: flex;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
+    padding-bottom: var(--space-1);
+  }
+
+  .app-navigation > a {
+    min-width: 7.5rem;
+    flex: 0 0 auto;
+    border-bottom: 3px solid transparent;
+    border-left: 0;
+  }
+
+  .app-navigation > .app-nav-active {
+    border-bottom-color: var(--color-accent);
+  }
+
+  .app-settings-link {
+    align-self: flex-start;
+    margin-top: var(--space-1);
+    border-top: 0;
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .app-content {
+    width: min(
+      calc(100% - 2 * var(--content-gutter)),
+      var(--content-width-default)
+    );
+  }
+}
+
+@media (max-width: 640px) {
+  .app-navigation > a {
+    min-width: 6.5rem;
+  }
+}
+
+@media (max-width: 320px) {
+  :root {
+    --content-gutter: var(--space-3);
+  }
+
+  .app-navigation > a {
+    min-width: 5.75rem;
+  }
+}

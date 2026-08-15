@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  adjustRegionRectangle,
   buildOcrRegionRenderSpec,
   normalizePdfSelection,
   OCR_REGION_LONG_EDGE_PIXELS,
@@ -18,6 +19,32 @@ const ROTATED_VIEWPORT: PdfViewportAdapter = {
 };
 
 describe("PDF question region coordinates", () => {
+  it("moves an editable region without leaving the page", () => {
+    expect(
+      adjustRegionRectangle(
+        { left: 80, top: 70, width: 30, height: 20 },
+        50,
+        50,
+        "move",
+        100,
+        100,
+      ),
+    ).toEqual({ left: 70, top: 80, width: 30, height: 20 });
+  });
+
+  it("resizes a region from its upper-left corner", () => {
+    expect(
+      adjustRegionRectangle(
+        { left: 20, top: 20, width: 60, height: 50 },
+        -10,
+        -8,
+        "nw",
+        100,
+        100,
+      ),
+    ).toEqual({ left: 10, top: 12, width: 70, height: 58 });
+  });
+
   it("round-trips through a rotated viewport without canvas pixels", () => {
     const normalized = normalizePdfSelection(
       3,
