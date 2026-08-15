@@ -1,5 +1,9 @@
 # Local agent tooling downloaded for development
 .agents/
+.codex/
+.tmp-*/
+AGENTS.md
+KyStudy-frontend-source.zip
 
 # JavaScript dependencies and build output
 node_modules/
