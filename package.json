@@ -11,8 +11,8 @@
   "scripts": {
     "dev": "vite",
     "build": "pnpm typecheck && vite build",
-    "format": "prettier --check package.json index.html eslint.config.js tsconfig.json vite.config.ts vitest.config.ts README.md AGENTS.md docs/DEVELOPMENT_WORKFLOW.md docs/V0_1_0_DEVELOPMENT_HANDOFF.md docs/V0_1_0_FINAL_ACCEPTANCE.md scripts/audit-css.mjs scripts/css-audit-core.mjs scripts/css-audit-core.test.mjs scripts/check-targets.mjs .github src src-tauri/capabilities src-tauri/tauri.conf.json src-tauri/tauri.release.conf.json",
-    "format:write": "prettier --write package.json index.html eslint.config.js tsconfig.json vite.config.ts vitest.config.ts README.md AGENTS.md docs/DEVELOPMENT_WORKFLOW.md docs/V0_1_0_DEVELOPMENT_HANDOFF.md docs/V0_1_0_FINAL_ACCEPTANCE.md scripts/audit-css.mjs scripts/css-audit-core.mjs scripts/css-audit-core.test.mjs scripts/check-targets.mjs .github src src-tauri/capabilities src-tauri/tauri.conf.json src-tauri/tauri.release.conf.json",
+    "format": "prettier --check package.json index.html eslint.config.js tsconfig.json vite.config.ts vitest.config.ts README.md docs/DEVELOPMENT_WORKFLOW.md docs/V0_1_0_DEVELOPMENT_HANDOFF.md docs/V0_1_0_FINAL_ACCEPTANCE.md scripts/audit-css.mjs scripts/css-audit-core.mjs scripts/css-audit-core.test.mjs scripts/check-targets.mjs .github src src-tauri/capabilities src-tauri/tauri.conf.json src-tauri/tauri.release.conf.json",
+    "format:write": "prettier --write package.json index.html eslint.config.js tsconfig.json vite.config.ts vitest.config.ts README.md docs/DEVELOPMENT_WORKFLOW.md docs/V0_1_0_DEVELOPMENT_HANDOFF.md docs/V0_1_0_FINAL_ACCEPTANCE.md scripts/audit-css.mjs scripts/css-audit-core.mjs scripts/css-audit-core.test.mjs scripts/check-targets.mjs .github src src-tauri/capabilities src-tauri/tauri.conf.json src-tauri/tauri.release.conf.json",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
     "audit:css": "node scripts/audit-css.mjs",
