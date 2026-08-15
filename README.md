@@ -21,10 +21,10 @@
     <img src="https://img.shields.io/badge/license-GPL--3.0--only-blue.svg" alt="GPL-3.0-only license">
   </a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4.svg" alt="Windows 10 and 11 x64">
-  <img src="https://img.shields.io/badge/status-v0.1.0%20release%20candidate-orange.svg" alt="v0.1.0 release candidate">
+  <img src="https://img.shields.io/badge/status-v0.1.0%20released-brightgreen.svg" alt="v0.1.0 released">
 </p>
 
-> 当前首版目标是 Windows 10/11 x64 的 v0.1.0。自动门禁、干净提交、桌面安装验收和 OCR 组件公开 Release 已完成；应用发行包仍待从确定的 v0.1.0 标签上传 GitHub Release。
+> 当前首版支持 Windows 10/11 x64。自动门禁、干净提交、桌面安装验收和 OCR 组件公开 Release 已完成，KyStudy v0.1.0 已正式发布。
 
 ## 目录
 
@@ -177,7 +177,7 @@ AI 只在用户主动触发时调用。规划结果先作为草案展示，确�
 - [x] GPL 许可证、Windows NSIS 和 ZIP 便携版配置
 - [x] OCR 组件 ZIP 公开 Release、SHA-256 校验和在线下载构建
 - [x] 项目维护者完成隔离环境桌面验收
-- [ ] 从干净提交创建 v0.1.0 标签并发布 GitHub Release
+- [x] 从干净提交创建 v0.1.0 标签并发布 GitHub Release
 
 ### v0.1.0 之后
 

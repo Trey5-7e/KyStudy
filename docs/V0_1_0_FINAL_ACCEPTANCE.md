@@ -148,3 +148,14 @@
 | `artifacts/kystudy-windows-x64-portable.zip`                       |  9,206,166 字节 | `91AFB97DAEE57F73C2C9901416F1936F739534CE69B95AAFEFB9145D00BDD57E` |
 
 当前自动门禁和用户已确认的桌面验收条件均已闭合；正式发布前仍需项目维护者先提交这三份发布文档/脚本改动，再从干净提交创建 `v0.1.0` 标签，并将重新生成的 NSIS/ZIP 产物上传到对应 GitHub Release。该发布动作尚未执行。
+
+## 11. 2026-08-15 v0.1.0 GitHub Release 发布记录
+
+- 已将发布准备提交 `97e876e023523002125383f132c440dfe80a627f` 推送到 `main`，并创建带注释的 `v0.1.0` 标签。
+- GitHub Release：[KyStudy v0.1.0](https://github.com/Trey5-7e/KyStudy/releases/tag/v0.1.0) 已正式发布，`draft=false`、`prerelease=false`。
+- 已上传 NSIS 安装包和 Windows x64 便携版 ZIP；GitHub API 返回的资产大小与摘要分别为：
+  - `KyStudy_0.1.0_x64-setup.exe`：`6,931,164` 字节，`sha256:8e7d34d6903c03cd3a9cd2fd272724708658712919b0266647f49ebc633315d4`。
+  - `kystudy-windows-x64-portable.zip`：`9,206,166` 字节，`sha256:91afb97daee57f73c2c9901416f1936f739534ce69b95aafefb9145d00bdd57e`。
+- 发布资产中的源码入口、GPL-3.0-only 说明、OCR `ocr-v0.1.0` 组件链接和 Windows 10/11 x64 边界均已写入 Release 文案；未启动桌面程序。
+
+本节为第 10 节发布前记录的后续追加证据；`v0.1.0` 标签不再移动，后续文档修订不改变已发布资产。
