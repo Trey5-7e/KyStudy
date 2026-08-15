@@ -82,24 +82,25 @@ KyStudy 的目标不是记录更多数据，而是减少备考中重复、麻烦
 
 README 只展示四个核心页面，具体的导入、组卷、错题反馈、PDF 阅读、思维导图和设置操作放在后面的使用流程中说明。
 
-<table>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/demo-workspace/today-demo.png" alt="今日页面"></td>
-    <td width="50%"><img src="docs/screenshots/demo-workspace/planning-demo.png" alt="计划页面"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>今日</strong>：集中处理当前任务</td>
-    <td align="center"><strong>计划</strong>：查看周期安排和进度</td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/demo-workspace/workbook-demo.png" alt="习题册页面"></td>
-    <td width="50%"><img src="docs/screenshots/demo-workspace/library-demo.png" alt="资料页面"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>习题册</strong>：管理题目和索引</td>
-    <td align="center"><strong>资料</strong>：统一管理 PDF 与导图</td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/screenshots/demo-workspace/today-demo.png" alt="今日页面" width="100%">
+</p>
+<p align="center"><strong>今日</strong>：集中处理当前任务</p>
+
+<p align="center">
+  <img src="docs/screenshots/demo-workspace/planning-demo.png" alt="计划页面" width="100%">
+</p>
+<p align="center"><strong>计划</strong>：查看周期安排和进度</p>
+
+<p align="center">
+  <img src="docs/screenshots/demo-workspace/workbook-demo.png" alt="习题册页面" width="100%">
+</p>
+<p align="center"><strong>习题册</strong>：管理题目和索引</p>
+
+<p align="center">
+  <img src="docs/screenshots/demo-workspace/library-demo.png" alt="资料页面" width="100%">
+</p>
+<p align="center"><strong>资料</strong>：统一管理 PDF 与导图</p>
 
 ## 技术栈
 
