@@ -103,8 +103,8 @@
 本节追加记录最新状态，前文历史验收结论保持不变：
 
 - 已将 `Trey5-7e/KyStudy` 仓库切换为 Public，并将 `ocr-v0.1.0` 从 Draft 发布为正式 OCR Release。
-- OCR ZIP：[kystudy-ocr-worker-v0.1.0.zip](https://github.com/Trey5-7e/KyStudy/releases/download/ocr-v0.1.0/kystudy-ocr-worker-v0.1.0.zip)，大小 `116,300,551` 字节，SHA-256 `bb5a3e16a898713adde85717f4debe8cfbdf22ca10eb632752368f200513b01`。
-- 已使用公开 URL 和上述摘要完成在线下载配置构建。最新 EXE：`src-tauri/target/release/kystudy.exe`，大小 `26,371,584` 字节，SHA-256 `876EB2551647DAAA4049AF2AFE171531175B0C08954972FE839ECED87B81D8A6`；未启动桌面程序。
+- OCR ZIP：[kystudy-ocr-worker-v0.1.0.zip](https://github.com/Trey5-7e/KyStudy/releases/download/ocr-v0.1.0/kystudy-ocr-worker-v0.1.0.zip)，大小 `116,300,551` 字节，SHA-256 `bb5a3e16a898713adde85717f4debe8cfbdf22cae10eb632752368f200513b01`。
+- 已使用公开 URL 和上述摘要完成在线下载配置构建。最新 EXE：`src-tauri/target/release/kystudy.exe`，大小 `26,372,096` 字节，SHA-256 `BB5C8CF727F3BF15B8FB673FB6947CF59FE9E7CE4FA32CBCEB65C9253941CDEF`；未启动桌面程序。
 - `pnpm check`、`cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check`、`cargo test --locked --manifest-path src-tauri/Cargo.toml` 和 `cargo clippy --locked --all-targets --manifest-path src-tauri/Cargo.toml -- -D warnings` 均通过。
 
 因此，R52/R53 的 OCR 资产与在线下载构建条件已闭合；完整 v0.1.0 应用发行包的桌面安装验收仍按项目维护者流程执行。
@@ -114,3 +114,5 @@
 部分已有工作区的 v15、v17 迁移记录保留了格式化前的合法 SHA-256；发布候选版本曾因迁移文件换行规范化而误报 `MIGRATION_HISTORY_INCONSISTENT`。本次修复将这两组已知历史摘要加入兼容白名单，未修改任何用户数据库内容，并新增回归测试。
 
 修复版在线 OCR EXE 输出到 `src-tauri/target/release-migration-fix/release/kystudy.exe`，大小 `26,372,096` 字节，SHA-256 `21BF79325517F7C1F67CDFA293A295B707E3C8F175D326DCF1CF0622A1C389EC`。该构建未启动桌面程序；旧 EXE 若仍在运行，需要先正常退出后再替换。
+
+随后发现公开 ZIP 摘要在构建命令中少写 1 位，导致在线按钮按设计保持禁用；已改用真实 64 位摘要 `bb5a3e16a898713adde85717f4debe8cfbdf22cae10eb632752368f200513b01`，并重新生成标准 Release EXE。当前 EXE 大小 `26,372,096` 字节，SHA-256 `BB5C8CF727F3BF15B8FB673FB6947CF59FE9E7CE4FA32CBCEB65C9253941CDEF`；未启动桌面程序。

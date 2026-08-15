@@ -43,9 +43,9 @@ OCR 资产已公开发布后，使用以下构建时环境变量生成在线下�
 
 ```powershell
 $env:KYSTUDY_OCR_DOWNLOAD_URL = 'https://github.com/Trey5-7e/KyStudy/releases/download/ocr-v0.1.0/kystudy-ocr-worker-v0.1.0.zip'
-$env:KYSTUDY_OCR_DOWNLOAD_SHA256 = 'bb5a3e16a898713adde85717f4debe8cfbdf22ca10eb632752368f200513b01'
+$env:KYSTUDY_OCR_DOWNLOAD_SHA256 = 'bb5a3e16a898713adde85717f4debe8cfbdf22cae10eb632752368f200513b01'
 pnpm tauri build --no-bundle
 Remove-Item Env:KYSTUDY_OCR_DOWNLOAD_URL, Env:KYSTUDY_OCR_DOWNLOAD_SHA256
 ```
 
-公开 URL 已通过不带 GitHub 登录态的 HTTP 头请求验证可返回 `200 OK` 和 `116300551` 字节。最终 EXE 为 `src-tauri/target/release/kystudy.exe`，大小 `26,371,584` 字节，SHA-256 `876EB2551647DAAA4049AF2AFE171531175B0C08954972FE839ECED87B81D8A6`；构建后未启动桌面程序。
+公开 URL 已通过不带 GitHub 登录态的 HTTP 头请求验证可返回 `200 OK` 和 `116300551` 字节。最终 EXE 为 `src-tauri/target/release/kystudy.exe`，大小 `26,372,096` 字节，SHA-256 `BB5C8CF727F3BF15B8FB673FB6947CF59FE9E7CE4FA32CBCEB65C9253941CDEF`；构建后未启动桌面程序。

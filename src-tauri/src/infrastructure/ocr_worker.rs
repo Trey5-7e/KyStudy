@@ -682,4 +682,11 @@ mod tests {
         assert!(!valid_sha256("short"));
         assert!(!valid_sha256(&"g".repeat(64)));
     }
+
+    #[test]
+    fn compile_time_download_configuration_requires_both_values() {
+        let configured = option_env!("KYSTUDY_OCR_DOWNLOAD_URL").is_some()
+            && option_env!("KYSTUDY_OCR_DOWNLOAD_SHA256").is_some();
+        assert_eq!(ocr_download_manifest().is_some(), configured);
+    }
 }
