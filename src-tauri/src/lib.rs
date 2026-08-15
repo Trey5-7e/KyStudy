@@ -6,9 +6,12 @@ mod commands;
 mod domain;
 mod infrastructure;
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use tauri::Manager;
+
+const APPLICATION_DATA_DIRECTORY_OVERRIDE_ENV: &str = "KYSTUDY_APP_DATA_DIR";
 
 fn debug_application_data_directory(directory: &Path) -> PathBuf {
     #[cfg(debug_assertions)]
@@ -30,7 +33,29 @@ fn resolve_application_data_directory(
     app: &tauri::App,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let directory = app.path().app_data_dir()?;
-    Ok(debug_application_data_directory(&directory))
+    resolve_configured_application_data_directory(
+        &directory,
+        std::env::var_os(APPLICATION_DATA_DIRECTORY_OVERRIDE_ENV),
+    )
+}
+
+fn resolve_configured_application_data_directory(
+    directory: &Path,
+    override_directory: Option<OsString>,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let Some(override_directory) = override_directory.filter(|value| !value.is_empty()) else {
+        return Ok(debug_application_data_directory(directory));
+    };
+
+    let override_directory = PathBuf::from(override_directory);
+    if !override_directory.is_absolute() {
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{APPLICATION_DATA_DIRECTORY_OVERRIDE_ENV} must be an absolute path"),
+        )));
+    }
+
+    Ok(override_directory)
 }
 
 fn initialize_application(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -239,8 +264,9 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::debug_application_data_directory;
-    use std::path::PathBuf;
+    use super::{debug_application_data_directory, resolve_configured_application_data_directory};
+    use std::ffi::OsString;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn debug_data_directory_is_separate_from_release_data() {
@@ -256,5 +282,30 @@ mod tests {
 
         #[cfg(not(debug_assertions))]
         assert_eq!(resolved, release_directory);
+    }
+
+    #[test]
+    fn explicit_data_directory_override_is_used_as_is() {
+        let default_directory =
+            PathBuf::from(r"C:\Users\tester\AppData\Roaming\io.github.kystudy.desktop");
+        let override_directory = PathBuf::from(r"C:\Temp\kystudy-clean-release");
+
+        let resolved = resolve_configured_application_data_directory(
+            &default_directory,
+            Some(override_directory.as_os_str().to_os_string()),
+        )
+        .expect("absolute data directory override should be accepted");
+
+        assert_eq!(resolved, override_directory);
+    }
+
+    #[test]
+    fn relative_data_directory_override_is_rejected() {
+        let result = resolve_configured_application_data_directory(
+            Path::new(r"C:\Users\tester\AppData\Roaming\io.github.kystudy.desktop"),
+            Some(OsString::from("relative-path")),
+        );
+
+        assert!(result.is_err());
     }
 }

@@ -38,24 +38,22 @@ if ([IO.Path]::GetExtension($resolvedExecutable) -ne ".exe") {
 
 $systemTemporary = [IO.Path]::GetTempPath()
 $previewRoot = Join-Path $systemTemporary ("kystudy-clean-release-" + [Guid]::NewGuid().ToString("N"))
-$previewAppData = Join-Path $previewRoot "AppData\Roaming"
-$previewLocalAppData = Join-Path $previewRoot "AppData\Local"
-$previewDatabase = Join-Path $previewAppData "io.github.kystudy.desktop\workspaces\default\kystudy.sqlite3"
+$previewDataDirectory = Join-Path $previewRoot "KyStudyData"
+$previewDatabase = Join-Path $previewDataDirectory "workspaces\default\kystudy.sqlite3"
 
-$originalAppData = $env:APPDATA
-$originalLocalAppData = $env:LOCALAPPDATA
+$originalDataDirectoryOverride = $env:KYSTUDY_APP_DATA_DIR
 $process = $null
 
 try {
-    New-Item -ItemType Directory -Path $previewAppData -Force | Out-Null
-    New-Item -ItemType Directory -Path $previewLocalAppData -Force | Out-Null
+    New-Item -ItemType Directory -Path $previewDataDirectory -Force | Out-Null
 
-    $env:APPDATA = $previewAppData
-    $env:LOCALAPPDATA = $previewLocalAppData
+    # Tauri resolves Windows Known Folders directly, so APPDATA alone cannot
+    # isolate the preview. KyStudy honors this explicit absolute-path override.
+    $env:KYSTUDY_APP_DATA_DIR = $previewDataDirectory
 
     Write-Host "KyStudy clean first-launch preview"
     Write-Host "Executable: $resolvedExecutable"
-    Write-Host "Isolated APPDATA: $previewAppData"
+    Write-Host "Isolated application data: $previewDataDirectory"
     Write-Host "Your normal KyStudy workspace will not be touched."
     Write-Host "Close the KyStudy window when you finish checking the initial state."
 
@@ -69,8 +67,7 @@ try {
     }
 }
 finally {
-    $env:APPDATA = $originalAppData
-    $env:LOCALAPPDATA = $originalLocalAppData
+    $env:KYSTUDY_APP_DATA_DIR = $originalDataDirectoryOverride
 
     if ($null -ne $process -and -not $process.HasExited) {
         Stop-Process -Id $process.Id -Force

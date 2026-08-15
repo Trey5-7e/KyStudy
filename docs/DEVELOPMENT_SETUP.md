@@ -112,14 +112,14 @@ pnpm tauri build --no-bundle
 
 ### 5.2 本地干净首启预览
 
-开发运行和已安装版本会共享当前 Windows 用户的 `%APPDATA%\io.github.kystudy.desktop`，因此安装包启动后看到开发资料是同一工作区被复用，并不表示资料被打进安装包。要查看真正的新用户首启状态，请使用隔离 AppData 启动 Release EXE：
+开发运行和已安装版本使用不同的工作区目录：Debug 为 `%APPDATA%\io.github.kystudy.desktop-dev`，Release/安装版为 `%APPDATA%\io.github.kystudy.desktop`。安装包启动后看到正式版资料，通常是因为该正式目录此前已有工作区，并不表示资料被打进安装包。要查看真正的新用户首启状态，请使用带显式临时数据目录的 Release 预览脚本：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-clean-release-preview.ps1 `
   -ExecutablePath .\src-tauri\target\release\kystudy.exe
 ```
 
-也可以把 `-ExecutablePath` 换成从 GitHub 下载或安装得到的 `kystudy.exe` 路径。脚本会在系统临时目录创建一次性 AppData，关闭窗口后自动清理，不会修改正常开发工作区；如果需要保留这次预览数据，请在脚本中止前复制临时目录中的资料。
+也可以把 `-ExecutablePath` 换成从 GitHub 下载或安装得到的 `kystudy.exe` 路径。脚本通过 `KYSTUDY_APP_DATA_DIR` 指定临时绝对路径；这是必要的，因为 Windows 下 Tauri 使用 Known Folder API，单独修改 `APPDATA` 不足以隔离目录。脚本会在系统临时目录创建一次性数据目录，关闭窗口后自动清理，不会修改正常开发或正式工作区；如果需要保留这次预览数据，请在脚本中止前复制临时目录中的资料。
 
 ### 5.3 开发工作区与正式工作区隔离
 

@@ -504,12 +504,22 @@ fn load_workspace(connection: &Connection) -> Result<Option<Workspace>, Persiste
 }
 
 fn migration_checksum(migration: &Migration) -> String {
-    let digest = Sha256::digest(migration.sql.as_bytes());
+    // GitHub Actions and local Windows worktrees may compile the same SQL with
+    // different newline bytes; persist a platform-independent checksum.
+    let normalized_sql = migration.sql.replace("\r\n", "\n");
+    checksum_sql(&normalized_sql)
+}
+
+fn checksum_sql(sql: &str) -> String {
+    let digest = Sha256::digest(sql.as_bytes());
     format!("{digest:X}")
 }
 
 fn migration_checksum_is_accepted(migration: &Migration, checksum: &str) -> bool {
-    if checksum == migration_checksum(migration) {
+    if checksum == migration_checksum(migration)
+        || checksum == checksum_sql(migration.sql)
+        || checksum == checksum_sql(&migration.sql.replace("\r\n", "\n").replace('\n', "\r\n"))
+    {
         return true;
     }
     match migration.version {
@@ -557,16 +567,17 @@ pub(crate) fn database_error(source: rusqlite::Error) -> PersistenceError {
 #[cfg(test)]
 mod tests {
     use rusqlite::{Connection, OptionalExtension};
+    use sha2::{Digest, Sha256};
     use tempfile::tempdir;
 
     use super::{
         APPLICATION_ID, MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004, MIGRATION_005,
         MIGRATION_006, MIGRATION_007, MIGRATION_008, MIGRATION_009, MIGRATION_013,
         MIGRATION_013_LEGACY_CHECKSUMS, MIGRATION_014, MIGRATION_015,
-        MIGRATION_015_LEGACY_CHECKSUMS, MIGRATION_016, MIGRATION_017_LEGACY_CHECKSUMS,
-        MIGRATION_019, MIGRATION_020, MIGRATION_021, MIGRATION_022, MIGRATION_023, MIGRATIONS,
-        Migration, SqliteWorkspaceRepository, apply_migrations, configure_connection, migrate,
-        migration_checksum,
+        MIGRATION_015_LEGACY_CHECKSUMS, MIGRATION_016, MIGRATION_017,
+        MIGRATION_017_LEGACY_CHECKSUMS, MIGRATION_019, MIGRATION_020, MIGRATION_021, MIGRATION_022,
+        MIGRATION_023, MIGRATIONS, Migration, SqliteWorkspaceRepository, apply_migrations,
+        configure_connection, migrate, migration_checksum,
     };
     use crate::application::{PersistenceError, WorkspaceRepository};
     use crate::domain::{LATEST_SCHEMA_VERSION, NewWorkspace};
@@ -832,6 +843,34 @@ mod tests {
             error,
             PersistenceError::MigrationHistoryInconsistent
         ));
+    }
+
+    #[test]
+    fn find_default_accepts_migration_history_with_windows_line_endings() {
+        let directory = tempdir().expect("temporary directory should exist");
+        let repository = SqliteWorkspaceRepository::new(directory.path());
+        std::fs::create_dir_all(repository.workspace_directory())
+            .expect("workspace directory should exist");
+        let mut connection =
+            Connection::open(repository.database_path()).expect("workspace database should open");
+        configure_connection(&connection).expect("connection should configure");
+        apply_migrations(&mut connection, MIGRATIONS).expect("latest schema should be created");
+
+        for migration in [MIGRATION_015, MIGRATION_017] {
+            let windows_sql = migration.sql.replace("\r\n", "\n").replace('\n', "\r\n");
+            let checksum = format!("{:X}", Sha256::digest(windows_sql.as_bytes()));
+            connection
+                .execute(
+                    "UPDATE schema_migration SET checksum = ?1 WHERE version = ?2",
+                    (&checksum, migration.version),
+                )
+                .expect("fixture should use the Windows line-ending checksum");
+        }
+        drop(connection);
+
+        repository
+            .find_default()
+            .expect("line-ending-only migration differences should remain readable");
     }
 
     #[test]
