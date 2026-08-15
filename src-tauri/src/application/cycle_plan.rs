@@ -367,11 +367,19 @@ impl<R: CyclePlanRepository> CyclePlanUseCases<R> {
         &self,
         input: &ConfirmShiftCyclePlanInput,
     ) -> Result<ShiftCyclePlanResult, CyclePlanError> {
+        self.confirm_shift_plan_at(input, current_utc_millis()?)
+    }
+
+    fn confirm_shift_plan_at(
+        &self,
+        input: &ConfirmShiftCyclePlanInput,
+        now: i64,
+    ) -> Result<ShiftCyclePlanResult, CyclePlanError> {
         let intent = validate_shift_intent(&input.plan_id, &input.from_date, input.study_days)?;
         validate_preview_token(&input.preview_token)?;
-        let mutation =
-            self.repository
-                .confirm_shift(&intent, &input.preview_token, current_utc_millis()?)?;
+        let mutation = self
+            .repository
+            .confirm_shift(&intent, &input.preview_token, now)?;
         let dashboard = self.dashboard()?;
         Ok(ShiftCyclePlanResult {
             dashboard,
@@ -380,17 +388,31 @@ impl<R: CyclePlanRepository> CyclePlanUseCases<R> {
         })
     }
 
+    #[cfg(test)]
+    pub(crate) fn confirm_shift_plan_for_test(
+        &self,
+        input: &ConfirmShiftCyclePlanInput,
+        now: i64,
+    ) -> Result<ShiftCyclePlanResult, CyclePlanError> {
+        self.confirm_shift_plan_at(input, now)
+    }
+
     pub(crate) fn undo_shift_plan(
         &self,
         input: &UndoShiftCyclePlanInput,
     ) -> Result<CyclePlanDashboard, CyclePlanError> {
+        self.undo_shift_plan_at(input, current_utc_millis()?)
+    }
+
+    fn undo_shift_plan_at(
+        &self,
+        input: &UndoShiftCyclePlanInput,
+        now: i64,
+    ) -> Result<CyclePlanDashboard, CyclePlanError> {
         validate_id(&input.plan_id)?;
         validate_undo_token(&input.undo_token)?;
-        self.repository.undo_shifted_items(
-            &input.plan_id,
-            &input.undo_token,
-            current_utc_millis()?,
-        )?;
+        self.repository
+            .undo_shifted_items(&input.plan_id, &input.undo_token, now)?;
         self.dashboard()
     }
 

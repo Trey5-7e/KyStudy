@@ -1075,6 +1075,9 @@ mod tests {
     use crate::domain::{CyclePlanItemState, NewWorkspace};
     use crate::infrastructure::{SqliteReviewSchemeRepository, SqliteWorkspaceRepository};
 
+    // Keep the five-second production window out of the test scheduler's timing.
+    const TEST_SHIFT_NOW: i64 = 4_000_000_000_000;
+
     fn use_cases(directory: &Path) -> CyclePlanUseCases<SqliteCyclePlanRepository> {
         SqliteWorkspaceRepository::new(directory)
             .initialize_default(&NewWorkspace::default_at(1_700_000_000_000))
@@ -1101,12 +1104,15 @@ mod tests {
             let preview_token = preview
                 .preview_token
                 .ok_or(CyclePlanError::ShiftPreviewStale)?;
-            self.confirm_shift_plan(&ConfirmShiftCyclePlanInput {
-                plan_id: input.plan_id.clone(),
-                from_date: input.from_date.clone(),
-                study_days: input.study_days,
-                preview_token,
-            })
+            self.confirm_shift_plan_for_test(
+                &ConfirmShiftCyclePlanInput {
+                    plan_id: input.plan_id.clone(),
+                    from_date: input.from_date.clone(),
+                    study_days: input.study_days,
+                    preview_token,
+                },
+                TEST_SHIFT_NOW,
+            )
         }
     }
 
