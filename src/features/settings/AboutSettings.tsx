@@ -25,16 +25,20 @@ import { SectionHeader } from "../../shared/ui/SectionHeader";
 import { StatusBanner } from "../../shared/ui/StatusBanner";
 
 const GITHUB_REPOSITORY_URL = "https://github.com/Trey5-7e/KyStudy";
+const GITHUB_ISSUES_URL = `${GITHUB_REPOSITORY_URL}/issues`;
 const AUTO_UPDATE_CHECK_KEY = "kystudy.settings.autoUpdateCheck";
 const LAST_UPDATE_CHECK_KEY = "kystudy.settings.lastUpdateCheck";
 const AUTO_UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-async function openRepository(event: MouseEvent<HTMLAnchorElement>) {
+async function openExternalUrl(
+  event: MouseEvent<HTMLAnchorElement>,
+  url: string,
+) {
   event.preventDefault();
   try {
-    await openUrl(GITHUB_REPOSITORY_URL);
+    await openUrl(url);
   } catch {
-    window.open(GITHUB_REPOSITORY_URL, "_blank", "noopener,noreferrer");
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 }
 
@@ -217,9 +221,20 @@ export function AboutSettings() {
             target="_blank"
             rel="noreferrer"
             className="settings-about-link"
-            onClick={(event) => void openRepository(event)}
+            onClick={(event) =>
+              void openExternalUrl(event, GITHUB_REPOSITORY_URL)
+            }
           >
             GitHub 开源仓库
+          </a>
+          <a
+            href={GITHUB_ISSUES_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="settings-about-link"
+            onClick={(event) => void openExternalUrl(event, GITHUB_ISSUES_URL)}
+          >
+            意见反馈
           </a>
         </div>
       </section>
@@ -325,7 +340,14 @@ export function AboutSettings() {
           <div>
             <dt>代码仓库</dt>
             <dd>
-              <a href={GITHUB_REPOSITORY_URL} target="_blank" rel="noreferrer">
+              <a
+                href={GITHUB_REPOSITORY_URL}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(event) =>
+                  void openExternalUrl(event, GITHUB_REPOSITORY_URL)
+                }
+              >
                 github.com/Trey5-7e/KyStudy
               </a>
             </dd>
