@@ -16,6 +16,12 @@ const MINIMUM_SAFE_SQLITE_VERSION: i32 = 3_051_003;
 // The M10 acceptance build used equivalent v13 SQL before that migration file was frozen.
 const MIGRATION_013_LEGACY_CHECKSUMS: &[&str] =
     &["E0DFA397DC05C5404FD7F4B7AC68C9E1A4ADF8C02EEDB6E10AC135B6C0DFBCD2"];
+// The v0.1.0 release candidate normalized line endings in these migration
+// files after some workspaces had already recorded the original bytes.
+const MIGRATION_015_LEGACY_CHECKSUMS: &[&str] =
+    &["2535352BA3F24A7291F9DBB7BA65A1A44F51CC5B4F242CDCBC3D8A447E3D321A"];
+const MIGRATION_017_LEGACY_CHECKSUMS: &[&str] =
+    &["B6C3C057B5A42BB1D8B1F678607BE7E1C06F3E23492BE67BA6DE44D6F07DB77C"];
 
 #[derive(Debug, Clone, Copy)]
 struct Migration {
@@ -503,9 +509,21 @@ fn migration_checksum(migration: &Migration) -> String {
 }
 
 fn migration_checksum_is_accepted(migration: &Migration, checksum: &str) -> bool {
-    checksum == migration_checksum(migration)
-        || (migration.version == MIGRATION_013.version
-            && MIGRATION_013_LEGACY_CHECKSUMS.contains(&checksum))
+    if checksum == migration_checksum(migration) {
+        return true;
+    }
+    match migration.version {
+        version if version == MIGRATION_013.version => {
+            MIGRATION_013_LEGACY_CHECKSUMS.contains(&checksum)
+        }
+        version if version == MIGRATION_015.version => {
+            MIGRATION_015_LEGACY_CHECKSUMS.contains(&checksum)
+        }
+        version if version == MIGRATION_017.version => {
+            MIGRATION_017_LEGACY_CHECKSUMS.contains(&checksum)
+        }
+        _ => false,
+    }
 }
 
 fn storage_error(source: std::io::Error) -> PersistenceError {
@@ -544,9 +562,10 @@ mod tests {
     use super::{
         APPLICATION_ID, MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004, MIGRATION_005,
         MIGRATION_006, MIGRATION_007, MIGRATION_008, MIGRATION_009, MIGRATION_013,
-        MIGRATION_013_LEGACY_CHECKSUMS, MIGRATION_014, MIGRATION_015, MIGRATION_016, MIGRATION_019,
-        MIGRATION_020, MIGRATION_021, MIGRATION_022, MIGRATION_023, MIGRATIONS, Migration,
-        SqliteWorkspaceRepository, apply_migrations, configure_connection, migrate,
+        MIGRATION_013_LEGACY_CHECKSUMS, MIGRATION_014, MIGRATION_015,
+        MIGRATION_015_LEGACY_CHECKSUMS, MIGRATION_016, MIGRATION_017_LEGACY_CHECKSUMS,
+        MIGRATION_019, MIGRATION_020, MIGRATION_021, MIGRATION_022, MIGRATION_023, MIGRATIONS,
+        Migration, SqliteWorkspaceRepository, apply_migrations, configure_connection, migrate,
         migration_checksum,
     };
     use crate::application::{PersistenceError, WorkspaceRepository};
@@ -862,6 +881,35 @@ mod tests {
         assert_eq!(version, LATEST_SCHEMA_VERSION);
         assert!(plan_stage_task_exists);
         assert_eq!(stored_v13_checksum, MIGRATION_013_LEGACY_CHECKSUMS[0]);
+    }
+
+    #[test]
+    fn find_default_accepts_known_legacy_v15_and_v17_histories() {
+        let directory = tempdir().expect("temporary directory should exist");
+        let repository = SqliteWorkspaceRepository::new(directory.path());
+        std::fs::create_dir_all(repository.workspace_directory())
+            .expect("workspace directory should exist");
+        let mut connection =
+            Connection::open(repository.database_path()).expect("workspace database should open");
+        configure_connection(&connection).expect("connection should configure");
+        apply_migrations(&mut connection, MIGRATIONS).expect("latest schema should be created");
+        connection
+            .execute(
+                "UPDATE schema_migration SET checksum = ?1 WHERE version = 15",
+                [MIGRATION_015_LEGACY_CHECKSUMS[0]],
+            )
+            .expect("fixture should use the pre-normalization v15 checksum");
+        connection
+            .execute(
+                "UPDATE schema_migration SET checksum = ?1 WHERE version = 17",
+                [MIGRATION_017_LEGACY_CHECKSUMS[0]],
+            )
+            .expect("fixture should use the pre-normalization v17 checksum");
+        drop(connection);
+
+        repository
+            .find_default()
+            .expect("known legacy migration checksums should remain readable");
     }
 
     #[test]

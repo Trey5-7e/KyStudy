@@ -108,3 +108,9 @@
 - `pnpm check`、`cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check`、`cargo test --locked --manifest-path src-tauri/Cargo.toml` 和 `cargo clippy --locked --all-targets --manifest-path src-tauri/Cargo.toml -- -D warnings` 均通过。
 
 因此，R52/R53 的 OCR 资产与在线下载构建条件已闭合；完整 v0.1.0 应用发行包的桌面安装验收仍按项目维护者流程执行。
+
+## 7. 2026-08-15 本地迁移历史兼容修复追加记录
+
+部分已有工作区的 v15、v17 迁移记录保留了格式化前的合法 SHA-256；发布候选版本曾因迁移文件换行规范化而误报 `MIGRATION_HISTORY_INCONSISTENT`。本次修复将这两组已知历史摘要加入兼容白名单，未修改任何用户数据库内容，并新增回归测试。
+
+修复版在线 OCR EXE 输出到 `src-tauri/target/release-migration-fix/release/kystudy.exe`，大小 `26,372,096` 字节，SHA-256 `21BF79325517F7C1F67CDFA293A295B707E3C8F175D326DCF1CF0622A1C389EC`。该构建未启动桌面程序；旧 EXE 若仍在运行，需要先正常退出后再替换。
