@@ -127,3 +127,24 @@
 - 读取器现优先使用已保存的有效题型；历史空值会从 `question_index_metadata.source_key` 的题型段恢复，无法恢复时归入“其他”。未修改用户数据库内容。
 - 新增真实 `NULL` 题型快照回归测试及来源标识优先级测试；完整 Rust 测试 `297 passed`，Clippy 与格式检查通过。
 - 最新 Release EXE：`src-tauri/target/release/kystudy.exe`，大小 `26,372,096` 字节，SHA-256 `E6FFDB0D0B07FF309A1E3191DC3F342B7AADE3D2BFE7BE79B98654F8C4DBDF82`；构建后未启动桌面程序。
+
+## 10. 2026-08-15 最终发布前自动门禁与产物记录
+
+项目负责人已确认此前未验收任务均已完成验收；本节记录当前 `main`（`d1d90f5`）的最终自动门禁与重新生成的候选发行包。门禁执行时工作树干净；本节追加记录和便携版说明增强后产生 README、验收文档与打包脚本三份待提交改动。历史章节中的“当前未闭合”描述保持原样，由本节后续证据更新状态。
+
+- 仓库工作树干净，当前 `main` 与远端 `origin/main` 一致；版本元数据统一为 `0.1.0`，许可证为 `GPL-3.0-only`。
+- `pnpm check`：通过；63 个测试文件、407 个测试全部通过，格式、Lint、TypeScript 和生产构建均通过。
+- `cargo fmt --check --manifest-path src-tauri\\Cargo.toml`：通过。
+- `cargo test --locked --manifest-path src-tauri\\Cargo.toml`：通过，297 passed、0 failed。
+- `cargo clippy --all-targets --all-features --locked --manifest-path src-tauri\\Cargo.toml -- -D warnings`：通过。
+- `pnpm tauri build`：通过，生成 NSIS 安装包；未启动桌面程序。
+- `pnpm package:windows-portable`：通过，便携版 ZIP 包含 `kystudy.exe`、`LICENSE` 和 `README.txt`。
+- 便携版 `README.txt` 已补充公开源码仓库与 GPL-3.0-only 说明，并从 ZIP 回读验证；NSIS 继续使用 `licenseFile: ../LICENSE` 提供安装流程许可证文本。
+
+| 产物                                                               |            大小 | SHA-256                                                            |
+| ------------------------------------------------------------------ | --------------: | ------------------------------------------------------------------ |
+| `src-tauri/target/release/kystudy.exe`                             | 26,334,208 字节 | `0F310CCADEC2F1DF92354A2A0DF20CF492AD717CE32A96224A7974852F7B4D0D` |
+| `src-tauri/target/release/bundle/nsis/KyStudy_0.1.0_x64-setup.exe` |  6,931,164 字节 | `8E7D34D6903C03CD3A9CD2FD272724708658712919B0266647F49EBC633315D4` |
+| `artifacts/kystudy-windows-x64-portable.zip`                       |  9,206,166 字节 | `91AFB97DAEE57F73C2C9901416F1936F739534CE69B95AAFEFB9145D00BDD57E` |
+
+当前自动门禁和用户已确认的桌面验收条件均已闭合；正式发布前仍需项目维护者先提交这三份发布文档/脚本改动，再从干净提交创建 `v0.1.0` 标签，并将重新生成的 NSIS/ZIP 产物上传到对应 GitHub Release。该发布动作尚未执行。

@@ -24,7 +24,7 @@
   <img src="https://img.shields.io/badge/status-v0.1.0%20release%20candidate-orange.svg" alt="v0.1.0 release candidate">
 </p>
 
-> 当前首版目标是 Windows 10/11 x64 的 v0.1.0。自动门禁、干净提交和 OCR 组件公开 Release 已完成；完整桌面安装验收与应用发行包 Release 仍由项目维护者最后确认。
+> 当前首版目标是 Windows 10/11 x64 的 v0.1.0。自动门禁、干净提交、桌面安装验收和 OCR 组件公开 Release 已完成；应用发行包仍待从确定的 v0.1.0 标签上传 GitHub Release。
 
 ## 目录
 
@@ -80,6 +80,8 @@ KyStudy 的目标不是记录更多数据，而是减少备考中重复、麻烦
 ### 普通用户
 
 从 [GitHub Releases](https://github.com/Trey5-7e/KyStudy/releases) 下载 Windows x64 发行包：
+
+源码、构建脚本和完整许可证文本位于公开的 [KyStudy GitHub 仓库](https://github.com/Trey5-7e/KyStudy)；安装包不包含完整源码是正常的，源码与二进制发行包分开提供。
 
 1. **NSIS 安装包**：推荐使用，默认按当前用户安装，不需要管理员权限；
 2. **ZIP 便携版**：解压后运行 kystudy.exe，适合临时使用或手动管理目录。
@@ -174,7 +176,7 @@ AI 只在用户主动触发时调用。规划结果先作为草案展示，确�
 - [x] 当前功能、自动门禁和发布候选构建
 - [x] GPL 许可证、Windows NSIS 和 ZIP 便携版配置
 - [x] OCR 组件 ZIP 公开 Release、SHA-256 校验和在线下载构建
-- [ ] 项目维护者完成隔离环境桌面验收
+- [x] 项目维护者完成隔离环境桌面验收
 - [ ] 从干净提交创建 v0.1.0 标签并发布 GitHub Release
 
 ### v0.1.0 之后
@@ -193,7 +195,7 @@ AI 只在用户主动触发时调用。规划结果先作为草案展示，确�
 
 ## 项目图标
 
-docs/branding/kystudy-icon-concept-v4-transparent-tight.png 是当前裁掉多余留白的透明背景项目图标候选，不代表最终品牌定稿。确认视觉方案后，再将其转换为 Windows 多尺寸 ICO 并接入 Tauri 图标资源。
+docs/branding/kystudy-icon-concept-v4-transparent-tight.png 是当前裁掉多余留白的透明背景项目图标；它已接入前端左上角品牌区域，并转换为 Windows 多尺寸 ICO 作为 Tauri 应用图标。
 
 ## 许可证
 
@@ -201,7 +203,6 @@ KyStudy 使用 [GNU General Public License v3.0 only](LICENSE)。任何人都可
 
 ## 致谢
 
-- README 结构参考 [Best-README-Template](https://github.com/othneildrew/Best-README-Template)；
 - 感谢 Tauri、React、Vite、PDF.js、SQLite、Vitest 及其贡献者；
 - 感谢所有通过 Issue 和验收反馈帮助改进 KyStudy 的用户。
 

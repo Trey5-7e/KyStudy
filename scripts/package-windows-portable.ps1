@@ -32,6 +32,8 @@ KyStudy $Version portable package
 Run kystudy.exe to start KyStudy.
 User data is stored separately in the Windows application data directory and is not removed by deleting this folder.
 See the project README for backup, privacy, support, and license information.
+Source code: https://github.com/Trey5-7e/KyStudy
+License: GNU GPL v3.0-only (see LICENSE)
 "@
     Set-Content -LiteralPath (Join-Path $stagingDirectory "README.txt") -Value $readme -Encoding UTF8
 
