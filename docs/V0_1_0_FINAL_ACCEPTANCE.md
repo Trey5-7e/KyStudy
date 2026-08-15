@@ -97,3 +97,14 @@
 - NSIS/ZIP 产物已在本机发布候选构建中生成，但尚未从干净提交创建 `v0.1.0` 标签，也尚未上传 GitHub Release。
 
 因此，当前状态为：**自动门禁和当前实现验收通过；等待最后一轮桌面证据与正式发布资产闭合后，才能宣称 v0.1.0 正式发布验收通过。**
+
+## 6. 2026-08-15 OCR 公开发布与在线构建追加记录
+
+本节追加记录最新状态，前文历史验收结论保持不变：
+
+- 已将 `Trey5-7e/KyStudy` 仓库切换为 Public，并将 `ocr-v0.1.0` 从 Draft 发布为正式 OCR Release。
+- OCR ZIP：[kystudy-ocr-worker-v0.1.0.zip](https://github.com/Trey5-7e/KyStudy/releases/download/ocr-v0.1.0/kystudy-ocr-worker-v0.1.0.zip)，大小 `116,300,551` 字节，SHA-256 `bb5a3e16a898713adde85717f4debe8cfbdf22ca10eb632752368f200513b01`。
+- 已使用公开 URL 和上述摘要完成在线下载配置构建。最新 EXE：`src-tauri/target/release/kystudy.exe`，大小 `26,371,584` 字节，SHA-256 `876EB2551647DAAA4049AF2AFE171531175B0C08954972FE839ECED87B81D8A6`；未启动桌面程序。
+- `pnpm check`、`cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check`、`cargo test --locked --manifest-path src-tauri/Cargo.toml` 和 `cargo clippy --locked --all-targets --manifest-path src-tauri/Cargo.toml -- -D warnings` 均通过。
+
+因此，R52/R53 的 OCR 资产与在线下载构建条件已闭合；完整 v0.1.0 应用发行包的桌面安装验收仍按项目维护者流程执行。

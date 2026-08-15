@@ -151,3 +151,13 @@ Get-ChildItem 'F:\DevTools\VisualStudio\BuildTools\VC\Redist\MSVC' -Directory
 3. **公开时再配置下载地址。** 当前私有 Draft Release 保持不变；仓库公开、Release 发布和 `KYSTUDY_OCR_DOWNLOAD_URL` 配置可以在最终验收后一次完成。
 
 当前没有需要补做的许可证确认动作。保持 Private Draft 只是为了等待最终公开时机，不是因为 R52 组件包存在已知许可阻塞。
+
+## 公开发布闭合记录（2026-08-15）
+
+上一节保留了 2026-08-14 的 Draft Release 过程记录；本节记录其后的最终发布动作，不改写历史证据：
+
+- 仓库 `Trey5-7e/KyStudy` 已按项目拥有者要求切换为 Public。
+- Release `ocr-v0.1.0` 已从 Draft 发布为正式 Release。
+- 公开资产：[kystudy-ocr-worker-v0.1.0.zip](https://github.com/Trey5-7e/KyStudy/releases/download/ocr-v0.1.0/kystudy-ocr-worker-v0.1.0.zip)。
+- 公开资产 SHA-256：`bb5a3e16a898713adde85717f4debe8cfbdf22ca10eb632752368f200513b01`；大小 `116,300,551` 字节。
+- 已用该 HTTPS 地址和摘要完成新的 `pnpm tauri build --no-bundle`；未启动桌面程序。

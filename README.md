@@ -24,7 +24,7 @@
   <img src="https://img.shields.io/badge/status-v0.1.0%20release%20candidate-orange.svg" alt="v0.1.0 release candidate">
 </p>
 
-> 当前首版目标是 Windows 10/11 x64 的 v0.1.0。自动门禁和发布候选构建已通过；正式公开发布仍需完成桌面安装验收、干净提交和 GitHub Release。
+> 当前首版目标是 Windows 10/11 x64 的 v0.1.0。自动门禁、干净提交和 OCR 组件公开 Release 已完成；完整桌面安装验收与应用发行包 Release 仍由项目维护者最后确认。
 
 ## 目录
 
@@ -91,7 +91,7 @@ KyStudy 的目标不是记录更多数据，而是减少备考中重复、麻烦
 - 支持：Windows 10/11 x64；
 - 许可证：[GPL-3.0-only](LICENSE)；
 - 暂不提供：macOS/Linux 包、移动端、自动更新服务、云端账号和多设备同步；
-- 在线 OCR 下载只有在正式 ZIP、公开 HTTPS 地址、SHA-256 和许可证信息齐全后才会启用。
+- 在线 OCR 下载已配置为公开 HTTPS Release 资产，并在构建时写入 SHA-256；本地安装仍可作为兜底路径。
 
 ## 从源码运行
 
@@ -173,6 +173,7 @@ AI 只在用户主动触发时调用。规划结果先作为草案展示，确�
 
 - [x] 当前功能、自动门禁和发布候选构建
 - [x] GPL 许可证、Windows NSIS 和 ZIP 便携版配置
+- [x] OCR 组件 ZIP 公开 Release、SHA-256 校验和在线下载构建
 - [ ] 项目维护者完成隔离环境桌面验收
 - [ ] 从干净提交创建 v0.1.0 标签并发布 GitHub Release
 
