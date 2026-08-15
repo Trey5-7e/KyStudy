@@ -1741,7 +1741,8 @@ fn load_questions(connection: &Connection) -> Result<Vec<IndexedQuestion>, Quest
         .prepare(
             "SELECT q.id, q.document_id, d.title, q.subject_id, subject.name,
                     m.workbook_id, w.name, m.segment_id, COALESCE(q.chapter, '未分章'),
-                    m.section_part, q.question_type, COALESCE(q.question_number, ''),
+                    m.section_part, m.source_key, q.question_type,
+                    COALESCE(q.question_number, ''),
                     q.title, m.index_confidence, m.sort_order,
                     (SELECT a.result FROM question_attempt a
                      WHERE a.question_id = q.id ORDER BY a.attempted_at DESC, a.id DESC LIMIT 1),
@@ -1764,8 +1765,8 @@ fn load_questions(connection: &Connection) -> Result<Vec<IndexedQuestion>, Quest
         .map_err(database_error)?;
     let rows = statement
         .query_map([], |row| {
-            let question_type: String = row.get(10)?;
-            let current_result: Option<String> = row.get(15)?;
+            let question_type: Option<String> = row.get(11)?;
+            let current_result: Option<String> = row.get(16)?;
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
@@ -1777,15 +1778,16 @@ fn load_questions(connection: &Connection) -> Result<Vec<IndexedQuestion>, Quest
                 row.get::<_, String>(7)?,
                 row.get::<_, String>(8)?,
                 row.get::<_, String>(9)?,
+                row.get::<_, String>(10)?,
                 question_type,
-                row.get::<_, String>(11)?,
                 row.get::<_, String>(12)?,
-                row.get::<_, f64>(13)?,
-                row.get::<_, u32>(14)?,
+                row.get::<_, String>(13)?,
+                row.get::<_, f64>(14)?,
+                row.get::<_, u32>(15)?,
                 current_result,
-                row.get::<_, u32>(16)?,
                 row.get::<_, u32>(17)?,
                 row.get::<_, u32>(18)?,
+                row.get::<_, u32>(19)?,
             ))
         })
         .map_err(database_error)?
@@ -1794,8 +1796,8 @@ fn load_questions(connection: &Connection) -> Result<Vec<IndexedQuestion>, Quest
     rows.into_iter()
         .map(|row| {
             let question_type =
-                QuestionType::parse(&row.10).ok_or(QuestionBankError::InvalidInput)?;
-            let current_result = match row.15.as_deref() {
+                parse_question_type_with_legacy_fallback(row.11.as_deref(), &row.10);
+            let current_result = match row.16.as_deref() {
                 Some(value) => {
                     Some(AttemptResult::parse(value).ok_or(QuestionBankError::InvalidInput)?)
                 }
@@ -1813,18 +1815,28 @@ fn load_questions(connection: &Connection) -> Result<Vec<IndexedQuestion>, Quest
                 chapter: row.8,
                 section_part: row.9,
                 question_type,
-                question_number: row.11,
-                title: row.12,
-                index_confidence: row.13,
-                sort_order: row.14,
+                question_number: row.12,
+                title: row.13,
+                index_confidence: row.14,
+                sort_order: row.15,
                 current_result,
-                attempt_count: row.16,
-                incorrect_count: row.17,
-                partial_count: row.18,
+                attempt_count: row.17,
+                incorrect_count: row.18,
+                partial_count: row.19,
                 regions: load_regions(connection, &row.0)?,
             })
         })
         .collect()
+}
+
+fn parse_question_type_with_legacy_fallback(
+    stored_type: Option<&str>,
+    source_key: &str,
+) -> QuestionType {
+    stored_type
+        .and_then(QuestionType::parse)
+        .or_else(|| source_key.split('|').nth(2).and_then(QuestionType::parse))
+        .unwrap_or(QuestionType::Other)
 }
 
 fn load_regions(
@@ -2021,6 +2033,62 @@ mod tests {
     use crate::infrastructure::{
         SqliteBlobStore, SqliteScheduleRepository, SqliteWorkspaceRepository,
     };
+
+    #[test]
+    fn legacy_missing_question_type_uses_source_key_classification() {
+        let parsed = parse_question_type_with_legacy_fallback(None, "第0章 零基础|other|blank|4|1");
+
+        assert_eq!(parsed, QuestionType::Blank);
+    }
+
+    #[test]
+    fn valid_question_type_takes_precedence_over_source_key() {
+        let parsed = parse_question_type_with_legacy_fallback(
+            Some("choice"),
+            "第0章 零基础|other|blank|4|1",
+        );
+
+        assert_eq!(parsed, QuestionType::Choice);
+    }
+
+    #[test]
+    fn unknown_legacy_question_type_defaults_to_other() {
+        let parsed = parse_question_type_with_legacy_fallback(
+            Some("legacy-type"),
+            "第0章 零基础|other|unclassified|4|1",
+        );
+
+        assert_eq!(parsed, QuestionType::Other);
+    }
+
+    #[test]
+    fn snapshot_accepts_legacy_null_question_type() {
+        let (directory, bank, _segment_id, indexed) = question_bank_fixture(1);
+        let question_id = indexed.questions[0].id.clone();
+        let database_path = directory.path().join("workspaces/default/kystudy.sqlite3");
+        let connection = Connection::open(database_path).expect("fixture database should open");
+        connection
+            .execute(
+                "UPDATE question SET question_type = NULL WHERE id = ?1",
+                rusqlite::params![question_id],
+            )
+            .expect("legacy question type should be cleared");
+        connection
+            .execute(
+                "UPDATE question_index_metadata
+                 SET source_key = '第0章 零基础|other|blank|4|1'
+                 WHERE question_id = ?1",
+                rusqlite::params![indexed.questions[0].id],
+            )
+            .expect("legacy source key should be restored");
+        drop(connection);
+
+        let snapshot = bank
+            .snapshot()
+            .expect("legacy null question type should not block snapshot loading");
+
+        assert_eq!(snapshot.questions[0].question_type, QuestionType::Blank);
+    }
 
     #[test]
     fn question_gap_acknowledgements_are_sorted_and_idempotent() {
