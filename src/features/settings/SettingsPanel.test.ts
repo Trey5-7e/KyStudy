@@ -13,12 +13,13 @@ const SETTINGS_PANEL_SOURCE = readFileSync(
 );
 
 describe("settings tab navigation", () => {
-  it("keeps the four tabs in the rendered and roving order", () => {
+  it("keeps the five tabs in the rendered and roving order", () => {
     expect(SETTINGS_TABS.map((tab) => tab.id)).toEqual([
       "study",
       "ai",
       "data",
       "application",
+      "about",
     ]);
   });
 
@@ -30,13 +31,14 @@ describe("settings tab navigation", () => {
     expect(nextSettingsTab("study", "ArrowRight")).toBe("ai");
     expect(nextSettingsTab("ai", "ArrowDown")).toBe("data");
     expect(nextSettingsTab("data", "ArrowLeft")).toBe("ai");
-    expect(nextSettingsTab("study", "ArrowUp")).toBe("application");
-    expect(nextSettingsTab("application", "ArrowRight")).toBe("study");
+    expect(nextSettingsTab("study", "ArrowUp")).toBe("about");
+    expect(nextSettingsTab("application", "ArrowRight")).toBe("about");
+    expect(nextSettingsTab("about", "ArrowRight")).toBe("study");
   });
 
   it("keeps Home and End as explicit bounds", () => {
     expect(nextSettingsTab("data", "Home")).toBe("study");
-    expect(nextSettingsTab("study", "End")).toBe("application");
+    expect(nextSettingsTab("study", "End")).toBe("about");
   });
 
   it("ignores non-navigation keys", () => {
@@ -70,5 +72,12 @@ describe("settings tab DOM contract", () => {
     expect(SETTINGS_PANEL_SOURCE).toContain(
       "requestAnimationFrame(() => settingsTabRefs.current[next]?.focus());",
     );
+  });
+
+  it("does not expose legacy planning compatibility tools", () => {
+    expect(SETTINGS_PANEL_SOURCE).not.toContain("LegacyPlanCompatibilityPanel");
+    expect(SETTINGS_PANEL_SOURCE).not.toContain("历史详细规划数据");
+    expect(SETTINGS_PANEL_SOURCE).not.toContain("打开兼容工具");
+    expect(SETTINGS_PANEL_SOURCE).not.toContain("Schema");
   });
 });

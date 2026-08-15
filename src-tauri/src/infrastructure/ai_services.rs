@@ -12,6 +12,7 @@ use crate::application::{
 use crate::domain::{AiModelProfile, AiProviderConfig, AiProviderType};
 
 const KEYRING_SERVICE: &str = "io.github.kystudy.ai";
+const DEBUG_KEYRING_SERVICE: &str = "io.github.kystudy.ai-dev";
 const PROVIDER_TIMEOUT: Duration = Duration::from_mins(1);
 const MAXIMUM_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -50,7 +51,12 @@ fn entry(reference: &str) -> Result<Entry, AiError> {
     if reference.is_empty() || reference.len() > 120 {
         return Err(AiError::InvalidInput);
     }
-    Entry::new(KEYRING_SERVICE, reference).map_err(|_| AiError::SecretStoreUnavailable)
+    let service = if cfg!(debug_assertions) {
+        DEBUG_KEYRING_SERVICE
+    } else {
+        KEYRING_SERVICE
+    };
+    Entry::new(service, reference).map_err(|_| AiError::SecretStoreUnavailable)
 }
 
 #[derive(Debug, Clone, Copy, Default)]

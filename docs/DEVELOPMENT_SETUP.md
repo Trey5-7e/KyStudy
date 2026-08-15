@@ -110,6 +110,33 @@ pnpm tauri build --no-bundle
 
 `.github/workflows/windows-ci.yml` 在固定的 `windows-2025` GitHub 托管 Runner 上重复执行上述质量门槛和 Release 构建。`scripts/test-release-smoke.ps1` 随后在隔离 AppData 下验证主窗口启动、进程稳定性和“启动不自动创建工作区”，并将 EXE 与 JSON 报告上传为短期 Artifact。详细边界与首次验收步骤见 [M1 Windows CI 文档](archive/v0.1.0/M1_WINDOWS_CI.md)。
 
+### 5.2 本地干净首启预览
+
+开发运行和已安装版本会共享当前 Windows 用户的 `%APPDATA%\io.github.kystudy.desktop`，因此安装包启动后看到开发资料是同一工作区被复用，并不表示资料被打进安装包。要查看真正的新用户首启状态，请使用隔离 AppData 启动 Release EXE：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-clean-release-preview.ps1 `
+  -ExecutablePath .\src-tauri\target\release\kystudy.exe
+```
+
+也可以把 `-ExecutablePath` 换成从 GitHub 下载或安装得到的 `kystudy.exe` 路径。脚本会在系统临时目录创建一次性 AppData，关闭窗口后自动清理，不会修改正常开发工作区；如果需要保留这次预览数据，请在脚本中止前复制临时目录中的资料。
+
+### 5.3 开发工作区与正式工作区隔离
+
+Debug/Tauri 开发构建使用 `%APPDATA%\io.github.kystudy.desktop-dev`，并使用独立的 Windows 凭据服务 `io.github.kystudy.ai-dev`；Release/安装版继续使用 `%APPDATA%\io.github.kystudy.desktop` 和 `io.github.kystudy.ai`。如果本机已有一份过去由开发版写入正式目录的工作区，请先关闭 KyStudy，再显式执行一次迁移：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\separate-development-workspace.ps1 -ConfirmMove
+```
+
+迁移脚本只会在目标目录不存在、且没有运行中的 KyStudy 进程时移动目录；它不会合并或覆盖已有目录。迁移完成后，开发版继续使用原来的资料，安装版从正式目录开始，不再读取开发资料。由于凭据服务也已隔离，Debug 首次使用 AI 时需要重新录入 API Key。
+
+如果误把原有个人数据迁移到了 Debug，而你希望日常使用 Release/安装版，可在关闭 KyStudy 后执行恢复脚本。它会先把当前 Release 目录改名为带随机后缀的备份，再把 Debug 数据移回正式目录，不会覆盖现有目录：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\restore-release-workspace.ps1 -ConfirmMove
+```
+
 ## 6. TV-01 实验依赖
 
 实验目录：`experiments/tv-01-tauri-shell/`。
@@ -144,6 +171,15 @@ pnpm tauri build
 ```
 
 Release 打包会生成未签名的实验产物。它们只用于技术验证，不应作为正式 KyStudy 安装包发布。
+
+### 签名更新与 GitHub Release
+
+KyStudy 的正式 Windows 版通过 Tauri updater 从 GitHub Release 获取 `latest.json`，并在安装前校验签名。更新私钥不得写入仓库或提交到工作区；发布前在 GitHub 仓库配置以下 Actions Secrets：
+
+- `TAURI_SIGNING_PRIVATE_KEY`：本地 `pnpm tauri signer generate` 生成的私钥全文；
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：如果私钥设置了密码，则填写对应密码，否则留空。
+
+推送 `v*` 标签或手动运行 `Publish Windows Release` 工作流，会使用 `src-tauri/tauri.release.conf.json` 生成签名更新包和 `latest.json`，并创建 Draft Release 供发布者复核。不要在普通 CI 或 Debug 构建中使用私钥；开发构建不会参与自动更新。
 
 ## 8. 项目本地 Agent Skills
 

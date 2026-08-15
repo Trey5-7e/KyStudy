@@ -321,6 +321,116 @@
   content: "";
 }
 
+.settings-about-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  min-width: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: var(--space-5);
+}
+
+.settings-about-logo {
+  width: 4.5rem;
+  height: 4.5rem;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.settings-about-identity {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.settings-about-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.settings-about-title-row h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xl);
+}
+
+.settings-about-identity p {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.settings-about-link,
+.settings-description-list a {
+  color: var(--color-primary);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.settings-update-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  background: var(--color-bg-subtle);
+}
+
+.settings-update-card > div {
+  min-width: 0;
+}
+
+.settings-update-card strong,
+.settings-update-card p {
+  margin: 0;
+}
+
+.settings-update-card p {
+  margin-top: var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.settings-update-card .settings-update-notes {
+  margin-top: var(--space-3);
+  white-space: pre-wrap;
+}
+
+.settings-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: var(--space-4);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.settings-toggle-row input {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+  accent-color: var(--color-primary);
+}
+
+.settings-toggle-row span {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.settings-toggle-row small {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-body);
+}
+
 .settings-runtime .ui-section-header-actions {
   align-items: center;
 }
@@ -471,6 +581,12 @@
   .settings-content .workspace-grid > div {
     grid-template-columns: minmax(7rem, 0.6fr) minmax(0, 1fr);
     gap: var(--space-3);
+  }
+
+  .settings-about-hero,
+  .settings-update-card {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

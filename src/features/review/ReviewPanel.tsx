@@ -94,9 +94,8 @@ export function ReviewPanel({
   const header = (actions?: React.ReactNode) => (
     <PageHeader
       id="review-title"
-      eyebrow="每日复习队列"
       title="错题"
-      description="设置一次，之后只做系统推送的题；未完成题自动顺延。"
+      description="按系统推送复习，未完成题自动顺延。"
       actions={actions}
     />
   );

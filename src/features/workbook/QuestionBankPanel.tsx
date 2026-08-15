@@ -14,13 +14,16 @@ import {
   PageSurface,
 } from "../../shared/components/PagePrimitives";
 import {
+  archiveWorkbookCategory,
   getQuestionBank,
   listTrashedWorkbookSegments,
   normalizeQuestionBankError,
   practiceStatus,
+  renameWorkbookCategory,
   restoreWorkbookSegment,
   type QuestionBankSnapshot,
   type TrashedWorkbookDocumentSegment,
+  type WorkbookCategory,
   type WorkbookDocumentSegment,
 } from "../../shared/tauri/questionBankClient";
 import {
@@ -29,7 +32,10 @@ import {
   type ResourceDocument,
 } from "../../shared/tauri/resourceClient";
 import {
+  archiveSubject,
   listSubjects,
+  normalizeScheduleCommandError,
+  renameSubject,
   type StudySubject,
 } from "../../shared/tauri/scheduleClient";
 import { getWorkspaceStatus } from "../../shared/tauri/workspaceClient";
@@ -50,6 +56,7 @@ import {
 } from "./questionBankWindowModel";
 
 import { QuestionBankTree } from "./QuestionBankTree";
+import { QuestionBankCategoryOverview } from "./QuestionBankCategoryOverview";
 import { QuestionBankWindowPresenter } from "./QuestionBankWindowPresenter";
 import { ManualIndexDialog } from "./ManualIndexDialog";
 import { findSegmentRestoreConflicts } from "./questionBankModel";
@@ -81,6 +88,8 @@ export function QuestionBankPanel({
   const [segmentManagerNotice, setSegmentManagerNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ResourceCommandError>();
+  const [categoryActionBusyId, setCategoryActionBusyId] = useState<string>();
+  const [categoryActionError, setCategoryActionError] = useState<string>();
   const [questionBankLoadState, setQuestionBankLoadState] =
     useState<QuestionBankLoadState>("loading");
   const [questionBankSnapshotError, setQuestionBankSnapshotError] =
@@ -230,6 +239,98 @@ export function QuestionBankPanel({
     }
   }, [refreshAuxiliaryData, refreshSnapshot]);
 
+  const deleteSubject = useCallback(
+    async (subject: StudySubject): Promise<void> => {
+      if (
+        !window.confirm(
+          `删除科目“${subject.name}”？它会从整个应用的可选科目和题库中隐藏，但已有题目、任务和学习记录会保留。`,
+        )
+      ) {
+        return;
+      }
+      setCategoryActionBusyId(subject.id);
+      setCategoryActionError(undefined);
+      try {
+        await archiveSubject(subject.id);
+        await refresh();
+      } catch (deleteError: unknown) {
+        setCategoryActionError(
+          normalizeScheduleCommandError(deleteError).message,
+        );
+      } finally {
+        setCategoryActionBusyId(undefined);
+      }
+    },
+    [refresh],
+  );
+
+  const deleteWorkbook = useCallback(
+    async (workbook: WorkbookCategory): Promise<void> => {
+      if (
+        !window.confirm(
+          `删除练习册“${workbook.name}”？已有题目和学习记录会保留，但该练习册会从题库中隐藏。`,
+        )
+      ) {
+        return;
+      }
+      setCategoryActionBusyId(workbook.id);
+      setCategoryActionError(undefined);
+      try {
+        await archiveWorkbookCategory(workbook.id);
+        await refresh();
+      } catch (deleteError: unknown) {
+        setCategoryActionError(normalizeQuestionBankError(deleteError).message);
+      } finally {
+        setCategoryActionBusyId(undefined);
+      }
+    },
+    [refresh],
+  );
+
+  const renameSubjectCategory = useCallback(
+    async (
+      subject: StudySubject,
+      name: string,
+    ): Promise<string | undefined> => {
+      setCategoryActionBusyId(subject.id);
+      setCategoryActionError(undefined);
+      try {
+        await renameSubject(subject.id, name);
+        await refresh();
+        return undefined;
+      } catch (renameError: unknown) {
+        const message = normalizeScheduleCommandError(renameError).message;
+        setCategoryActionError(message);
+        return message;
+      } finally {
+        setCategoryActionBusyId(undefined);
+      }
+    },
+    [refresh],
+  );
+
+  const renameWorkbookCategoryItem = useCallback(
+    async (
+      workbook: WorkbookCategory,
+      name: string,
+    ): Promise<string | undefined> => {
+      setCategoryActionBusyId(workbook.id);
+      setCategoryActionError(undefined);
+      try {
+        await renameWorkbookCategory(workbook.id, name);
+        await refresh();
+        return undefined;
+      } catch (renameError: unknown) {
+        const message = normalizeQuestionBankError(renameError).message;
+        setCategoryActionError(message);
+        return message;
+      } finally {
+        setCategoryActionBusyId(undefined);
+      }
+    },
+    [refresh],
+  );
+
   const refreshSegmentTrash = useCallback(
     async (options?: { restoreCompleted?: boolean }): Promise<boolean> => {
       if (!mountedRef.current) return false;
@@ -353,7 +454,10 @@ export function QuestionBankPanel({
     () => [
       {
         label: "科目",
-        value: new Set(snapshot.segments.map((value) => value.subjectId)).size,
+        value: Math.max(
+          subjects.length,
+          new Set(snapshot.segments.map((value) => value.subjectId)).size,
+        ),
       },
       { label: "练习册", value: snapshot.workbooks.length },
       { label: "已索引", value: `${snapshot.questions.length} 道` },
@@ -364,6 +468,7 @@ export function QuestionBankPanel({
       snapshot.segments,
       snapshot.questions.length,
       snapshot.workbooks.length,
+      subjects.length,
     ],
   );
   const availableSegmentIds = useMemo(
@@ -656,9 +761,7 @@ export function QuestionBankPanel({
     <PageSurface className="question-bank" labelledBy="question-bank-title">
       <PageHeader
         id="question-bank-title"
-        eyebrow="题库"
         title="习题册"
-        description="管理科目、练习册和 PDF 题目索引。"
         actions={pageActions}
       />
 
@@ -745,6 +848,17 @@ export function QuestionBankPanel({
           ))}
         </div>
       )}
+
+      <QuestionBankCategoryOverview
+        subjects={subjects}
+        workbooks={snapshot.workbooks}
+        busyId={categoryActionBusyId}
+        error={categoryActionError}
+        onDeleteSubject={(subject) => void deleteSubject(subject)}
+        onDeleteWorkbook={(workbook) => void deleteWorkbook(workbook)}
+        onRenameSubject={renameSubjectCategory}
+        onRenameWorkbook={renameWorkbookCategoryItem}
+      />
 
       {activeSnapshotEmpty &&
       !segmentTrashLoaded &&
@@ -856,15 +970,19 @@ export function QuestionBankPanel({
         onClose={closeWindow}
         onBack={backWindow}
         onCloseDialog={closeDialogWindow}
-        onSubjectCreated={(subject) =>
-          setSubjects((current) => [...current, subject])
-        }
-        onWorkbookCreated={(workbook) =>
+        onSubjectCreated={(subject) => {
+          setCategoryActionError(undefined);
+          setSubjects((current) => [...current, subject]);
+          void refresh();
+        }}
+        onWorkbookCreated={(workbook) => {
+          setCategoryActionError(undefined);
           applySnapshotUpdate((current) => ({
             ...current,
             workbooks: [...current.workbooks, workbook],
-          }))
-        }
+          }));
+          void refresh();
+        }}
         onCloseSegmentManager={closeSegmentManager}
         onCloseSegmentTrash={closeSegmentTrash}
         onSelectTool={selectQuestionBankTool}

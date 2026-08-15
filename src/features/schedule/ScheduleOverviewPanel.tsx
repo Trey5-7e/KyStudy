@@ -66,9 +66,7 @@ export function ScheduleOverviewPanel({
     >
       <PageHeader
         id="schedule-overview-title"
-        eyebrow="历史详细日程"
         title="已有日程"
-        description="查看已生成的周日程、学习记录、统计和回收站。"
         backAction={
           <button
             type="button"

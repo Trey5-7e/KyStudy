@@ -680,6 +680,16 @@ export async function archiveSubject(subjectId: string): Promise<StudySubject> {
   return parseStudySubject(value);
 }
 
+export async function renameSubject(
+  subjectId: string,
+  name: string,
+): Promise<StudySubject> {
+  const value: unknown = await invoke("rename_subject", {
+    request: { subjectId, name },
+  });
+  return parseStudySubject(value);
+}
+
 export async function createTask(request: CreateTaskInput): Promise<StudyTask> {
   const value: unknown = await invoke("create_task", { request });
   return parseStudyTask(value);

@@ -147,6 +147,55 @@ impl ScheduleRepository for SqliteScheduleRepository {
         Ok(subject)
     }
 
+    fn rename_subject(
+        &self,
+        subject_id: &str,
+        name: &str,
+        renamed_at: i64,
+    ) -> Result<Subject, ScheduleError> {
+        let (mut connection, workspace_id) = self.open_current()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(schedule_database_error)?;
+        let duplicate = transaction
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM subject
+                    WHERE workspace_id = ?1 AND name = ?2 COLLATE NOCASE
+                      AND archived_at IS NULL AND id <> ?3
+                 )",
+                params![workspace_id, name, subject_id],
+                |row| row.get::<_, bool>(0),
+            )
+            .map_err(schedule_database_error)?;
+        if duplicate {
+            return Err(ScheduleError::SubjectNameConflict);
+        }
+        let raw = transaction
+            .query_row(
+                "SELECT id, name, color_key, sort_order, archived_at, created_at, updated_at
+                 FROM subject
+                 WHERE id = ?1 AND workspace_id = ?2 AND archived_at IS NULL",
+                params![subject_id, workspace_id],
+                raw_subject,
+            )
+            .optional()
+            .map_err(schedule_database_error)?
+            .ok_or(ScheduleError::SubjectNotFound)?;
+        let mut subject = subject_from_raw(raw)?;
+        subject.rename(name, renamed_at)?;
+        transaction
+            .execute(
+                "UPDATE subject
+                 SET name = ?1, updated_at = ?2
+                 WHERE id = ?3 AND workspace_id = ?4 AND archived_at IS NULL",
+                params![subject.name, renamed_at, subject_id, workspace_id],
+            )
+            .map_err(schedule_database_error)?;
+        transaction.commit().map_err(schedule_database_error)?;
+        Ok(subject)
+    }
+
     fn create_task(&self, task: &NewTask) -> Result<Task, ScheduleError> {
         let (mut connection, workspace_id) = self.open_current()?;
         let transaction = connection
@@ -1686,6 +1735,32 @@ mod tests {
 
         assert_eq!(subjects.len(), 1);
         assert_eq!(subjects[0].name, "408");
+    }
+
+    #[test]
+    fn rename_subject_updates_active_category_name() {
+        let fixture = initialized_fixture();
+        let subject = NewSubject::new("408", SubjectColor::Blue, 0, 1_700_000_000_001)
+            .expect("subject should be valid");
+        fixture
+            .schedule
+            .create_subject(&subject)
+            .expect("subject should persist");
+
+        let renamed = fixture
+            .schedule
+            .rename_subject(&subject.id, "高等数学", 1_700_000_000_002)
+            .expect("subject should rename");
+
+        assert_eq!(renamed.name, "高等数学");
+        assert_eq!(
+            fixture
+                .schedule
+                .list_subjects()
+                .expect("subjects should list")[0]
+                .name,
+            "高等数学"
+        );
     }
 
     #[test]

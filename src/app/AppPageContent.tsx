@@ -1,6 +1,5 @@
 import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
 
-import type { ResourceOpenRequest } from "../features/library/ResourcePanel";
 import { PageHeader, PageStatus } from "../shared/components/PagePrimitives";
 import type { AppView } from "./navigation";
 import type { QuestionBankOpenRequest } from "../features/workbook/questionBankWindowModel";
@@ -71,11 +70,9 @@ export const PAGE_META: Readonly<Record<AppView, AppPageMeta>> = {
 
 export interface AppPageContentProps {
   activeView: AppView;
-  resourceOpenRequest?: ResourceOpenRequest;
   reviewOpenRequest?: number;
   workbookOpenRequest?: QuestionBankOpenRequest;
   backAction?: ReactNode;
-  onOpenResource: (documentId: string, page: number) => void;
   onOpenReviewWindow: () => void;
   onOpenPaperShortcut: () => void;
   onOpenSettings: () => void;
@@ -85,10 +82,8 @@ export interface AppPageContentProps {
 
 function PageContent({
   activeView,
-  resourceOpenRequest,
   reviewOpenRequest,
   workbookOpenRequest,
-  onOpenResource,
   onOpenReviewWindow,
   onOpenPaperShortcut,
   onOpenSettings,
@@ -114,7 +109,7 @@ function PageContent({
     case "schedule":
       return <ScheduleOverviewPanel onBackToPlanning={onBackToPlanning} />;
     case "library":
-      return <ResourcePanel openRequest={resourceOpenRequest} />;
+      return <ResourcePanel />;
     case "workbook":
       return <WorkbookPanel openRequest={workbookOpenRequest} />;
     case "review":
@@ -125,22 +120,15 @@ function PageContent({
         />
       );
     case "settings":
-      return (
-        <SettingsPanel
-          onOpenReference={onOpenResource}
-          onOpenSchedule={() => onNavigate("schedule")}
-        />
-      );
+      return <SettingsPanel />;
   }
 }
 
 export function AppPageContent({
   activeView,
-  resourceOpenRequest,
   reviewOpenRequest,
   workbookOpenRequest,
   backAction,
-  onOpenResource,
   onOpenReviewWindow,
   onOpenPaperShortcut,
   onOpenSettings,
@@ -152,22 +140,15 @@ export function AppPageContent({
     <Suspense
       fallback={
         <div className="page-loading-shell">
-          <PageHeader
-            eyebrow="本地学习辅助"
-            title={currentPage.label}
-            description={currentPage.caption}
-            backAction={backAction}
-          />
+          <PageHeader title={currentPage.label} backAction={backAction} />
           <PageStatus tone="loading" title="正在加载页面…" />
         </div>
       }
     >
       <PageContent
         activeView={activeView}
-        resourceOpenRequest={resourceOpenRequest}
         reviewOpenRequest={reviewOpenRequest}
         workbookOpenRequest={workbookOpenRequest}
-        onOpenResource={onOpenResource}
         onOpenReviewWindow={onOpenReviewWindow}
         onOpenPaperShortcut={onOpenPaperShortcut}
         onOpenSettings={onOpenSettings}

@@ -12,7 +12,6 @@ export function TodayFocusHeader({ date, exam }: TodayFocusHeaderProps) {
       <div className="today-focus-heading">
         <p className="today-focus-eyebrow">{formatOverviewDate(date)}</p>
         <h1 id="today-title">今日</h1>
-        <p>先完成下一项学习任务，进度会在这里持续更新。</p>
       </div>
       <div className="today-exam-context" aria-label="考试倒计时">
         <div>

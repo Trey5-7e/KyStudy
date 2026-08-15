@@ -10,6 +10,7 @@ node_modules/
 dist/
 dist-ssr/
 artifacts/
+experiments/**/output/
 
 # Rust and Tauri build output
 target/

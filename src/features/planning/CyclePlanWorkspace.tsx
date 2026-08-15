@@ -137,7 +137,7 @@ export function CyclePlanWorkspace({
       <PageHeader
         id="cycle-plan-title"
         title="计划"
-        description="先看整月安排；只需设置数量和节奏，不必逐日添加任务。"
+        description="设置学习节奏，月历会自动生成。"
         actions={
           <button
             type="button"

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 
-import type { ResourceOpenRequest } from "../features/library/ResourcePanel";
 import {
   resolveHashView,
   resolveStoredView,
@@ -34,8 +33,6 @@ function storeView(view: AppView) {
 
 export function App() {
   const [activeView, setActiveView] = useState<AppView>(loadInitialView);
-  const [resourceOpenRequest, setResourceOpenRequest] =
-    useState<ResourceOpenRequest>();
   const [reviewOpenRequest, setReviewOpenRequest] = useState<number>();
   const [workbookOpenRequest, setWorkbookOpenRequest] =
     useState<QuestionBankOpenRequest>();
@@ -84,18 +81,11 @@ export function App() {
     }
   };
 
-  const openResource = (documentId: string, page: number) => {
-    setResourceOpenRequest({ documentId, page, nonce: Date.now() });
-    navigate("library");
-  };
-
   return (
     <AppShell
       activeView={activeView}
-      resourceOpenRequest={resourceOpenRequest}
       reviewOpenRequest={reviewOpenRequest}
       workbookOpenRequest={workbookOpenRequest}
-      onOpenResource={openResource}
       onOpenReviewWindow={() =>
         setReviewOpenRequest((current) => (current ?? 0) + 1)
       }

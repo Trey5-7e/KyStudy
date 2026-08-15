@@ -261,6 +261,25 @@ export async function createWorkbookCategory(
   );
 }
 
+export async function archiveWorkbookCategory(
+  workbookId: string,
+): Promise<WorkbookCategory> {
+  return parseWorkbookCategory(
+    await invoke("archive_workbook_category", { workbookId }),
+  );
+}
+
+export async function renameWorkbookCategory(
+  workbookId: string,
+  name: string,
+): Promise<WorkbookCategory> {
+  return parseWorkbookCategory(
+    await invoke("rename_workbook_category", {
+      request: { workbookId, name },
+    }),
+  );
+}
+
 export async function saveWorkbookSegments(
   assignments: WorkbookSegmentAssignment[],
 ): Promise<WorkbookDocumentSegment[]> {

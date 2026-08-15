@@ -85,10 +85,11 @@ pub(crate) use question_bank::{
     BulkQuestionAttemptInput, CreateWorkbookCategoryInput, ImportQuestionIndexInput,
     IndexedQuestionDraftInput, IndexedQuestionRegionUpdateInput, InsertIndexedQuestionInput,
     QuestionBankError, QuestionBankRepository, QuestionBankUseCases, ReassignWorkbookSegmentInput,
-    RecordBulkQuestionAttemptsInput, ReplaceIndexedQuestionRegionsInput,
-    RestoreWorkbookSegmentInput, SetQuestionGapAcknowledgementInput, TrashWorkbookSegmentInput,
-    UpdateIndexedQuestionInput, ValidatedBulkAttempt, ValidatedIndexedQuestion,
-    ValidatedIndexedQuestionUpdate, WorkbookSegmentAssignmentInput,
+    RecordBulkQuestionAttemptsInput, RenameWorkbookCategoryInput,
+    ReplaceIndexedQuestionRegionsInput, RestoreWorkbookSegmentInput,
+    SetQuestionGapAcknowledgementInput, TrashWorkbookSegmentInput, UpdateIndexedQuestionInput,
+    ValidatedBulkAttempt, ValidatedIndexedQuestion, ValidatedIndexedQuestionUpdate,
+    WorkbookSegmentAssignmentInput,
 };
 pub(crate) use resource::{
     ImportError, ImportProgress, ImportRequest, MindMapSource, ReadableResource, RecoveryReport,
@@ -109,9 +110,9 @@ pub(crate) use review_scheme::{
 };
 pub(crate) use runtime::{RuntimeStatus, get_runtime_status};
 pub(crate) use schedule::{
-    CreateStudySessionInput, CreateSubjectInput, CreateTaskInput, RescheduleTaskInput,
-    ScheduleError, ScheduleRepository, ScheduleUseCases, SplitChildInput, SplitTaskInput,
-    UpdateTaskDetailsInput,
+    CreateStudySessionInput, CreateSubjectInput, CreateTaskInput, RenameSubjectInput,
+    RescheduleTaskInput, ScheduleError, ScheduleRepository, ScheduleUseCases, SplitChildInput,
+    SplitTaskInput, UpdateTaskDetailsInput,
 };
 pub(crate) use search::{
     BeginResourceIndexInput, SearchError, SearchRepository, SearchResourcesInput, SearchUseCases,

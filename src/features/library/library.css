@@ -478,8 +478,27 @@
   gap: var(--space-2);
 }
 
-.library-page .resource-reader {
-  margin-top: var(--space-2);
+.resource-reader-dialog .editor-dialog-content {
+  padding: 0;
+  overflow: hidden;
+}
+
+.resource-reader-dialog .pdf-reader {
+  border: 1px solid rgb(30 91 66 / 16%);
+  border-radius: 0;
+  overflow: hidden;
+  background: #edf3ed;
+}
+
+.resource-reader-dialog .pdf-canvas-shell {
+  min-height: calc(94dvh - 10rem);
+  max-height: calc(94dvh - 10rem);
+}
+
+.resource-reader-dialog .image-reader {
+  min-height: calc(94dvh - 10rem);
+  border: 1px solid rgb(30 91 66 / 16%);
+  border-radius: 0;
 }
 
 .library-page .destructive-confirmation {

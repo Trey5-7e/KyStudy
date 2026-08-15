@@ -42,7 +42,6 @@ export function TodayCyclePlanSection({
       <SectionHeader
         id="today-up-next-title"
         title="接下来"
-        description="完成当前行动后，继续处理这些事项。"
         actions={
           <Button variant="text" size="sm" onClick={onOpenPlan}>
             打开计划

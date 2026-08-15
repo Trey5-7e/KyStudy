@@ -44,18 +44,13 @@ const BackupPanel = lazy(() =>
     default: module.BackupPanel,
   })),
 );
-const LegacyPlanCompatibilityPanel = lazy(() =>
-  import("../planning/PersonalPlanPanel").then((module) => ({
-    default: module.LegacyPlanCompatibilityPanel,
+const AboutSettings = lazy(() =>
+  import("./AboutSettings").then((module) => ({
+    default: module.AboutSettings,
   })),
 );
 
-interface SettingsPanelProps {
-  onOpenReference(documentId: string, page: number): void;
-  onOpenSchedule(): void;
-}
-
-type SettingsTab = "study" | "ai" | "data" | "application";
+type SettingsTab = "study" | "ai" | "data" | "application" | "about";
 
 /**
  * Keep one stable tabpanel target even while the active feature is lazy-loaded.
@@ -75,8 +70,9 @@ export const SETTINGS_TABS: ReadonlyArray<{
 }> = [
   { id: "study", label: "学习与考试", description: "本地工作区和学习偏好" },
   { id: "ai", label: "AI", description: "Provider、API Key 与预算" },
-  { id: "data", label: "数据", description: "备份、恢复与运行诊断" },
-  { id: "application", label: "应用", description: "本地行为与当前边界" },
+  { id: "data", label: "数据", description: "备份、恢复与问题排查" },
+  { id: "application", label: "隐私与行为", description: "本地优先与外发确认" },
+  { id: "about", label: "关于", description: "版本、更新与开源仓库" },
 ];
 
 export function nextSettingsTab(
@@ -99,10 +95,10 @@ export function nextSettingsTab(
 }
 
 const CURRENT_BOUNDARIES = [
-  "SQLite 与文件路径不向学习页面暴露",
-  "PDF 只通过 document ID 和受控 Range 协议读取",
-  "AI 调用前必须预览并由用户明确确认",
-  "API Key 只保存到系统安全凭据存储",
+  "学习页面不会直接展示数据库和本地文件路径",
+  "资料文件默认只在本地工作区内读取",
+  "AI 调用前必须预览，并由你明确确认是否外发",
+  "API Key 只保存到 Windows 凭据管理器",
 ] as const;
 
 function DiagnosticPanel() {
@@ -156,14 +152,14 @@ function DiagnosticPanel() {
   }, []);
 
   if (state.kind === "loading") {
-    return <StatusBanner tone="info" title="正在检查本地核心…" />;
+    return <StatusBanner tone="info" title="正在读取应用信息…" />;
   }
 
   if (state.kind === "error") {
     return (
       <StatusBanner
         tone="error"
-        title={state.message}
+        title={`暂时无法读取应用信息：${state.message}`}
         actions={
           <Button size="sm" variant="secondary" onClick={() => void refresh()}>
             重新检查
@@ -181,17 +177,17 @@ function DiagnosticPanel() {
       <SectionHeader
         id="diagnostic-title"
         level={3}
-        title="运行诊断"
-        description="本地核心已连接，摘要已脱敏"
+        title="应用信息"
+        description="查看当前版本和工作区状态；反馈问题时可导出脱敏摘要"
         actions={
           <div className="settings-section-actions">
-            <Badge tone="success">仅含脱敏摘要</Badge>
+            <Badge tone="success">摘要已脱敏</Badge>
             <Button
               size="sm"
               variant="secondary"
               onClick={() => setPreviewOpen(true)}
             >
-              预览导出
+              导出诊断摘要
             </Button>
           </div>
         }
@@ -200,10 +196,6 @@ function DiagnosticPanel() {
         <div>
           <dt>应用版本</dt>
           <dd>{state.report.runtime.appVersion}</dd>
-        </div>
-        <div>
-          <dt>Schema</dt>
-          <dd>v{state.report.runtime.schemaVersion}</dd>
         </div>
         <div>
           <dt>平台 / 架构</dt>
@@ -287,7 +279,7 @@ function DiagnosticPreview({
   );
 }
 
-function DataSettings({ onOpenReference, onOpenSchedule }: SettingsPanelProps) {
+function DataSettings() {
   return (
     <div className="settings-section-stack">
       <DiagnosticPanel />
@@ -295,14 +287,6 @@ function DataSettings({ onOpenReference, onOpenSchedule }: SettingsPanelProps) {
         fallback={<StatusBanner tone="info" title="正在加载备份设置…" />}
       >
         <BackupPanel />
-      </Suspense>
-      <Suspense
-        fallback={<StatusBanner tone="info" title="正在加载历史兼容工具…" />}
-      >
-        <LegacyPlanCompatibilityPanel
-          onOpenReference={onOpenReference}
-          onOpenSchedule={onOpenSchedule}
-        />
       </Suspense>
     </div>
   );
@@ -318,8 +302,8 @@ function ApplicationSettings() {
         <SectionHeader
           id="boundary-title"
           level={3}
-          title="本地优先仍是默认行为"
-          description="当前边界"
+          title="本地优先与隐私保护"
+          description="数据默认保存在本机，外发前由你确认"
         />
         <ul className="settings-boundary-list">
           {CURRENT_BOUNDARIES.map((boundary) => (
@@ -331,10 +315,7 @@ function ApplicationSettings() {
   );
 }
 
-export function SettingsPanel({
-  onOpenReference,
-  onOpenSchedule,
-}: SettingsPanelProps) {
+export function SettingsPanel() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("study");
   const active = SETTINGS_TABS.find((tab) => tab.id === activeTab)!;
   const settingsTabRefs = useRef<Record<SettingsTab, HTMLButtonElement | null>>(
@@ -343,6 +324,7 @@ export function SettingsPanel({
       ai: null,
       data: null,
       application: null,
+      about: null,
     },
   );
 
@@ -365,11 +347,7 @@ export function SettingsPanel({
 
   return (
     <div className="settings-page">
-      <PageHeader
-        id="settings-title"
-        title="设置"
-        description="把低频配置收在一个地方；学习时不需要经过这些页面。"
-      />
+      <PageHeader id="settings-title" title="设置" />
 
       <div className="settings-surface">
         <div className="settings-layout">
@@ -411,7 +389,6 @@ export function SettingsPanel({
             <SectionHeader
               className="settings-content-heading"
               title={active.label}
-              description={active.description}
             />
 
             {activeTab === "study" ? (
@@ -431,12 +408,17 @@ export function SettingsPanel({
                 <AiFoundationPanel />
               </Suspense>
             ) : activeTab === "data" ? (
-              <DataSettings
-                onOpenReference={onOpenReference}
-                onOpenSchedule={onOpenSchedule}
-              />
-            ) : (
+              <DataSettings />
+            ) : activeTab === "application" ? (
               <ApplicationSettings />
+            ) : (
+              <Suspense
+                fallback={
+                  <StatusBanner tone="info" title="正在加载关于设置…" />
+                }
+              >
+                <AboutSettings />
+              </Suspense>
             )}
           </section>
         </div>

@@ -24,12 +24,12 @@ use crate::application::{
     PlanningChatReply, PlanningContextSelection, PlanningConversation, PlanningError,
     PlanningMessage, PlanningSource, QuestionBankError, QuestionError, QuestionRegionInput,
     ReassignWorkbookSegmentInput, RecognizePdfPageInput, RecognizeQuestionRegionInput,
-    RecordBulkQuestionAttemptsInput, RepeatedMistakeAnalytics, ReplaceIndexedQuestionRegionsInput,
-    RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor,
-    RestoreCyclePlanItemStateInput, RestoreReport, RestoreWorkbookSegmentInput, ReviewError,
-    ReviewSchemeError, ReviewSchemeTypeQuotaInput, RuntimeStatus, SaveAiBudgetInput,
-    SaveAiProviderInput, SaveCyclePlanInput, SavePlanInput, SavePlanStageInput,
-    SaveReviewSchemeInput, ScheduleError, SearchError, SearchResourcesInput,
+    RecordBulkQuestionAttemptsInput, RenameSubjectInput, RenameWorkbookCategoryInput,
+    RepeatedMistakeAnalytics, ReplaceIndexedQuestionRegionsInput, RescheduleTaskInput,
+    ResourceDocument, ResourceReaderDescriptor, RestoreCyclePlanItemStateInput, RestoreReport,
+    RestoreWorkbookSegmentInput, ReviewError, ReviewSchemeError, ReviewSchemeTypeQuotaInput,
+    RuntimeStatus, SaveAiBudgetInput, SaveAiProviderInput, SaveCyclePlanInput, SavePlanInput,
+    SavePlanStageInput, SaveReviewSchemeInput, ScheduleError, SearchError, SearchResourcesInput,
     SetCyclePlanItemStateInput, SetCyclePlanItemStateResult, SetQuestionGapAcknowledgementInput,
     SetQuestionReviewInput, SetWorkbookSubjectInput, ShiftCyclePlanInput, ShiftCyclePlanPreview,
     ShiftCyclePlanResult, ShiftCyclePlanUndo, SplitChildInput, SplitTaskInput,
@@ -921,6 +921,22 @@ pub(crate) struct CreateSubjectRequestDto {
     name: String,
     color_key: String,
     sort_order: u32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RenameSubjectRequestDto {
+    subject_id: String,
+    name: String,
+}
+
+impl From<RenameSubjectRequestDto> for RenameSubjectInput {
+    fn from(request: RenameSubjectRequestDto) -> Self {
+        Self {
+            subject_id: request.subject_id,
+            name: request.name,
+        }
+    }
 }
 
 impl From<CreateSubjectRequestDto> for CreateSubjectInput {
@@ -1947,6 +1963,22 @@ impl From<WorkbookProfile> for WorkbookProfileDto {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct CreateWorkbookCategoryRequestDto {
     name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RenameWorkbookCategoryRequestDto {
+    workbook_id: String,
+    name: String,
+}
+
+impl From<RenameWorkbookCategoryRequestDto> for RenameWorkbookCategoryInput {
+    fn from(value: RenameWorkbookCategoryRequestDto) -> Self {
+        Self {
+            workbook_id: value.workbook_id,
+            name: value.name,
+        }
+    }
 }
 
 impl From<CreateWorkbookCategoryRequestDto> for CreateWorkbookCategoryInput {
@@ -5070,6 +5102,20 @@ pub(crate) async fn archive_subject(
 }
 
 #[tauri::command]
+pub(crate) async fn rename_subject(
+    request: RenameSubjectRequestDto,
+    state: State<'_, AppState>,
+) -> Result<SubjectDto, AppErrorDto> {
+    let use_cases = state.schedule.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.rename_subject(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(SubjectDto::from)
+        .map_err(|error| AppErrorDto::from_schedule(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn list_tasks_for_range(
     start_date: String,
     end_date: String,
@@ -5876,6 +5922,33 @@ pub(crate) async fn create_workbook_category(
     let use_cases = state.question_bank.clone();
     let input = request.into();
     tauri::async_runtime::spawn_blocking(move || use_cases.create_workbook(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn archive_workbook_category(
+    workbook_id: String,
+    state: State<'_, AppState>,
+) -> Result<WorkbookCategoryDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.archive_workbook(&workbook_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn rename_workbook_category(
+    request: RenameWorkbookCategoryRequestDto,
+    state: State<'_, AppState>,
+) -> Result<WorkbookCategoryDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.rename_workbook(&input))
         .await
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)

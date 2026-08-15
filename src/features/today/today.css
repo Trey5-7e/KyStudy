@@ -37,12 +37,6 @@
   text-wrap: balance;
 }
 
-.today-focus-heading > p:last-child {
-  max-width: 54ch;
-  color: var(--color-text-muted);
-  line-height: 1.55;
-}
-
 .today-focus-eyebrow {
   color: var(--color-primary);
   font-size: 0.76rem;

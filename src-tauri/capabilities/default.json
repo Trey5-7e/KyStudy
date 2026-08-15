@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Minimal capability for the KyStudy main window",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "updater:default"]
 }

@@ -99,6 +99,12 @@ function providerDestination(provider: AiProviderConfig): string {
   }
 }
 
+function isUserVisibleProvider(provider: AiProviderConfig): boolean {
+  // The offline provider remains available to backend tests and migrations,
+  // but it must not appear in a production user's configuration workflow.
+  return provider.providerType !== "offline_test";
+}
+
 export function AiFoundationPanel() {
   const modeHeadingRef = useRef<HTMLHeadingElement>(null);
   const previousDialogModeRef = useRef<AiDialogMode | undefined>(undefined);
@@ -171,10 +177,17 @@ export function AiFoundationPanel() {
     });
   }, [dialogMode]);
 
-  const activeProvider = overview?.providers.find(
+  const configuredActiveProvider = overview?.providers.find(
     (provider) => provider.id === overview.activeProviderId,
   );
-  const editingProvider = overview?.providers.find(
+  const visibleProviders =
+    overview?.providers.filter(isUserVisibleProvider) ?? [];
+  const activeProvider =
+    configuredActiveProvider !== undefined &&
+    isUserVisibleProvider(configuredActiveProvider)
+      ? configuredActiveProvider
+      : undefined;
+  const editingProvider = visibleProviders.find(
     (provider) => provider.id === editingProviderId,
   );
 
@@ -355,6 +368,10 @@ export function AiFoundationPanel() {
 
   const preparePreview = (event: FormEvent) => {
     event.preventDefault();
+    if (activeProvider === undefined) {
+      setNotice("请先配置一个 Responses API Provider，再进行连接测试。");
+      return;
+    }
     void run("preview", async () => {
       setPreview(
         await previewAiCall({
@@ -368,7 +385,12 @@ export function AiFoundationPanel() {
   };
 
   const executePreview = () => {
-    if (!confirmed || preview === undefined || !preview.allowed) {
+    if (
+      !confirmed ||
+      preview === undefined ||
+      !preview.allowed ||
+      preview.providerType !== "openai_responses"
+    ) {
       return;
     }
     void run("execute", async () => {
@@ -423,7 +445,7 @@ export function AiFoundationPanel() {
         <div className="ai-provider-summary-heading">
           <div>
             <h3 id="ai-provider-summary-title">当前 Provider</h3>
-            <span>{overview?.providers.length ?? 0} / 20 个配置</span>
+            <span>{visibleProviders.length} / 20 个配置</span>
           </div>
           <button
             type="button"
@@ -433,8 +455,12 @@ export function AiFoundationPanel() {
             管理 AI 配置
           </button>
         </div>
-        {activeProvider === undefined ? (
+        {overview === undefined ? (
           <p className="ai-provider-summary-empty">正在加载 Provider 配置…</p>
+        ) : activeProvider === undefined ? (
+          <p className="ai-provider-summary-empty">
+            尚未配置可用的 AI Provider，请先添加一个 Responses API 配置。
+          </p>
         ) : (
           <div className="ai-provider-summary-main">
             <div className="ai-provider-summary-copy">
@@ -444,9 +470,7 @@ export function AiFoundationPanel() {
               </div>
               <p>{activeProvider.modelName}</p>
               <small>
-                {activeProvider.providerType === "offline_test"
-                  ? "离线测试"
-                  : "Responses API"}
+                Responses API
                 {" · "}
                 {providerDestination(activeProvider)}
                 {activeProvider.providerType === "openai_responses"
@@ -563,7 +587,7 @@ export function AiFoundationPanel() {
                   aria-selected="false"
                   aria-controls="ai-dialog-panel-connection"
                   onClick={() => setDialogMode("connection")}
-                  disabled={busy !== undefined}
+                  disabled={busy !== undefined || activeProvider === undefined}
                 >
                   连接测试
                 </button>
@@ -587,7 +611,7 @@ export function AiFoundationPanel() {
                   >
                     API Provider
                   </h3>
-                  <span>{overview?.providers.length ?? 0} / 20 个配置</span>
+                  <span>{visibleProviders.length} / 20 个配置</span>
                 </div>
                 <button
                   type="button"
@@ -599,7 +623,7 @@ export function AiFoundationPanel() {
               </div>
 
               <ul className="ai-provider-list">
-                {overview?.providers.map((provider) => (
+                {visibleProviders.map((provider) => (
                   <li
                     key={provider.id}
                     className={
@@ -615,9 +639,7 @@ export function AiFoundationPanel() {
                       </div>
                       <p>{provider.modelName}</p>
                       <small>
-                        {provider.providerType === "offline_test"
-                          ? "离线测试"
-                          : "Responses API"}
+                        Responses API
                         {" · "}
                         {providerDestination(provider)}
                         {provider.providerType === "openai_responses"
@@ -723,22 +745,10 @@ export function AiFoundationPanel() {
                     setProviderDraft((current) => ({
                       ...current,
                       providerType,
-                      displayName:
-                        providerType === "offline_test" &&
-                        current.displayName === ""
-                          ? "离线测试 Provider"
-                          : current.displayName,
-                      modelName:
-                        providerType === "offline_test"
-                          ? "kystudy-offline-test-v1"
-                          : current.modelName === "kystudy-offline-test-v1"
-                            ? ""
-                            : current.modelName,
                     }));
                   }}
                 >
                   <option value="openai_responses">Responses API</option>
-                  <option value="offline_test">离线测试</option>
                 </select>
               </label>
               <label>
@@ -1033,10 +1043,8 @@ export function AiFoundationPanel() {
                     连接与外发测试
                   </h3>
                   <span>
-                    当前：{activeProvider?.displayName ?? "正在加载"} ·{" "}
-                    {activeProvider?.providerType === "offline_test"
-                      ? "不会联网"
-                      : "确认后联网"}
+                    当前：{activeProvider?.displayName ?? "尚未配置"} ·
+                    确认后联网
                   </span>
                 </div>
                 <label>
@@ -1048,7 +1056,9 @@ export function AiFoundationPanel() {
                     rows={4}
                     maxLength={20000}
                     value={prompt}
-                    disabled={busy !== undefined}
+                    disabled={
+                      busy !== undefined || activeProvider === undefined
+                    }
                     onChange={(event) => {
                       setPrompt(event.target.value);
                       invalidatePreview();
@@ -1066,7 +1076,9 @@ export function AiFoundationPanel() {
                     min={1}
                     max={activeProvider?.maxOutputTokens ?? 800}
                     value={outputLimit}
-                    disabled={busy !== undefined}
+                    disabled={
+                      busy !== undefined || activeProvider === undefined
+                    }
                     onChange={(event) => {
                       setOutputLimit(event.target.value);
                       invalidatePreview();
@@ -1074,7 +1086,10 @@ export function AiFoundationPanel() {
                     required
                   />
                 </label>
-                <button type="submit" disabled={busy !== undefined}>
+                <button
+                  type="submit"
+                  disabled={busy !== undefined || activeProvider === undefined}
+                >
                   生成测试预览
                 </button>
               </form>
@@ -1143,9 +1158,7 @@ export function AiFoundationPanel() {
                       !confirmed || !preview.allowed || busy !== undefined
                     }
                   >
-                    {preview.providerType === "offline_test"
-                      ? "运行离线测试"
-                      : "确认并测试连接"}
+                    确认并测试连接
                   </button>
                 </section>
               ) : null}

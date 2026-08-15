@@ -5,6 +5,7 @@ export interface RuntimeStatus {
   schemaVersion: number;
   platform: string;
   architecture: string;
+  buildProfile: "debug" | "release";
 }
 
 export interface AppError {
@@ -24,7 +25,8 @@ export function parseRuntimeStatus(value: unknown): RuntimeStatus {
     !Number.isSafeInteger(value.schemaVersion) ||
     value.schemaVersion < 0 ||
     typeof value.platform !== "string" ||
-    typeof value.architecture !== "string"
+    typeof value.architecture !== "string" ||
+    (value.buildProfile !== "debug" && value.buildProfile !== "release")
   ) {
     throw new Error("RUNTIME_STATUS_INVALID");
   }
@@ -34,6 +36,7 @@ export function parseRuntimeStatus(value: unknown): RuntimeStatus {
     schemaVersion: value.schemaVersion,
     platform: value.platform,
     architecture: value.architecture,
+    buildProfile: value.buildProfile,
   };
 }
 

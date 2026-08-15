@@ -92,6 +92,7 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
   const terminalOperations = useRef(new Set<string>());
   const lastSavedProgress = useRef<string | undefined>(undefined);
   const readerRequestRef = useRef(0);
+  const handledOpenRequestRef = useRef<string | undefined>(undefined);
   const sectionTabRefs = useRef<Record<ResourceTab, HTMLButtonElement | null>>({
     files: null,
     mindmaps: null,
@@ -184,11 +185,6 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
       setRequestedPage(page);
       setReader(descriptor);
       lastSavedProgress.current = undefined;
-      window.setTimeout(() => {
-        document
-          .getElementById("resource-reader-title")
-          ?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 0);
     } catch (readerError: unknown) {
       if (requestId === readerRequestRef.current) {
         setError(normalizeResourceCommandError(readerError));
@@ -200,15 +196,19 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
     }
   }, []);
 
-  const requestReader = (documentId: string, page?: number) => {
-    setReaderLoading(true);
-    setError(null);
-    void openReader(documentId, page);
-  };
+  const requestReader = useCallback(
+    (documentId: string, page?: number) => {
+      setReaderLoading(true);
+      setError(null);
+      void openReader(documentId, page);
+    },
+    [openReader],
+  );
 
   const closeReader = () => {
     readerRequestRef.current += 1;
     setReader(null);
+    setRequestedPage(undefined);
   };
 
   const removeResource = async () => {
@@ -236,32 +236,20 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
     if (requestedDocumentId === undefined) {
       return;
     }
-    const requestId = readerRequestRef.current + 1;
-    readerRequestRef.current = requestId;
-    let active = true;
-    void getResourceReaderDescriptor(requestedDocumentId).then(
-      (descriptor) => {
-        if (active && requestId === readerRequestRef.current) {
-          setRequestedPage(requestedReferencePage);
-          setReader(descriptor);
-          lastSavedProgress.current = undefined;
-          window.setTimeout(() => {
-            document
-              .getElementById("resource-reader-title")
-              ?.scrollIntoView({ behavior: "smooth", block: "start" });
-          }, 0);
-        }
-      },
-      (readerError: unknown) => {
-        if (active && requestId === readerRequestRef.current) {
-          setError(normalizeResourceCommandError(readerError));
-        }
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [requestNonce, requestedDocumentId, requestedReferencePage]);
+    const requestKey = `${requestNonce ?? ""}:${requestedDocumentId}:${requestedReferencePage ?? ""}`;
+    if (handledOpenRequestRef.current === requestKey) {
+      return;
+    }
+    handledOpenRequestRef.current = requestKey;
+    void Promise.resolve().then(() => {
+      requestReader(requestedDocumentId, requestedReferencePage);
+    });
+  }, [
+    requestNonce,
+    requestedDocumentId,
+    requestedReferencePage,
+    requestReader,
+  ]);
 
   const beginImport = async () => {
     setError(null);
@@ -405,7 +393,7 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
       <PageHeader
         id="library-title"
         title="资料"
-        description="PDF、图片和思维导图源文件会复制到本地工作区；相同内容只保存一份。"
+        description="资料保存在本机工作区，并自动去重。"
         actions={
           <Button
             variant="primary"
@@ -556,7 +544,6 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
                 >
                   <SectionHeader
                     title="资料文件"
-                    description="按用途管理资料；打开是最常用的动作，更多操作收在行菜单中。"
                     actions={
                       <span className="resource-browser-hint">
                         {resources.length === 0 ? "暂无资料" : "列表视图"}
@@ -586,19 +573,14 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
               )}
 
               {reader === null ? null : (
-                <section
-                  className="resource-reader"
-                  aria-labelledby="resource-reader-title"
+                <EditorDialog
+                  title={reader.title}
+                  description="受控本地阅读，支持翻页、缩放、旋转和阅读进度保存。"
+                  dirty={false}
+                  size="review"
+                  className="resource-reader-dialog"
+                  onRequestClose={closeReader}
                 >
-                  <div className="resource-reader-heading">
-                    <div>
-                      <p className="section-label">受控本地阅读</p>
-                      <h2 id="resource-reader-title">{reader.title}</h2>
-                    </div>
-                    <Button variant="secondary" size="sm" onClick={closeReader}>
-                      关闭阅读器
-                    </Button>
-                  </div>
                   {reader.kind === "pdf" ? (
                     <Suspense
                       fallback={
@@ -628,7 +610,7 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
                       />
                     </div>
                   )}
-                </section>
+                </EditorDialog>
               )}
               {trashTarget === undefined ? null : (
                 <EditorDialog

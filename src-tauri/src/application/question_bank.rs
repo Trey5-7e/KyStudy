@@ -18,6 +18,12 @@ pub(crate) struct CreateWorkbookCategoryInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RenameWorkbookCategoryInput {
+    pub(crate) workbook_id: String,
+    pub(crate) name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkbookSegmentAssignmentInput {
     pub(crate) document_id: String,
     pub(crate) subject_id: String,
@@ -264,6 +270,17 @@ pub(crate) trait QuestionBankRepository: Clone + Send + Sync + 'static {
         &self,
         workbook: WorkbookCategory,
     ) -> Result<WorkbookCategory, QuestionBankError>;
+    fn archive_workbook(
+        &self,
+        workbook_id: &str,
+        archived_at: i64,
+    ) -> Result<WorkbookCategory, QuestionBankError>;
+    fn rename_workbook(
+        &self,
+        workbook_id: &str,
+        name: &str,
+        renamed_at: i64,
+    ) -> Result<WorkbookCategory, QuestionBankError>;
     fn save_segments(
         &self,
         segments: &[WorkbookDocumentSegment],
@@ -375,6 +392,25 @@ impl<R: QuestionBankRepository> QuestionBankUseCases<R> {
             created_at: now,
             updated_at: now,
         })
+    }
+
+    pub(crate) fn archive_workbook(
+        &self,
+        workbook_id: &str,
+    ) -> Result<WorkbookCategory, QuestionBankError> {
+        validate_id(workbook_id)?;
+        self.repository
+            .archive_workbook(workbook_id, current_utc_millis()?)
+    }
+
+    pub(crate) fn rename_workbook(
+        &self,
+        input: &RenameWorkbookCategoryInput,
+    ) -> Result<WorkbookCategory, QuestionBankError> {
+        validate_id(&input.workbook_id)?;
+        let name = required_text(&input.name, 120)?;
+        self.repository
+            .rename_workbook(&input.workbook_id, &name, current_utc_millis()?)
     }
 
     pub(crate) fn save_segments(

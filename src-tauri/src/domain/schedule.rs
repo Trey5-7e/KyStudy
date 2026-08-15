@@ -512,6 +512,25 @@ pub(crate) struct Subject {
 }
 
 impl Subject {
+    /// Renames an active subject without changing its identity or assignments.
+    pub(crate) fn rename(
+        &mut self,
+        name: &str,
+        renamed_at: i64,
+    ) -> Result<(), ScheduleValidationError> {
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 40 {
+            return Err(ScheduleValidationError::Text);
+        }
+        validate_change_timestamp(renamed_at, self.updated_at)?;
+        if self.archived_at.is_some() {
+            return Err(ScheduleValidationError::Transition);
+        }
+        name.clone_into(&mut self.name);
+        self.updated_at = renamed_at;
+        Ok(())
+    }
+
     /// Archives an active subject without modifying tasks already assigned to it.
     pub(crate) fn archive(&mut self, archived_at: i64) -> Result<bool, ScheduleValidationError> {
         validate_change_timestamp(archived_at, self.updated_at)?;

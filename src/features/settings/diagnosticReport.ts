@@ -11,6 +11,7 @@ export interface DiagnosticReport {
     schemaVersion: number;
     platform: string;
     architecture: string;
+    buildProfile: "debug" | "release";
   };
   workspace:
     | {
@@ -44,6 +45,7 @@ export function buildDiagnosticReport(
       schemaVersion: runtime.schemaVersion,
       platform: runtime.platform,
       architecture: runtime.architecture,
+      buildProfile: runtime.buildProfile,
     },
     workspace:
       workspace === null

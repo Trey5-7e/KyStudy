@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-import type { ResourceOpenRequest } from "../features/library/ResourcePanel";
 import type { QuestionBankOpenRequest } from "../features/workbook/questionBankWindowModel";
 import { shouldInterceptNavigationClick, type AppView } from "./navigation";
 import { AppNavigation } from "./AppNavigation";
@@ -8,10 +7,8 @@ import { AppPageContent } from "./AppPageContent";
 
 export interface AppShellProps {
   activeView: AppView;
-  resourceOpenRequest?: ResourceOpenRequest;
   reviewOpenRequest?: number;
   workbookOpenRequest?: QuestionBankOpenRequest;
-  onOpenResource: (documentId: string, page: number) => void;
   onOpenReviewWindow: () => void;
   onOpenPaperShortcut: () => void;
   onOpenSettings: () => void;
@@ -42,10 +39,8 @@ function BackToPlanningAction({
 
 export function AppShell({
   activeView,
-  resourceOpenRequest,
   reviewOpenRequest,
   workbookOpenRequest,
-  onOpenResource,
   onOpenReviewWindow,
   onOpenPaperShortcut,
   onOpenSettings,
@@ -74,11 +69,9 @@ export function AppShell({
       >
         <AppPageContent
           activeView={activeView}
-          resourceOpenRequest={resourceOpenRequest}
           reviewOpenRequest={reviewOpenRequest}
           workbookOpenRequest={workbookOpenRequest}
           backAction={backAction}
-          onOpenResource={onOpenResource}
           onOpenReviewWindow={onOpenReviewWindow}
           onOpenPaperShortcut={onOpenPaperShortcut}
           onOpenSettings={onOpenSettings}

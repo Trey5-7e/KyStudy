@@ -14,6 +14,13 @@ pub(crate) struct CreateSubjectInput {
     pub(crate) sort_order: u32,
 }
 
+/// User-authored name for one existing subject.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RenameSubjectInput {
+    pub(crate) subject_id: String,
+    pub(crate) name: String,
+}
+
 /// User-authored fields for one manual task.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CreateTaskInput {
@@ -121,6 +128,14 @@ pub(crate) trait ScheduleRepository: Clone + Send + Sync + 'static {
     /// Archives one subject without deleting or rewriting assigned tasks.
     fn archive_subject(&self, subject_id: &str, archived_at: i64)
     -> Result<Subject, ScheduleError>;
+
+    /// Renames one active subject while preserving its tasks and history.
+    fn rename_subject(
+        &self,
+        subject_id: &str,
+        name: &str,
+        renamed_at: i64,
+    ) -> Result<Subject, ScheduleError>;
 
     /// Creates one task and its immutable `created` history in one transaction.
     fn create_task(&self, task: &NewTask) -> Result<Task, ScheduleError>;
@@ -230,6 +245,18 @@ impl<R: ScheduleRepository> ScheduleUseCases<R> {
         }
         self.repository
             .archive_subject(subject_id, current_utc_millis()?)
+    }
+
+    /// Renames one active subject using the current system timestamp.
+    pub(crate) fn rename_subject(
+        &self,
+        input: &RenameSubjectInput,
+    ) -> Result<Subject, ScheduleError> {
+        if uuid::Uuid::parse_str(&input.subject_id).is_err() {
+            return Err(ScheduleValidationError::Identifier.into());
+        }
+        self.repository
+            .rename_subject(&input.subject_id, input.name.trim(), current_utc_millis()?)
     }
 
     /// Creates one validated manual task using the current system timestamp.
@@ -479,6 +506,28 @@ mod tests {
                 .find(|subject| subject.id == subject_id)
                 .ok_or(ScheduleError::SubjectNotFound)?;
             subject.archive(archived_at)?;
+            Ok(subject.clone())
+        }
+
+        fn rename_subject(
+            &self,
+            subject_id: &str,
+            name: &str,
+            renamed_at: i64,
+        ) -> Result<Subject, ScheduleError> {
+            let mut subjects = self.subjects();
+            if subjects.iter().any(|subject| {
+                subject.archived_at.is_none()
+                    && subject.id != subject_id
+                    && subject.name.eq_ignore_ascii_case(name)
+            }) {
+                return Err(ScheduleError::SubjectNameConflict);
+            }
+            let subject = subjects
+                .iter_mut()
+                .find(|subject| subject.id == subject_id && subject.archived_at.is_none())
+                .ok_or(ScheduleError::SubjectNotFound)?;
+            subject.rename(name, renamed_at)?;
             Ok(subject.clone())
         }
 

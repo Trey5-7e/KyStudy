@@ -6,10 +6,35 @@ mod commands;
 mod domain;
 mod infrastructure;
 
+use std::path::{Path, PathBuf};
+
 use tauri::Manager;
 
+fn debug_application_data_directory(directory: &Path) -> PathBuf {
+    #[cfg(debug_assertions)]
+    {
+        let name = directory
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("io.github.kystudy.desktop");
+        directory.with_file_name(format!("{name}-dev"))
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        directory.to_path_buf()
+    }
+}
+
+fn resolve_application_data_directory(
+    app: &tauri::App,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let directory = app.path().app_data_dir()?;
+    Ok(debug_application_data_directory(&directory))
+}
+
 fn initialize_application(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let application_data_directory = app.path().app_data_dir()?;
+    let application_data_directory = resolve_application_data_directory(app)?;
     let state = bootstrap::AppState::new(&application_data_directory);
     if let Err(error) = state.resources.recover_and_list() {
         eprintln!("KYSTUDY_IMPORT_RECOVERY_FAILED: {}", error.code());
@@ -52,6 +77,7 @@ macro_rules! kystudy_command_handler {
             commands::list_subjects,
             commands::create_subject,
             commands::archive_subject,
+            commands::rename_subject,
             commands::list_tasks_for_range,
             commands::create_task,
             commands::update_task_details,
@@ -111,6 +137,8 @@ macro_rules! kystudy_command_handler {
             commands::get_question_gap_acknowledgements,
             commands::set_question_gap_acknowledgement,
             commands::create_workbook_category,
+            commands::archive_workbook_category,
+            commands::rename_workbook_category,
             commands::save_workbook_segments,
             commands::import_question_index,
             commands::record_bulk_question_attempts,
@@ -180,6 +208,7 @@ macro_rules! kystudy_command_handler {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .register_uri_scheme_protocol("kystudy-pdf", |context, request| {
             context
                 .app_handle()
@@ -205,4 +234,26 @@ pub fn run() {
             eprintln!("KYSTUDY_RUNTIME_START_FAILED: {error}");
             std::process::exit(1);
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::debug_application_data_directory;
+    use std::path::PathBuf;
+
+    #[test]
+    fn debug_data_directory_is_separate_from_release_data() {
+        let release_directory =
+            PathBuf::from(r"C:\Users\tester\AppData\Roaming\io.github.kystudy.desktop");
+        let resolved = debug_application_data_directory(&release_directory);
+
+        #[cfg(debug_assertions)]
+        assert_eq!(
+            resolved,
+            PathBuf::from(r"C:\Users\tester\AppData\Roaming\io.github.kystudy.desktop-dev")
+        );
+
+        #[cfg(not(debug_assertions))]
+        assert_eq!(resolved, release_directory);
+    }
 }

@@ -111,9 +111,12 @@ impl QuestionBankRepository for SqliteQuestionBankRepository {
         &self,
         workbook: WorkbookCategory,
     ) -> Result<WorkbookCategory, QuestionBankError> {
-        let connection = self.open()?;
-        let workspace_id = load_workspace_id(&connection)?;
-        let result = connection.execute(
+        let mut connection = self.open()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(database_error)?;
+        let workspace_id = load_workspace_id(&transaction)?;
+        let result = transaction.execute(
             "INSERT INTO workbook_category(
                 id, workspace_id, name, archived_at, created_at, updated_at
              ) VALUES (?1, ?2, ?3, NULL, ?4, ?4)",
@@ -125,7 +128,144 @@ impl QuestionBankRepository for SqliteQuestionBankRepository {
             ],
         );
         match result {
-            Ok(_) => Ok(workbook),
+            Ok(_) => {
+                transaction.commit().map_err(database_error)?;
+                Ok(workbook)
+            }
+            Err(error) if is_unique_constraint(&error) => {
+                let archived_id = transaction
+                    .query_row(
+                        "SELECT id
+                         FROM workbook_category
+                         WHERE workspace_id = ?1 AND name = ?2 AND archived_at IS NOT NULL",
+                        params![workspace_id, workbook.name],
+                        |row| row.get::<_, String>(0),
+                    )
+                    .optional()
+                    .map_err(database_error)?;
+                let Some(archived_id) = archived_id else {
+                    return Err(QuestionBankError::WorkbookAlreadyExists);
+                };
+                let archived_name = archived_workbook_name(&workbook.name, &archived_id);
+                transaction
+                    .execute(
+                        "UPDATE workbook_category
+                         SET name = ?1
+                         WHERE id = ?2 AND workspace_id = ?3 AND archived_at IS NOT NULL",
+                        params![archived_name, archived_id, workspace_id],
+                    )
+                    .map_err(database_error)?;
+                transaction
+                    .execute(
+                        "INSERT INTO workbook_category(
+                            id, workspace_id, name, archived_at, created_at, updated_at
+                         ) VALUES (?1, ?2, ?3, NULL, ?4, ?4)",
+                        params![
+                            workbook.id,
+                            workspace_id,
+                            workbook.name,
+                            workbook.created_at
+                        ],
+                    )
+                    .map_err(database_error)?;
+                transaction.commit().map_err(database_error)?;
+                Ok(workbook)
+            }
+            Err(error) => Err(database_error(error).into()),
+        }
+    }
+
+    fn archive_workbook(
+        &self,
+        workbook_id: &str,
+        archived_at: i64,
+    ) -> Result<WorkbookCategory, QuestionBankError> {
+        let mut connection = self.open()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(database_error)?;
+        let workspace_id = load_workspace_id(&transaction)?;
+        let workbook = transaction
+            .query_row(
+                "SELECT id, name, created_at, updated_at
+                 FROM workbook_category
+                 WHERE id = ?1 AND workspace_id = ?2 AND archived_at IS NULL",
+                params![workbook_id, workspace_id],
+                |row| {
+                    Ok(WorkbookCategory {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        created_at: row.get(2)?,
+                        updated_at: row.get(3)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(database_error)?
+            .ok_or(QuestionBankError::WorkbookNotFound)?;
+        // CONTEXT: v0.1.0 created a workspace-wide UNIQUE(workspace_id, name)
+        // constraint. Keep archived rows intact but move their hidden name to
+        // a deterministic tombstone so a new active workbook can reuse it.
+        let archived_name = archived_workbook_name(&workbook.name, workbook_id);
+        transaction
+            .execute(
+                "UPDATE workbook_category
+                 SET name = ?1, archived_at = ?2, updated_at = ?2
+                 WHERE id = ?3 AND workspace_id = ?4 AND archived_at IS NULL",
+                params![archived_name, archived_at, workbook_id, workspace_id],
+            )
+            .map_err(database_error)?;
+        transaction.commit().map_err(database_error)?;
+        Ok(WorkbookCategory {
+            updated_at: archived_at,
+            ..workbook
+        })
+    }
+
+    fn rename_workbook(
+        &self,
+        workbook_id: &str,
+        name: &str,
+        renamed_at: i64,
+    ) -> Result<WorkbookCategory, QuestionBankError> {
+        let mut connection = self.open()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(database_error)?;
+        let workspace_id = load_workspace_id(&transaction)?;
+        let workbook = transaction
+            .query_row(
+                "SELECT id, name, created_at, updated_at
+                 FROM workbook_category
+                 WHERE id = ?1 AND workspace_id = ?2 AND archived_at IS NULL",
+                params![workbook_id, workspace_id],
+                |row| {
+                    Ok(WorkbookCategory {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        created_at: row.get(2)?,
+                        updated_at: row.get(3)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(database_error)?
+            .ok_or(QuestionBankError::WorkbookNotFound)?;
+        let result = transaction.execute(
+            "UPDATE workbook_category
+             SET name = ?1, updated_at = ?2
+             WHERE id = ?3 AND workspace_id = ?4 AND archived_at IS NULL",
+            params![name, renamed_at, workbook_id, workspace_id],
+        );
+        match result {
+            Ok(_) => {
+                transaction.commit().map_err(database_error)?;
+                Ok(WorkbookCategory {
+                    name: name.to_owned(),
+                    updated_at: renamed_at,
+                    ..workbook
+                })
+            }
             Err(error) if is_unique_constraint(&error) => {
                 Err(QuestionBankError::WorkbookAlreadyExists)
             }
@@ -1658,7 +1798,8 @@ fn load_segments(
              JOIN resource_document d ON d.id = s.document_id
              JOIN subject ON subject.id = s.subject_id
              JOIN workbook_category w ON w.id = s.workbook_id
-             WHERE w.archived_at IS NULL AND s.deleted_at IS NULL
+             WHERE subject.archived_at IS NULL
+               AND w.archived_at IS NULL AND s.deleted_at IS NULL
              ORDER BY subject.sort_order, subject.name, w.name, s.page_start, s.id",
         )
         .map_err(database_error)?;
@@ -1757,7 +1898,8 @@ fn load_questions(connection: &Connection) -> Result<Vec<IndexedQuestion>, Quest
              JOIN subject ON subject.id = q.subject_id
              JOIN workbook_category w ON w.id = m.workbook_id
              JOIN workbook_document_segment segment ON segment.id = m.segment_id
-             WHERE q.deleted_at IS NULL AND w.archived_at IS NULL
+             WHERE subject.archived_at IS NULL
+               AND q.deleted_at IS NULL AND w.archived_at IS NULL
                AND segment.deleted_at IS NULL
              ORDER BY subject.sort_order, subject.name, w.name,
                       segment.page_start, m.sort_order, q.id",
@@ -2012,6 +2154,13 @@ fn is_unique_constraint(error: &rusqlite::Error) -> bool {
     )
 }
 
+fn archived_workbook_name(name: &str, workbook_id: &str) -> String {
+    let suffix = format!(" [archived:{workbook_id}]");
+    let prefix_limit = 120usize.saturating_sub(suffix.chars().count());
+    let prefix: String = name.chars().take(prefix_limit).collect();
+    format!("{prefix}{suffix}")
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::AtomicBool;
@@ -2025,9 +2174,10 @@ mod tests {
         ImportQuestionIndexInput, ImportRequest, IndexedQuestionDraftInput,
         IndexedQuestionRegionUpdateInput, InsertIndexedQuestionInput, QuestionBankUseCases,
         QuestionRegionInput, ReassignWorkbookSegmentInput, RecordBulkQuestionAttemptsInput,
-        ReplaceIndexedQuestionRegionsInput, ResourceRepository, RestoreWorkbookSegmentInput,
-        ScheduleUseCases, SetQuestionGapAcknowledgementInput, TrashWorkbookSegmentInput,
-        UpdateIndexedQuestionInput, WorkbookSegmentAssignmentInput, WorkspaceRepository,
+        RenameWorkbookCategoryInput, ReplaceIndexedQuestionRegionsInput, ResourceRepository,
+        RestoreWorkbookSegmentInput, ScheduleUseCases, SetQuestionGapAcknowledgementInput,
+        TrashWorkbookSegmentInput, UpdateIndexedQuestionInput, WorkbookSegmentAssignmentInput,
+        WorkspaceRepository,
     };
     use crate::domain::NewWorkspace;
     use crate::infrastructure::{
@@ -2163,6 +2313,109 @@ mod tests {
             .expect_err("setting without a workspace should fail");
 
         assert!(matches!(error, QuestionBankError::WorkspaceNotInitialized));
+    }
+
+    #[test]
+    fn archiving_workbook_hides_its_active_question_bank_content() {
+        let (_directory, bank, _segment_id, snapshot) = question_bank_fixture(1);
+        let workbook_id = snapshot.workbooks[0].id.clone();
+
+        bank.archive_workbook(&workbook_id)
+            .expect("workbook should archive");
+
+        let refreshed = bank.snapshot().expect("snapshot should remain readable");
+        assert!(refreshed.workbooks.is_empty());
+        assert!(refreshed.segments.is_empty());
+        assert!(refreshed.questions.is_empty());
+    }
+
+    #[test]
+    fn archived_workbook_name_can_be_reused_by_a_new_active_workbook() {
+        let (_directory, bank, _segment_id, snapshot) = question_bank_fixture(1);
+        let workbook_id = snapshot.workbooks[0].id.clone();
+
+        bank.archive_workbook(&workbook_id)
+            .expect("workbook should archive");
+        let recreated = bank
+            .create_workbook(&CreateWorkbookCategoryInput {
+                name: snapshot.workbooks[0].name.clone(),
+            })
+            .expect("archived workbook name should be reusable");
+
+        assert_eq!(recreated.name, snapshot.workbooks[0].name);
+        assert_eq!(
+            bank.snapshot()
+                .expect("snapshot should remain readable")
+                .workbooks
+                .iter()
+                .map(|workbook| workbook.name.as_str())
+                .collect::<Vec<_>>(),
+            vec![snapshot.workbooks[0].name.as_str()]
+        );
+    }
+
+    #[test]
+    fn legacy_archived_workbook_name_is_released_when_reused() {
+        let (directory, bank, _segment_id, snapshot) = question_bank_fixture(1);
+        let workbook_id = snapshot.workbooks[0].id.clone();
+        let workbook_name = snapshot.workbooks[0].name.clone();
+
+        bank.archive_workbook(&workbook_id)
+            .expect("workbook should archive");
+        let connection =
+            Connection::open(directory.path().join("workspaces/default/kystudy.sqlite3"))
+                .expect("fixture database should open");
+        connection
+            .execute(
+                "UPDATE workbook_category SET name = ?1 WHERE id = ?2",
+                rusqlite::params![workbook_name, workbook_id],
+            )
+            .expect("legacy archived name should be restored for the fixture");
+
+        let recreated = bank
+            .create_workbook(&CreateWorkbookCategoryInput {
+                name: workbook_name.clone(),
+            })
+            .expect("legacy archived workbook name should be reusable");
+
+        assert_eq!(recreated.name, workbook_name);
+    }
+
+    #[test]
+    fn rename_workbook_updates_active_category_name() {
+        let (_directory, bank, _segment_id, snapshot) = question_bank_fixture(1);
+        let workbook_id = snapshot.workbooks[0].id.clone();
+
+        let renamed = bank
+            .rename_workbook(&RenameWorkbookCategoryInput {
+                workbook_id,
+                name: "考研数学基础".to_owned(),
+            })
+            .expect("workbook should rename");
+
+        assert_eq!(renamed.name, "考研数学基础");
+        assert_eq!(
+            bank.snapshot()
+                .expect("snapshot should remain readable")
+                .workbooks[0]
+                .name,
+            "考研数学基础"
+        );
+    }
+
+    #[test]
+    fn archiving_subject_hides_its_active_question_bank_content() {
+        let (directory, bank, _segment_id, snapshot) = question_bank_fixture(1);
+        let subject_id = snapshot.segments[0].subject_id.clone();
+        let schedules = ScheduleUseCases::new(SqliteScheduleRepository::new(directory.path()));
+
+        schedules
+            .archive_subject(&subject_id)
+            .expect("subject should archive");
+
+        let refreshed = bank.snapshot().expect("snapshot should remain readable");
+        assert!(refreshed.segments.is_empty());
+        assert!(refreshed.questions.is_empty());
     }
 
     #[test]

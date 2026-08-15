@@ -10,6 +10,7 @@ pub(crate) struct RuntimeStatus {
     schema_version: u32,
     platform: String,
     architecture: String,
+    build_profile: String,
 }
 
 /// Builds runtime metadata without reading user files or mutable application state.
@@ -19,6 +20,11 @@ pub(crate) fn get_runtime_status() -> RuntimeStatus {
         schema_version: LATEST_SCHEMA_VERSION,
         platform: std::env::consts::OS.to_owned(),
         architecture: std::env::consts::ARCH.to_owned(),
+        build_profile: if cfg!(debug_assertions) {
+            "debug".to_owned()
+        } else {
+            "release".to_owned()
+        },
     }
 }
 
@@ -39,5 +45,19 @@ mod tests {
         let status = get_runtime_status();
 
         assert_eq!(status.schema_version, LATEST_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn get_runtime_status_reports_the_build_profile() {
+        let status = get_runtime_status();
+
+        assert_eq!(
+            status.build_profile,
+            if cfg!(debug_assertions) {
+                "debug"
+            } else {
+                "release"
+            }
+        );
     }
 }

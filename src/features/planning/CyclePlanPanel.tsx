@@ -462,7 +462,7 @@ export function CyclePlanPanel() {
         <PageHeader
           id="cycle-plan-title"
           title="计划"
-          description="先看整月安排；只需设置数量和节奏，不必逐日添加任务。"
+          description="设置学习节奏，月历会自动生成。"
         />
         <PageStatus tone="loading" title="正在准备周期计划与月历…" />
       </section>
@@ -475,7 +475,7 @@ export function CyclePlanPanel() {
         <PageHeader
           id="cycle-plan-title"
           title="计划"
-          description="先看整月安排；只需设置数量和节奏，不必逐日添加任务。"
+          description="设置学习节奏，月历会自动生成。"
         />
         <PageStatus
           tone="error"

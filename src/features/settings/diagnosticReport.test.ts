@@ -13,6 +13,7 @@ const runtime: RuntimeStatus = {
   schemaVersion: 22,
   platform: "windows",
   architecture: "x86_64",
+  buildProfile: "release",
 };
 
 const workspace: WorkspaceStatus = {

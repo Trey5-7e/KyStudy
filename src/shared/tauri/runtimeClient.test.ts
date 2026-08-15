@@ -9,6 +9,7 @@ describe("parseRuntimeStatus", () => {
       schemaVersion: 0,
       platform: "windows",
       architecture: "x86_64",
+      buildProfile: "release",
     });
 
     expect(status.schemaVersion).toBe(0);
@@ -20,6 +21,7 @@ describe("parseRuntimeStatus", () => {
         appVersion: "0.1.0",
         schemaVersion: 0,
         architecture: "x86_64",
+        buildProfile: "release",
       }),
     ).toThrowError("RUNTIME_STATUS_INVALID");
   });
@@ -31,6 +33,7 @@ describe("parseRuntimeStatus", () => {
         schemaVersion: 0.5,
         platform: "windows",
         architecture: "x86_64",
+        buildProfile: "release",
       }),
     ).toThrowError("RUNTIME_STATUS_INVALID");
   });

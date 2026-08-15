@@ -5,7 +5,7 @@
   <h1>KyStudy</h1>
   <p>面向中国考研学生的本地优先学习规划、习题管理与错题复习桌面应用。</p>
   <p>
-    <a href="https://github.com/Trey5-7e/KyStudy/releases">下载 v0.1.0</a>
+    <a href="https://github.com/Trey5-7e/KyStudy/releases">下载 v0.1.1</a>
     ·
     <a href="https://github.com/Trey5-7e/KyStudy/issues">反馈问题</a>
     ·
@@ -21,10 +21,10 @@
     <img src="https://img.shields.io/badge/license-GPL--3.0--only-blue.svg" alt="GPL-3.0-only license">
   </a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4.svg" alt="Windows 10 and 11 x64">
-  <img src="https://img.shields.io/badge/status-v0.1.0%20released-brightgreen.svg" alt="v0.1.0 released">
+  <img src="https://img.shields.io/badge/status-v0.1.1%20candidate-orange.svg" alt="v0.1.1 release candidate">
 </p>
 
-> 当前首版支持 Windows 10/11 x64。自动门禁、干净提交、桌面安装验收和 OCR 组件公开 Release 已完成，KyStudy v0.1.0 已正式发布。
+> 当前首版支持 Windows 10/11 x64。v0.1.1 正在进行最终发布前检查；公开稳定版仍为 v0.1.0。
 
 ## 目录
 
@@ -128,7 +128,7 @@ README 只展示四个核心页面，具体的导入、组卷、错题反馈、P
 
 - 支持：Windows 10/11 x64；
 - 许可证：[GPL-3.0-only](LICENSE)；
-- 暂不提供：macOS/Linux 包、移动端、自动更新服务、云端账号和多设备同步；
+- 暂不提供：macOS/Linux 包、移动端、云端账号和多设备同步；Windows 正式版支持从 GitHub Release 检查签名更新；
 - 在线 OCR 下载已配置为公开 HTTPS Release 资产，并在构建时写入 SHA-256；本地安装仍可作为兜底路径。
 
 ## 从源码运行
@@ -284,6 +284,7 @@ NSIS 安装包输出到 src-tauri\target\release\bundle\nsis\，便携版输出�
 - [文档导航](docs/README.md)
 - [v0.1.0 开发交接文档](docs/V0_1_0_DEVELOPMENT_HANDOFF.md)
 - [v0.1.0 最终验收记录](docs/V0_1_0_FINAL_ACCEPTANCE.md)
+- [v0.1.1 发布说明](docs/V0_1_1_RELEASE_NOTES.md)
 - [精简开发流程](docs/DEVELOPMENT_WORKFLOW.md)
 - [开发环境与依赖说明](docs/DEVELOPMENT_SETUP.md)
 - [README 截图演示工作区](docs/DEMO_SCREENSHOT_WORKSPACE.md)
