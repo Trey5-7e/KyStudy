@@ -6,6 +6,7 @@ export interface RuntimeStatus {
   platform: string;
   architecture: string;
   buildProfile: "debug" | "release";
+  dataDirectory: string;
 }
 
 export interface AppError {
@@ -26,6 +27,8 @@ export function parseRuntimeStatus(value: unknown): RuntimeStatus {
     value.schemaVersion < 0 ||
     typeof value.platform !== "string" ||
     typeof value.architecture !== "string" ||
+    typeof value.dataDirectory !== "string" ||
+    value.dataDirectory.trim().length === 0 ||
     (value.buildProfile !== "debug" && value.buildProfile !== "release")
   ) {
     throw new Error("RUNTIME_STATUS_INVALID");
@@ -37,7 +40,21 @@ export function parseRuntimeStatus(value: unknown): RuntimeStatus {
     platform: value.platform,
     architecture: value.architecture,
     buildProfile: value.buildProfile,
+    dataDirectory: value.dataDirectory,
   };
+}
+
+/** Removes Windows' extended-length prefix for user-facing path labels. */
+export function formatDataDirectoryForDisplay(path: string): string {
+  const uncPrefix = "\\\\?\\UNC\\";
+  if (path.startsWith(uncPrefix)) {
+    return `\\\\${path.slice(uncPrefix.length)}`;
+  }
+
+  const extendedPrefix = "\\\\?\\";
+  return path.startsWith(extendedPrefix)
+    ? path.slice(extendedPrefix.length)
+    : path;
 }
 
 export async function getRuntimeStatus(): Promise<RuntimeStatus> {

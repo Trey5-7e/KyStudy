@@ -292,6 +292,14 @@
   overflow-wrap: anywhere;
 }
 
+.settings-data-path {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-body);
+  overflow-wrap: anywhere;
+}
+
 .settings-boundary-list {
   display: grid;
   gap: 0;

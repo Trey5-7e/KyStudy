@@ -1,7 +1,7 @@
 {
   "name": "kystudy",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "GPL-3.0-only",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
@@ -18,7 +18,7 @@
     "audit:css": "node scripts/audit-css.mjs",
     "test:css-audit": "node --test scripts/css-audit-core.test.mjs",
     "check:target": "node scripts/check-targets.mjs",
-    "package:windows-portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows-portable.ps1 -ExecutablePath src-tauri/target/release/kystudy.exe -OutputArchive artifacts/kystudy-windows-x64-portable.zip -Version 0.1.1",
+    "package:windows-portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows-portable.ps1 -ExecutablePath src-tauri/target/release/kystudy.exe -OutputArchive artifacts/kystudy-windows-x64-portable.zip -Version 0.1.2",
     "typecheck": "tsc --noEmit",
     "check": "pnpm format && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "tauri": "tauri"

@@ -1110,6 +1110,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the historical v3 fixture is intentionally explicit"
+    )]
     fn restore_migrates_a_verified_v3_backup_copy_to_latest() {
         let fixture = initialized_fixture();
         let output = tempdir().expect("output directory should exist");
@@ -1134,6 +1138,8 @@ mod tests {
                  DROP TABLE workbook_profile;
                  DROP TABLE ai_message;
                  DROP TABLE ai_conversation;
+                 DROP TABLE question_ai_analysis_history;
+                 DROP TABLE question_ai_analysis;
                  DROP TABLE ai_response_cache;
                  DROP TABLE ai_usage;
                  DROP TABLE ai_call;
@@ -1174,7 +1180,7 @@ mod tests {
                  ALTER TABLE resource_document DROP COLUMN page_count;
                  ALTER TABLE resource_document DROP COLUMN role;
                  DROP TABLE study_session;
-                 DELETE FROM schema_migration WHERE version IN (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23);
+                 DELETE FROM schema_migration WHERE version IN (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25);
                  PRAGMA user_version = 3;",
             )
             .expect("fixture should represent a v3 backup");
@@ -1242,6 +1248,8 @@ mod tests {
                  DROP TABLE workbook_profile;
                  DROP TABLE ai_message;
                  DROP TABLE ai_conversation;
+                 DROP TABLE question_ai_analysis_history;
+                 DROP TABLE question_ai_analysis;
                  DROP TABLE ai_response_cache;
                  DROP TABLE ai_usage;
                  DROP TABLE ai_call;
@@ -1283,7 +1291,7 @@ mod tests {
                  DROP TABLE task_change;
                  DROP TABLE task;
                  DROP TABLE subject;
-                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23);
+                 DELETE FROM schema_migration WHERE version IN (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25);
                  PRAGMA user_version = 2;",
             )
             .expect("fixture should represent a v2 backup");

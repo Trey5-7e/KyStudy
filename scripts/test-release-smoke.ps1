@@ -52,9 +52,12 @@ if ([IO.Path]::GetExtension($resolvedExecutable) -ne '.exe') {
 
 $runnerTemporary = Get-RequiredEnvironmentPath -Name 'RUNNER_TEMP'
 $smokeRoot = Join-Path $runnerTemporary ("kystudy-release-smoke-" + [Guid]::NewGuid().ToString('N'))
+$smokeInstallDirectory = Join-Path $smokeRoot 'install'
+$smokeExecutable = Join-Path $smokeInstallDirectory 'kystudy.exe'
+$smokeDataDirectory = Join-Path $smokeInstallDirectory 'data'
 $smokeAppData = Join-Path $smokeRoot 'AppData\Roaming'
 $smokeLocalAppData = Join-Path $smokeRoot 'AppData\Local'
-$workspaceDatabase = Join-Path $smokeAppData 'io.github.kystudy.desktop\workspaces\default\kystudy.sqlite3'
+$workspaceDatabase = Join-Path $smokeDataDirectory 'workspaces\default\kystudy.sqlite3'
 $resolvedReport = [IO.Path]::GetFullPath($ReportPath)
 $reportParent = Split-Path -Parent $resolvedReport
 $executableMetadata = Get-Item -LiteralPath $resolvedExecutable
@@ -67,13 +70,16 @@ $windowObserved = $false
 $observedSeconds = 0
 
 try {
+    New-Item -ItemType Directory -Path $smokeInstallDirectory -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $smokeInstallDirectory 'resources') -Force | Out-Null
+    Copy-Item -LiteralPath $resolvedExecutable -Destination $smokeExecutable
     New-Item -ItemType Directory -Path $smokeAppData -Force | Out-Null
     New-Item -ItemType Directory -Path $smokeLocalAppData -Force | Out-Null
     New-Item -ItemType Directory -Path $reportParent -Force | Out-Null
 
     $env:APPDATA = $smokeAppData
     $env:LOCALAPPDATA = $smokeLocalAppData
-    $process = Start-Process -FilePath $resolvedExecutable -PassThru -WindowStyle Hidden
+    $process = Start-Process -FilePath $smokeExecutable -PassThru -WindowStyle Hidden
 
     $deadline = [DateTime]::UtcNow.AddSeconds(20)
     do {
@@ -101,12 +107,16 @@ try {
     if (Test-Path -LiteralPath $workspaceDatabase) {
         throw 'Startup Smoke created a workspace database without user action.'
     }
+    if (-not (Test-Path -LiteralPath $smokeDataDirectory -PathType Container)) {
+        throw 'Startup Smoke did not initialize the installation-side data directory.'
+    }
 
     [ordered]@{
         status = 'passed'
         executableFileName = $executableMetadata.Name
         executableSizeBytes = $executableMetadata.Length
         executableSha256 = $executableHash
+        installDataDirectoryInitialized = $true
         mainWindowObserved = $windowObserved
         observedSeconds = $observedSeconds + 2
         workspaceDatabaseCreated = $false

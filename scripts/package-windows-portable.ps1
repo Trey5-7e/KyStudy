@@ -6,7 +6,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$OutputArchive,
 
-    [string]$Version = "0.1.1"
+    [string]$Version = "0.1.2"
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,11 +26,17 @@ New-Item -ItemType Directory -Path $stagingDirectory -Force | Out-Null
 try {
     Copy-Item -LiteralPath $executable -Destination (Join-Path $stagingDirectory "kystudy.exe")
 
+    $portableDataDirectory = Join-Path $stagingDirectory "data"
+    New-Item -ItemType Directory -Path $portableDataDirectory -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $portableDataDirectory ".kystudy-data-v1") `
+        -Value "KyStudy user data directory v1" -Encoding UTF8
+
     $readme = @"
 KyStudy $Version portable package
 
 Run kystudy.exe to start KyStudy.
-User data is stored separately in the Windows application data directory and is not removed by deleting this folder.
+User data is stored in the data folder next to kystudy.exe. Keep the data folder with the executable when moving this package.
+The data folder is user-owned content; back it up before replacing or deleting the portable package.
 See the project README for backup, privacy, support, and license information.
 Source code: https://github.com/Trey5-7e/KyStudy
 License: GNU GPL v3.0-only (see LICENSE)

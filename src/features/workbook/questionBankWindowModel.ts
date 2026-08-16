@@ -1,6 +1,7 @@
 import type { IndexedQuestion } from "../../shared/tauri/questionBankClient";
 import type { AttemptResult } from "../../shared/tauri/questionClient";
 import type { PaperDraftRecipe } from "./paperSetupPreferences";
+import type { PaperViewState } from "./paperNavigationModel";
 
 export type QuestionBankTool =
   | "subject"
@@ -51,6 +52,7 @@ export type QuestionBankWindow =
       recipe?: PaperDraftRecipe;
       results?: Record<string, AttemptResult>;
       recordedResults?: Record<string, AttemptResult>;
+      view?: PaperViewState;
       origin: QuestionBankWindowOrigin;
     };
 
@@ -98,6 +100,7 @@ export function paperWindow(
   recipe?: PaperDraftRecipe,
   results?: Record<string, AttemptResult>,
   recordedResults?: Record<string, AttemptResult>,
+  view?: PaperViewState,
 ): Extract<QuestionBankWindow, { kind: "paper" }> {
   return {
     kind: "paper",
@@ -106,6 +109,7 @@ export function paperWindow(
     recipe,
     results,
     recordedResults,
+    view,
   };
 }
 

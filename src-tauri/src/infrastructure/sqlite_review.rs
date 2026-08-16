@@ -1518,6 +1518,8 @@ mod tests {
                  DROP TABLE ai_message;
                  DROP TABLE ai_conversation;
                  ALTER TABLE study_plan DROP COLUMN source_ai_message_id;
+                 DROP TABLE question_ai_analysis_history;
+                 DROP TABLE question_ai_analysis;
                  DROP TABLE ai_response_cache;
                  DROP TABLE ai_usage;
                  DROP TABLE ai_call;
@@ -1545,7 +1547,7 @@ mod tests {
                  ALTER TABLE question DROP COLUMN classification_source;
                  ALTER TABLE question DROP COLUMN question_type;
                  ALTER TABLE question DROP COLUMN subject_id;
-                 DELETE FROM schema_migration WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23);
+                 DELETE FROM schema_migration WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25);
                  PRAGMA user_version = 7;",
             )
             .expect("fixture should become schema v7");

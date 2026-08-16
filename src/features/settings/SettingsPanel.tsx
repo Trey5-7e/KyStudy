@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import {
+  formatDataDirectoryForDisplay,
   getRuntimeStatus,
   normalizeCommandError,
 } from "../../shared/tauri/runtimeClient";
@@ -60,7 +61,7 @@ export const SETTINGS_PANEL_ID = "settings-panel";
 
 type DiagnosticState =
   | { kind: "loading" }
-  | { kind: "ready"; report: DiagnosticReport }
+  | { kind: "ready"; report: DiagnosticReport; dataDirectory: string }
   | { kind: "error"; message: string };
 
 export const SETTINGS_TABS: ReadonlyArray<{
@@ -115,6 +116,7 @@ function DiagnosticPanel() {
       setState({
         kind: "ready",
         report: buildDiagnosticReport(runtime, workspace),
+        dataDirectory: runtime.dataDirectory,
       });
     } catch (error: unknown) {
       const normalized =
@@ -133,6 +135,7 @@ function DiagnosticPanel() {
           setState({
             kind: "ready",
             report: buildDiagnosticReport(runtime, workspace),
+            dataDirectory: runtime.dataDirectory,
           });
         }
       },
@@ -178,7 +181,7 @@ function DiagnosticPanel() {
         id="diagnostic-title"
         level={3}
         title="应用信息"
-        description="查看当前版本和工作区状态；反馈问题时可导出脱敏摘要"
+        description="查看版本、数据目录和工作区状态；反馈问题时可导出脱敏摘要"
         actions={
           <div className="settings-section-actions">
             <Badge tone="success">摘要已脱敏</Badge>
@@ -210,6 +213,14 @@ function DiagnosticPanel() {
             {state.report.workspace.state === "ready"
               ? `已初始化 · ${state.report.workspace.timezone}`
               : "尚未初始化"}
+          </dd>
+        </div>
+        <div>
+          <dt>数据目录</dt>
+          <dd>
+            <span className="settings-data-path">
+              {formatDataDirectoryForDisplay(state.dataDirectory)}
+            </span>
           </dd>
         </div>
       </dl>

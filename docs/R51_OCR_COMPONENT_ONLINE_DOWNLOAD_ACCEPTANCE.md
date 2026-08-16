@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-R51 已接入在线下载的安全协议与界面入口，同时保留本地文件夹安装作为兜底。v0.1.1 已发布包含固定 SHA-256 摘要的 OCR Release 资产，正式构建会将下载地址和摘要注入应用，在线按钮可用；本地安装仍可在离线或下载失败时使用。
+R51 已接入在线下载的安全协议与界面入口，同时保留本地文件夹安装作为兜底。正式应用构建固定复用独立 `ocr-v0.1.0` Release 中包含 SHA-256 摘要的 OCR 资产，在线按钮可用；只有 OCR 组件本身发生变化时才更新独立 OCR Release。本地安装仍可在离线或下载失败时使用。
 
 这不是桌面验收通过声明；桌面验收由用户执行。当前批次的可验收范围是协议、错误边界和本地兜底不受影响。
 
@@ -26,7 +26,7 @@ KYSTUDY_OCR_DOWNLOAD_URL=https://github.com/Trey5-7e/KyStudy/releases/download/<
 KYSTUDY_OCR_DOWNLOAD_SHA256=<64 位十六进制 SHA-256>
 ```
 
-资产应为 ZIP，根目录固定为 `kystudy-ocr-worker/`，并与当前 `REQUIRED_COMPONENT_FILES` 完全匹配。v0.1.1 的正式资产已按该规则生成并上传；后续版本继续由发布工作流自动重建和上传。
+资产应为 ZIP，根目录固定为 `kystudy-ocr-worker/`，并与当前 `REQUIRED_COMPONENT_FILES` 完全匹配。`ocr-v0.1.0` 已按该规则生成并上传；后续普通应用版本继续复用该地址，OCR 组件变更时再创建新的独立 OCR Release。
 
 ## 验收建议
 
@@ -43,4 +43,4 @@ KYSTUDY_OCR_DOWNLOAD_SHA256=<64 位十六进制 SHA-256>
 - `pnpm exec tsc --noEmit`：通过。
 - 前端 ESLint（本批修改文件）：通过。
 
-v0.1.1 已完成完整发布工作流：OCR 组件构建、归档校验、Tauri 签名构建和 Release 资产上传均通过；桌面在线下载验收仍由用户执行。
+v0.1.1 已完成完整发布工作流；v0.1.2 将改为复用独立 `ocr-v0.1.0` 资产，以验证应用版本更新与 OCR 组件下载地址解耦。桌面在线下载验收仍由用户执行。

@@ -24,6 +24,8 @@ jobs:
     timeout-minutes: 45
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      KYSTUDY_OCR_DOWNLOAD_URL: https://github.com/Trey5-7e/KyStudy/releases/download/ocr-v0.1.0/kystudy-ocr-worker-v0.1.0.zip
+      KYSTUDY_OCR_DOWNLOAD_SHA256: bb5a3e16a898713adde85717f4debe8cfbdf22cae10eb632752368f200513b01
 
     steps:
       - name: Check out repository
@@ -48,53 +50,73 @@ jobs:
         shell: pwsh
         run: pnpm install --frozen-lockfile
 
-      - name: Set up Python for OCR component
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: "3.12"
-
-      - name: Build OCR component
-        shell: pwsh
-        run: |
-          python -m pip install --disable-pip-version-check --upgrade pip
-          python -m pip install --disable-pip-version-check -r experiments\tv-07-ocr\requirements.lock.txt
-          & .\experiments\tv-07-ocr\build_sidecar.ps1 -PythonExecutable (Get-Command python).Source
-
-      - name: Package OCR component asset
-        id: ocr
-        shell: pwsh
-        run: |
-          $archive = Join-Path $env:RUNNER_TEMP ("kystudy-ocr-worker-{0}.zip" -f $env:RELEASE_TAG)
-          & .\scripts\package-ocr-component.ps1 `
-            -ComponentRoot "experiments\tv-07-ocr\output\pyinstaller\dist\kystudy-ocr-worker" `
-            -OutputArchive $archive
-          $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/$env:RELEASE_TAG/$(Split-Path -Leaf $archive)"
-          "archive=$archive" >> $env:GITHUB_OUTPUT
-          "sha256=$hash" >> $env:GITHUB_OUTPUT
-          "download_url=$downloadUrl" >> $env:GITHUB_OUTPUT
-
       - name: Publish signed Tauri assets
         uses: tauri-apps/tauri-action@1ddc7b49b13c3038297360482fcb3e058764d7c9 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          KYSTUDY_OCR_DOWNLOAD_URL: ${{ steps.ocr.outputs.download_url }}
-          KYSTUDY_OCR_DOWNLOAD_SHA256: ${{ steps.ocr.outputs.sha256 }}
+          KYSTUDY_OCR_DOWNLOAD_URL: ${{ env.KYSTUDY_OCR_DOWNLOAD_URL }}
+          KYSTUDY_OCR_DOWNLOAD_SHA256: ${{ env.KYSTUDY_OCR_DOWNLOAD_SHA256 }}
         with:
           tagName: ${{ env.RELEASE_TAG }}
           releaseName: KyStudy ${{ env.RELEASE_TAG }}
-          releaseBody: "请查看仓库中的发布说明和校验清单。"
+          releaseBody: "请查看仓库中的发布说明和校验清单。OCR 组件复用独立 ocr-v0.1.0 Release。"
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true
           uploadUpdaterJson: true
           args: --config src-tauri/tauri.release.conf.json
 
-      - name: Upload OCR component asset
+      - name: Package Windows portable archive
+        shell: pwsh
+        run: pnpm package:windows-portable
+
+      - name: Build Windows release manifest
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OCR_ARCHIVE: ${{ steps.ocr.outputs.archive }}
-        run: gh release upload "$env:RELEASE_TAG" "$env:OCR_ARCHIVE" --repo "${{ github.repository }}" --clobber
+        run: |
+          $version = $env:RELEASE_TAG -replace '^v', ''
+          $bundleDirectory = Join-Path $env:GITHUB_WORKSPACE 'src-tauri/target/release/bundle'
+          $nsisDirectory = Join-Path $bundleDirectory 'nsis'
+          $artifactDirectory = Join-Path $env:GITHUB_WORKSPACE 'artifacts'
+          $setupPath = Join-Path $nsisDirectory "KyStudy_${version}_x64-setup.exe"
+          $signaturePath = "$setupPath.sig"
+          $portablePath = Join-Path $artifactDirectory 'kystudy-windows-x64-portable.zip'
+          $manifestPath = Join-Path $artifactDirectory 'kystudy-windows-x64-release-manifest.json'
+
+          if (-not (Test-Path -LiteralPath $setupPath -PathType Leaf)) {
+            throw "Expected NSIS asset was not produced: $setupPath"
+          }
+          if (-not (Test-Path -LiteralPath $signaturePath -PathType Leaf)) {
+            throw "Expected NSIS signature was not produced: $signaturePath"
+          }
+          if (-not (Test-Path -LiteralPath $portablePath -PathType Leaf)) {
+            throw "Expected portable asset was not produced: $portablePath"
+          }
+
+          $updaterPath = Get-ChildItem -LiteralPath $bundleDirectory -Recurse -File -Filter 'latest.json' |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $updaterPath) {
+            gh release download $env:RELEASE_TAG --pattern 'latest.json' --dir $artifactDirectory --clobber
+            $updaterPath = Join-Path $artifactDirectory 'latest.json'
+          }
+          if (-not (Test-Path -LiteralPath $updaterPath -PathType Leaf)) {
+            throw 'Expected updater JSON was not produced or uploaded.'
+          }
+
+          & (Join-Path $env:GITHUB_WORKSPACE 'scripts/write-windows-release-manifest.ps1') `
+            -Version $version `
+            -OutputPath $manifestPath `
+            -ArtifactPath @($setupPath, $signaturePath, $updaterPath, $portablePath)
+
+      - name: Upload Windows portable archive and release manifest
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh release upload "${{ env.RELEASE_TAG }}"
+          artifacts/kystudy-windows-x64-portable.zip
+          artifacts/kystudy-windows-x64-release-manifest.json
+          --clobber

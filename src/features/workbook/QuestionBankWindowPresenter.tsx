@@ -327,6 +327,9 @@ export function QuestionBankWindowPresenter({
           }
           initialResults={paperResults}
           initialRecordedResults={paperRecordedResults}
+          initialView={
+            activeWindow?.kind === "paper" ? activeWindow.view : undefined
+          }
           snapshot={snapshot}
           timezone={timezone}
           manualIndexDialog={ManualIndexDialog}

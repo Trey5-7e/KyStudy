@@ -37,6 +37,21 @@
   max-height: min(94dvh, 1000px);
 }
 
+.editor-dialog:has(.review-region-expanded) {
+  width: 100vw;
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+}
+
+.editor-dialog:has(.review-region-expanded) .editor-dialog-surface {
+  width: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+}
+
 .editor-dialog::backdrop {
   background: rgb(17 31 23 / 62%);
   backdrop-filter: blur(3px);
@@ -2344,6 +2359,9 @@ button:disabled {
 }
 
 .review-region-status {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
   margin: 0;
   padding: 18px;
   color: #68736d;
@@ -3310,6 +3328,115 @@ button:disabled {
   gap: 16px;
 }
 
+.generated-paper {
+  padding-bottom: 5rem;
+  scroll-padding-bottom: 7rem;
+}
+
+.generated-paper-list {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.generated-paper-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #53665a;
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.generated-paper-mode-row > span {
+  margin-right: 4px;
+}
+
+.generated-paper-mode-row > button {
+  min-height: 38px;
+  padding: 7px 12px;
+}
+
+.generated-paper-mode-row > button.is-active {
+  border: 1px solid #1e6949;
+  border-radius: 10px;
+  color: #fff;
+  background: #1e6949;
+}
+
+.generated-paper-question-navigation {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 10px 0 2px;
+  border-top: 1px solid #dbe5dd;
+}
+
+.generated-paper-question-navigation > span {
+  color: #40614e;
+  font-variant-numeric: tabular-nums;
+}
+
+.generated-paper-overview {
+  border: 1px solid #d7e3da;
+  border-radius: 12px;
+  background: #f8fbf8;
+}
+
+.generated-paper-overview > summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  color: #345b46;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.generated-paper-overview > summary:focus-visible {
+  outline: 3px solid rgb(47 123 89 / 32%);
+  outline-offset: -3px;
+}
+
+.generated-paper-overview-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 12px 6px;
+}
+
+.generated-paper-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 7px;
+  padding: 0 12px 12px;
+}
+
+.generated-paper-overview-grid button {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid #d1dfd5;
+  border-radius: 9px;
+  color: #456256;
+  background: #fff;
+  text-align: left;
+}
+
+.generated-paper-overview-grid button:hover,
+.generated-paper-overview-grid button.is-active {
+  border-color: #2f7b59;
+  background: #eaf5ed;
+}
+
+.generated-paper-overview-grid button small {
+  color: #758078;
+  font-size: 0.72rem;
+}
+
 .pdf-index-progress {
   margin: 0;
   padding: 10px 12px;
@@ -3739,6 +3866,11 @@ button:disabled {
   border: 1px solid #dce3dc;
   border-radius: 16px;
   background: #fff;
+}
+
+.generated-paper-question:focus {
+  outline: 3px solid rgb(47 123 89 / 35%);
+  outline-offset: 3px;
 }
 
 .generated-paper-toolbar {
@@ -4546,7 +4678,7 @@ button:disabled {
 
 .question-bank-workbooks > .question-bank-workbook-card,
 .question-bank-segment-list > .question-bank-segment,
-.generated-paper > .generated-paper-question {
+.generated-paper-list > div > .generated-paper-question {
   content-visibility: auto;
   contain-intrinsic-size: auto 132px;
 }
@@ -5521,6 +5653,7 @@ button:disabled {
   background: rgb(4 14 9 / 88%);
   box-shadow: none;
   backdrop-filter: blur(8px);
+  box-sizing: border-box;
 }
 
 .review-region-expanded-toolbar {

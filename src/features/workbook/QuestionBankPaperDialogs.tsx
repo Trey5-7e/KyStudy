@@ -1,4 +1,11 @@
-import { Fragment, useMemo, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
 import {
   EditorDialog,
@@ -19,7 +26,11 @@ import type {
   QuestionType,
 } from "../../shared/tauri/questionClient";
 import { localDateForTimezone } from "../../shared/tauri/scheduleClient";
-import { QuestionRegionCard } from "../review/QuestionRegionCard";
+import { PaperQuestionCard } from "./PaperQuestionCard";
+import {
+  PaperQuestionNavigator,
+  type PaperQuestionOverviewItem,
+} from "./PaperQuestionNavigator";
 import {
   generateWeightedPaper,
   paperChapterKey,
@@ -30,7 +41,6 @@ import {
 } from "./questionBankModel";
 import {
   IndexedQuestionEditForm,
-  partLabel,
   PART_OPTIONS,
   STATUS_OPTIONS,
   TYPE_OPTIONS,
@@ -44,9 +54,21 @@ import {
   loadPaperTypeQuotas,
   paperSpecFromDraftRecipe,
   savePaperDraft,
+  loadPaperViewMode,
+  savePaperViewMode,
   savePaperTypeQuotas,
   type PaperDraftRecipe,
 } from "./paperSetupPreferences";
+import {
+  filterPaperQuestions,
+  firstUnansweredPaperQuestionId,
+  navigatePaperQuestion,
+  paperQuestionPosition,
+  selectPaperQuestionId,
+  shouldHandlePaperNavigationKey,
+  type PaperQuestionFilter,
+  type PaperViewMode,
+} from "./paperNavigationModel";
 
 export function PaperSetupDialog({
   questions,
@@ -377,6 +399,7 @@ export function PaperDialog({
   recipe,
   initialResults,
   initialRecordedResults,
+  initialView,
   onClose,
   onRequestBack,
   backLabel,
@@ -390,6 +413,11 @@ export function PaperDialog({
   recipe?: PaperDraftRecipe;
   initialResults?: Record<string, AttemptResult>;
   initialRecordedResults?: Record<string, AttemptResult>;
+  initialView?: {
+    mode: PaperViewMode;
+    selectedQuestionType: PaperQuestionFilter;
+    activeQuestionId?: string;
+  };
   onClose(): void;
   onRequestBack?(): void;
   backLabel?: string;
@@ -403,19 +431,58 @@ export function PaperDialog({
   const [recordedResults, setRecordedResults] = useState<
     Record<string, AttemptResult>
   >(() => ({ ...initialRecordedResults }));
+  const [mode, setMode] = useState<PaperViewMode>(
+    initialView?.mode ?? loadPaperViewMode(),
+  );
   const [selectedQuestionType, setSelectedQuestionType] =
-    useState<PaperQuestionFilter>("all");
+    useState<PaperQuestionFilter>(initialView?.selectedQuestionType ?? "all");
+  const [activeQuestionId, setActiveQuestionId] = useState<string>(
+    () =>
+      selectPaperQuestionId(
+        filterPaperQuestions(
+          questions,
+          initialView?.selectedQuestionType ?? "all",
+        ),
+        initialView?.activeQuestionId,
+        initialResults,
+      ) ?? "",
+  );
   const [adjustingQuestionId, setAdjustingQuestionId] = useState<string>();
   const [editingQuestionId, setEditingQuestionId] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [draftStatus, setDraftStatus] = useState<
+    "idle" | "saving" | "saved" | "failed"
+  >("idle");
+  const [draftSavedAt, setDraftSavedAt] = useState<number>();
+  const activeQuestionRef = useRef<HTMLElement>(null);
+  const markDraftPending = useCallback(() => {
+    if (recipe !== undefined) setDraftStatus("saving");
+  }, [recipe]);
   const applySnapshot = (next: QuestionBankSnapshot) => {
+    markDraftPending();
     onSnapshotChanged(next);
-    setPaperQuestions((current) =>
-      current.flatMap((question) => {
-        const updated = next.questions.find((item) => item.id === question.id);
-        return updated === undefined ? [] : [updated];
-      }),
+    const nextPaperQuestions = paperQuestions.flatMap((question) => {
+      const updated = next.questions.find((item) => item.id === question.id);
+      return updated === undefined ? [] : [updated];
+    });
+    const nextQuestionIds = new Set(
+      nextPaperQuestions.map((question) => question.id),
+    );
+    setPaperQuestions(nextPaperQuestions);
+    setResults((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([questionId]) =>
+          nextQuestionIds.has(questionId),
+        ),
+      ),
+    );
+    setRecordedResults((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([questionId]) =>
+          nextQuestionIds.has(questionId),
+        ),
+      ),
     );
   };
   const adjustingQuestion = paperQuestions.find(
@@ -436,14 +503,123 @@ export function PaperDialog({
     return counts;
   }, [paperQuestions]);
   const visiblePaperQuestions = useMemo(
-    () =>
-      selectedQuestionType === "all"
-        ? paperQuestions
-        : paperQuestions.filter(
-            (question) => question.questionType === selectedQuestionType,
-          ),
+    () => filterPaperQuestions(paperQuestions, selectedQuestionType),
     [paperQuestions, selectedQuestionType],
   );
+
+  const currentQuestionId = useMemo(
+    () =>
+      selectPaperQuestionId(visiblePaperQuestions, activeQuestionId, results) ??
+      "",
+    [activeQuestionId, results, visiblePaperQuestions],
+  );
+  const currentPosition = paperQuestionPosition(
+    paperQuestions,
+    visiblePaperQuestions,
+    currentQuestionId,
+  );
+  const questionOverview = useMemo<PaperQuestionOverviewItem[]>(
+    () =>
+      paperQuestions.map((question, index) => ({
+        id: question.id,
+        label: `第 ${index + 1} 题`,
+        result: results[question.id],
+        active: question.id === currentQuestionId,
+      })),
+    [currentQuestionId, paperQuestions, results],
+  );
+
+  const selectOverviewQuestion = (questionId: string) => {
+    const selectedQuestion = paperQuestions.find(
+      (question) => question.id === questionId,
+    );
+    if (selectedQuestion === undefined) return;
+    markDraftPending();
+    if (
+      selectedQuestionType !== "all" &&
+      !visiblePaperQuestions.some((question) => question.id === questionId)
+    ) {
+      setSelectedQuestionType("all");
+    }
+    setActiveQuestionId(questionId);
+    requestAnimationFrame(() => {
+      const card = document.getElementById(`paper-question-${questionId}`);
+      card?.scrollIntoView?.({ block: "start" });
+    });
+  };
+
+  const selectNextUnanswered = () => {
+    const nextQuestionId = firstUnansweredPaperQuestionId(
+      paperQuestions,
+      results,
+    );
+    if (nextQuestionId === undefined) {
+      setMessage("本卷已全部作答。");
+      return;
+    }
+    selectOverviewQuestion(nextQuestionId);
+  };
+
+  useEffect(() => {
+    if (mode !== "single" || busy) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!shouldHandlePaperNavigationKey(event)) return;
+      const direction = event.key === "ArrowRight" ? "next" : "previous";
+      const nextQuestionId = navigatePaperQuestion(
+        visiblePaperQuestions,
+        currentQuestionId,
+        direction,
+      );
+      if (nextQuestionId === undefined) return;
+      event.preventDefault();
+      event.stopPropagation();
+      markDraftPending();
+      setActiveQuestionId(nextQuestionId);
+    };
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
+  }, [busy, currentQuestionId, markDraftPending, mode, visiblePaperQuestions]);
+
+  useEffect(() => {
+    if (mode !== "single" || currentQuestionId === "") return;
+    requestAnimationFrame(() =>
+      activeQuestionRef.current?.focus({ preventScroll: true }),
+    );
+  }, [currentQuestionId, mode]);
+
+  useEffect(() => {
+    if (recipe === undefined) return;
+    const timer = window.setTimeout(() => {
+      const saved = savePaperDraft({
+        questionIds: paperQuestions.map((question) => question.id),
+        recipe,
+        results,
+        recordedResults,
+        view: {
+          mode,
+          selectedQuestionType,
+          activeQuestionId: currentQuestionId || undefined,
+        },
+        savedAt: Date.now(),
+      });
+      if (saved) {
+        setDraftStatus("saved");
+        setDraftSavedAt(Date.now());
+      } else {
+        setDraftStatus("failed");
+        setMessage("自动暂存不可用，请保持窗口打开并使用保存记录。");
+      }
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [
+    currentQuestionId,
+    mode,
+    paperQuestions,
+    recordedResults,
+    recipe,
+    results,
+    selectedQuestionType,
+  ]);
 
   if (adjustingQuestion !== undefined) {
     return (
@@ -465,7 +641,7 @@ export function PaperDialog({
       <EditorDialog
         title="编辑练习卷题目"
         description="校正题号、章节、篇章、题型或卡片标题；保存后会立即更新本张练习卷。"
-        dirty
+        dirty={draftStatus === "failed"}
         onRequestClose={() => setEditingQuestionId(undefined)}
         onRequestBack={() => setEditingQuestionId(undefined)}
         backLabel="返回练习卷"
@@ -505,17 +681,27 @@ export function PaperDialog({
       setMessage("当前练习卷没有可恢复的组卷规则。");
       return false;
     }
-    savePaperDraft({
+    const saved = savePaperDraft({
       questionIds: paperQuestions.map((question) => question.id),
       recipe,
       results: nextResults,
       recordedResults: nextRecordedResults,
+      view: {
+        mode,
+        selectedQuestionType,
+        activeQuestionId: currentQuestionId || undefined,
+      },
       savedAt: Date.now(),
     });
-    return true;
+    setDraftStatus(saved ? "saved" : "failed");
+    if (saved) setDraftSavedAt(Date.now());
+    return saved;
   };
   const persistPaperDraft = () => {
-    if (!persistCurrentDraft()) return;
+    if (!persistCurrentDraft()) {
+      setMessage("草稿保存失败，请保持窗口打开并使用保存记录。");
+      return;
+    }
     setMessage("本卷和当前作答标记已暂存，下次可以继续。");
   };
   const saveProgress = async () => {
@@ -583,8 +769,14 @@ export function PaperDialog({
       setMessage("当前练习卷没有可刷新的组卷规则。");
       return;
     }
-    if (Object.keys(results).length > 0) {
-      setMessage("本卷已有作答结果，请先保存结果后再刷新组卷。");
+    if (Object.keys(results).length > 0 && pendingEntries.length === 0) {
+      setMessage("本卷已有已保存记录，请提交本卷或返回后新建组卷。");
+      return;
+    }
+    if (
+      Object.keys(results).length > 0 &&
+      !window.confirm("刷新将放弃尚未提交的当前作答标记，确定继续吗？")
+    ) {
       return;
     }
     const refreshed = generateWeightedPaper(
@@ -595,13 +787,20 @@ export function PaperDialog({
       setMessage("当前题库和原组卷条件下没有可用题目，暂未刷新。");
       return;
     }
+    markDraftPending();
     setPaperQuestions(refreshed);
     setResults({});
     setRecordedResults({});
     setSelectedQuestionType("all");
+    setActiveQuestionId(refreshed[0]?.id ?? "");
     savePaperDraft({
       questionIds: refreshed.map((question) => question.id),
       recipe,
+      view: {
+        mode,
+        selectedQuestionType: "all",
+        activeQuestionId: refreshed[0]?.id,
+      },
       savedAt: Date.now(),
     });
     setMessage("已按上次组卷规则刷新题目。");
@@ -610,20 +809,29 @@ export function PaperDialog({
     <EditorDialog
       title="本次练习卷"
       description={`${paperQuestions.length} 道题；做题时可以直接校正卡片，保存结果后会更新题库状态和错题队列。`}
-      dirty={!paperResultsEqual(results, recordedResults)}
+      dirty={draftStatus === "failed"}
       onRequestClose={onClose}
       onRequestBack={onRequestBack}
       backLabel={backLabel}
-      closeDisabled={busy}
+      closeDisabled={busy || draftStatus === "saving"}
       size="review"
     >
       <div className="generated-paper">
         <div className="generated-paper-toolbar">
           <div>
-            <strong>本卷已自动暂存</strong>
+            <strong>
+              {draftStatus === "saving"
+                ? "正在自动暂存…"
+                : draftStatus === "failed"
+                  ? "自动暂存失败"
+                  : "本卷已自动暂存"}
+            </strong>
             <span>
               已登记 {Object.keys(results).length} / {paperQuestions.length}{" "}
-              道；保存记录可继续，提交组卷后结束
+              道；
+              {draftStatus === "saved" && draftSavedAt !== undefined
+                ? `最近保存于 ${new Date(draftSavedAt).toLocaleTimeString()}`
+                : "请保持窗口打开并在需要时保存记录"}
             </span>
           </div>
           <div className="generated-paper-toolbar-actions">
@@ -644,24 +852,62 @@ export function PaperDialog({
             </button>
           </div>
         </div>
-        <nav className="generated-paper-nav" aria-label="练习卷题型导航">
-          {PAPER_TYPE_NAV.map((filter) => (
-            <button
-              key={filter.value}
-              type="button"
-              className={
-                selectedQuestionType === filter.value ? "is-active" : undefined
-              }
-              role="tab"
-              aria-selected={selectedQuestionType === filter.value}
-              aria-controls="generated-paper-list"
-              onClick={() => setSelectedQuestionType(filter.value)}
-            >
-              {filter.label}
-              <span>{questionTypeCounts[filter.value]}</span>
-            </button>
-          ))}
-        </nav>
+        <PaperQuestionNavigator
+          mode={mode}
+          selectedQuestionType={selectedQuestionType}
+          counts={questionTypeCounts}
+          filteredIndex={currentPosition?.filteredIndex}
+          filteredTotal={visiblePaperQuestions.length}
+          paperIndex={currentPosition?.paperIndex}
+          canGoPrevious={
+            currentPosition !== undefined && currentPosition.filteredIndex > 0
+          }
+          canGoNext={
+            currentPosition !== undefined &&
+            currentPosition.filteredIndex < currentPosition.filteredTotal - 1
+          }
+          questionOverview={questionOverview}
+          onModeChange={(nextMode) => {
+            markDraftPending();
+            savePaperViewMode(nextMode);
+            setMode(nextMode);
+          }}
+          onFilterChange={(filter) => {
+            markDraftPending();
+            setSelectedQuestionType(filter);
+            setActiveQuestionId(
+              selectPaperQuestionId(
+                filterPaperQuestions(paperQuestions, filter),
+                activeQuestionId,
+                results,
+              ) ?? "",
+            );
+          }}
+          onPrevious={() => {
+            const next = navigatePaperQuestion(
+              visiblePaperQuestions,
+              currentQuestionId,
+              "previous",
+            );
+            if (next !== undefined) {
+              markDraftPending();
+              setActiveQuestionId(next);
+            }
+          }}
+          onNext={() => {
+            const next = navigatePaperQuestion(
+              visiblePaperQuestions,
+              currentQuestionId,
+              "next",
+            );
+            if (next !== undefined) {
+              markDraftPending();
+              setActiveQuestionId(next);
+            }
+          }}
+          onQuestionSelect={selectOverviewQuestion}
+          onNextUnanswered={selectNextUnanswered}
+        />
         <div
           id="generated-paper-list"
           role="tabpanel"
@@ -674,21 +920,58 @@ export function PaperDialog({
           {visiblePaperQuestions.length === 0 ? (
             <div className="generated-paper-empty">当前题型暂无题目。</div>
           ) : (
-            renderPaperQuestions(
-              visiblePaperQuestions,
-              results,
-              (questionId, result) =>
-                setResults((current) => ({
-                  ...current,
-                  [questionId]: result,
-                })),
-              setAdjustingQuestionId,
-              setEditingQuestionId,
-            )
+            <div className="generated-paper-list">
+              {(mode === "single"
+                ? visiblePaperQuestions.filter(
+                    (question) => question.id === currentQuestionId,
+                  )
+                : visiblePaperQuestions
+              ).map((question) => {
+                const paperIndex = paperQuestions.findIndex(
+                  (item) => item.id === question.id,
+                );
+                return (
+                  <div key={question.id}>
+                    {mode === "continuous" &&
+                    (paperIndex === 0 ||
+                      paperQuestions[paperIndex - 1]?.questionType !==
+                        question.questionType) ? (
+                      <div className="generated-paper-section-heading">
+                        <h3>{paperSectionHeading(question.questionType)}</h3>
+                      </div>
+                    ) : null}
+                    <PaperQuestionCard
+                      question={question}
+                      index={visiblePaperQuestions.indexOf(question)}
+                      paperIndex={paperIndex}
+                      result={results[question.id]}
+                      deferImages={mode === "continuous"}
+                      questionRef={
+                        question.id === currentQuestionId
+                          ? activeQuestionRef
+                          : undefined
+                      }
+                      onResult={(questionId, result) => {
+                        markDraftPending();
+                        setResults((current) => ({
+                          ...current,
+                          [questionId]: result,
+                        }));
+                      }}
+                      onAdjust={setAdjustingQuestionId}
+                      onEdit={setEditingQuestionId}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
         {message === "" ? null : (
-          <p className="form-error" role="alert">
+          <p
+            className="form-error"
+            role={draftStatus === "failed" ? "alert" : "status"}
+          >
             {message}
           </p>
         )}
@@ -715,88 +998,6 @@ export function PaperDialog({
   );
 }
 
-function renderPaperQuestions(
-  paperQuestions: readonly IndexedQuestion[],
-  results: Readonly<Record<string, AttemptResult>>,
-  onResult: (questionId: string, result: AttemptResult) => void,
-  onAdjust: (questionId: string) => void,
-  onEdit: (questionId: string) => void,
-) {
-  let previousQuestionType: QuestionType | undefined;
-  return paperQuestions.map((question, index) => {
-    const startsSection = question.questionType !== previousQuestionType;
-    previousQuestionType = question.questionType;
-    return (
-      <Fragment key={question.id}>
-        {startsSection ? (
-          <div className="generated-paper-section-heading">
-            <h3>{paperSectionHeading(question.questionType)}</h3>
-          </div>
-        ) : null}
-        <article className="generated-paper-question question-bank-paper-card">
-          <header>
-            <div>
-              <span>第 {index + 1} 题</span>
-              <h3>
-                {question.subjectName} · {question.chapter}
-              </h3>
-            </div>
-            <div className="generated-paper-question-tools">
-              <small>
-                {question.workbookName} / {partLabel(question.sectionPart)} /{" "}
-                {typeLabel(question.questionType)} / 原题号{" "}
-                {question.questionNumber}
-              </small>
-              <div>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => onAdjust(question.id)}
-                >
-                  校正区域
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => onEdit(question.id)}
-                >
-                  编辑题目
-                </button>
-              </div>
-            </div>
-          </header>
-          <QuestionRegionCard
-            documentId={question.documentId}
-            title={question.title}
-            regions={question.regions}
-          />
-          <div
-            className="paper-result-buttons"
-            role="group"
-            aria-label={`第 ${index + 1} 题结果`}
-          >
-            {PAPER_RESULT_OPTIONS.map((result) => (
-              <button
-                key={result}
-                type="button"
-                className={
-                  results[question.id] === result
-                    ? `paper-result-${result} paper-result-active`
-                    : `paper-result-${result}`
-                }
-                aria-pressed={results[question.id] === result}
-                onClick={() => onResult(question.id, result)}
-              >
-                {attemptLabel(result)}
-              </button>
-            ))}
-          </div>
-        </article>
-      </Fragment>
-    );
-  });
-}
-
 function paperResultEntries(
   results: Readonly<Record<string, AttemptResult>>,
   recordedResults: Readonly<Record<string, AttemptResult>>,
@@ -805,35 +1006,6 @@ function paperResultEntries(
     recordedResults[questionId] === result ? [] : [{ questionId, result }],
   );
 }
-
-function paperResultsEqual(
-  left: Readonly<Record<string, AttemptResult>>,
-  right: Readonly<Record<string, AttemptResult>>,
-): boolean {
-  const leftEntries = Object.entries(left);
-  return (
-    leftEntries.length === Object.keys(right).length &&
-    leftEntries.every(([questionId, result]) => right[questionId] === result)
-  );
-}
-
-const PAPER_RESULT_OPTIONS: readonly AttemptResult[] = [
-  "correct",
-  "uncertain",
-  "incorrect",
-];
-
-type PaperQuestionFilter = "all" | QuestionType;
-
-const PAPER_TYPE_NAV: readonly {
-  value: PaperQuestionFilter;
-  label: string;
-}[] = [
-  { value: "all", label: "全部" },
-  { value: "choice", label: "选择题" },
-  { value: "blank", label: "填空题" },
-  { value: "solution", label: "解答题" },
-];
 
 function paperSectionHeading(questionType: QuestionType): string {
   const ordinal: Record<QuestionType, string> = {
@@ -1310,8 +1482,4 @@ function setsEqual<T>(left: ReadonlySet<T>, right: ReadonlySet<T>): boolean {
   return (
     left.size === right.size && [...left].every((value) => right.has(value))
   );
-}
-
-function attemptLabel(value: AttemptResult): string {
-  return { correct: "做对", uncertain: "不全对", incorrect: "做错" }[value];
 }

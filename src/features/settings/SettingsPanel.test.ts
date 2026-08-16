@@ -80,4 +80,9 @@ describe("settings tab DOM contract", () => {
     expect(SETTINGS_PANEL_SOURCE).not.toContain("打开兼容工具");
     expect(SETTINGS_PANEL_SOURCE).not.toContain("Schema");
   });
+
+  it("shows the backend-resolved data directory in the data tab", () => {
+    expect(SETTINGS_PANEL_SOURCE).toContain("<dt>数据目录</dt>");
+    expect(SETTINGS_PANEL_SOURCE).toContain("state.dataDirectory");
+  });
 });

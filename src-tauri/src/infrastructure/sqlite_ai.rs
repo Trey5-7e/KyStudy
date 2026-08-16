@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use crate::application::{
-    AiCachedResponse, AiError, AiProviderResponse, AiRepository, BeginAiCall, default_provider,
+    AiCachedResponse, AiCallResult, AiError, AiProviderResponse, AiRepository, BeginAiCall,
+    QuestionAiAnalysisHistoryEntry, default_provider,
 };
 use crate::domain::{
     AiBudget, AiCallSummary, AiModelProfile, AiProviderConfig, AiProviderType, AiUsageSummary,
@@ -430,6 +431,139 @@ impl AiRepository for SqliteAiRepository {
             .map_err(AiError::from)
     }
 
+    fn find_question_analysis(
+        &self,
+        question_id: &str,
+        source_fingerprint: &str,
+    ) -> Result<Option<AiCallResult>, AiError> {
+        let connection = self.open()?;
+        connection
+            .query_row(
+                "SELECT call_id, response_text, input_tokens, output_tokens,
+                        cached_input_tokens, reasoning_tokens, finished_at
+                 FROM question_ai_analysis
+                 WHERE question_id = ?1 AND source_fingerprint = ?2",
+                params![question_id, source_fingerprint],
+                |row| {
+                    Ok(AiCallResult {
+                        call_id: row.get(0)?,
+                        response_text: row.get(1)?,
+                        input_tokens: read_u64(row, 2)?,
+                        output_tokens: read_u64(row, 3)?,
+                        cached_input_tokens: read_u64(row, 4)?,
+                        reasoning_tokens: read_u64(row, 5)?,
+                        usage_source: "cache".to_owned(),
+                        cache_hit: true,
+                        finished_at: row.get(6)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(database_error)
+            .map_err(AiError::from)
+    }
+
+    fn save_question_analysis(
+        &self,
+        question_id: &str,
+        source_fingerprint: &str,
+        result: &AiCallResult,
+    ) -> Result<(), AiError> {
+        let mut connection = self.open()?;
+        let transaction = connection.transaction().map_err(database_error)?;
+        transaction
+            .execute(
+                "INSERT INTO question_ai_analysis(
+                    question_id, source_fingerprint, call_id, response_text,
+                    input_tokens, output_tokens, cached_input_tokens,
+                    reasoning_tokens, finished_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                 ON CONFLICT(question_id) DO UPDATE SET
+                    source_fingerprint = excluded.source_fingerprint,
+                    call_id = excluded.call_id,
+                    response_text = excluded.response_text,
+                    input_tokens = excluded.input_tokens,
+                    output_tokens = excluded.output_tokens,
+                    cached_input_tokens = excluded.cached_input_tokens,
+                    reasoning_tokens = excluded.reasoning_tokens,
+                    finished_at = excluded.finished_at",
+                params![
+                    question_id,
+                    source_fingerprint,
+                    result.call_id,
+                    result.response_text,
+                    to_i64(result.input_tokens)?,
+                    to_i64(result.output_tokens)?,
+                    to_i64(result.cached_input_tokens)?,
+                    to_i64(result.reasoning_tokens)?,
+                    result.finished_at,
+                ],
+            )
+            .map_err(database_error)?;
+        transaction
+            .execute(
+                "INSERT INTO question_ai_analysis_history(
+                    id, question_id, source_fingerprint, call_id, response_text,
+                    input_tokens, output_tokens, cached_input_tokens,
+                    reasoning_tokens, finished_at
+                 ) VALUES (?1, ?2, ?3, ?1, ?4, ?5, ?6, ?7, ?8, ?9)
+                 ON CONFLICT(id) DO NOTHING",
+                params![
+                    result.call_id,
+                    question_id,
+                    source_fingerprint,
+                    result.response_text,
+                    to_i64(result.input_tokens)?,
+                    to_i64(result.output_tokens)?,
+                    to_i64(result.cached_input_tokens)?,
+                    to_i64(result.reasoning_tokens)?,
+                    result.finished_at,
+                ],
+            )
+            .map_err(database_error)?;
+        transaction.commit().map_err(database_error)?;
+        Ok(())
+    }
+
+    fn list_question_analysis_history(
+        &self,
+        question_id: &str,
+    ) -> Result<Vec<QuestionAiAnalysisHistoryEntry>, AiError> {
+        let connection = self.open()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT source_fingerprint, call_id, response_text,
+                        input_tokens, output_tokens, cached_input_tokens,
+                        reasoning_tokens, finished_at
+                 FROM question_ai_analysis_history
+                 WHERE question_id = ?1
+                 ORDER BY finished_at DESC, id DESC
+                 LIMIT 50",
+            )
+            .map_err(database_error)?;
+        let rows = statement
+            .query_map([question_id], |row| {
+                Ok(QuestionAiAnalysisHistoryEntry {
+                    source_fingerprint: row.get(0)?,
+                    result: AiCallResult {
+                        call_id: row.get(1)?,
+                        response_text: row.get(2)?,
+                        input_tokens: read_u64(row, 3)?,
+                        output_tokens: read_u64(row, 4)?,
+                        cached_input_tokens: read_u64(row, 5)?,
+                        reasoning_tokens: read_u64(row, 6)?,
+                        usage_source: "cache".to_owned(),
+                        cache_hit: true,
+                        finished_at: row.get(7)?,
+                    },
+                })
+            })
+            .map_err(database_error)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(database_error)
+            .map_err(AiError::from)
+    }
+
     fn begin_call(&self, call: &BeginAiCall) -> Result<(), AiError> {
         let connection = self.open()?;
         connection
@@ -652,11 +786,12 @@ mod tests {
     use std::sync::{Arc, Mutex, PoisonError};
 
     use tempfile::tempdir;
+    use uuid::Uuid;
 
     use super::SqliteAiRepository;
     use crate::application::{
-        AiError, AiPreviewInput, AiRepository, AiUseCases, SaveAiBudgetInput, SaveAiProviderInput,
-        SecretStore, WorkspaceRepository,
+        AiError, AiPreviewInput, AiRepository, AiUseCases, QuestionAiAnalysisInput,
+        SaveAiBudgetInput, SaveAiProviderInput, SecretStore, WorkspaceRepository,
     };
     use crate::domain::NewWorkspace;
     use crate::infrastructure::{ProviderRouter, SqliteWorkspaceRepository};
@@ -839,5 +974,88 @@ mod tests {
             }),
             Err(AiError::BudgetBlocked)
         ));
+    }
+
+    #[test]
+    fn question_analysis_persists_per_question_and_reuses_without_usage() {
+        let directory = tempdir().expect("temporary directory should exist");
+        SqliteWorkspaceRepository::new(directory.path())
+            .initialize_default(&NewWorkspace::default_at(1_700_000_000_000))
+            .expect("workspace should initialize");
+        let repository = SqliteAiRepository::new(directory.path());
+        let question_id = Uuid::now_v7().to_string();
+        let document_id = Uuid::now_v7().to_string();
+        let blob_id = Uuid::now_v7().to_string();
+        let connection = repository.open().expect("database should open");
+        let workspace_id: String = connection
+            .query_row(
+                "SELECT id FROM workspace WHERE singleton_key = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("workspace should load");
+        connection
+            .execute(
+                "INSERT INTO blob(
+                    id, workspace_id, sha256, size_bytes, storage_key, integrity_state, created_at
+                 ) VALUES (?1, ?2, ?3, 1, ?4, 'ok', 1)",
+                rusqlite::params![blob_id, workspace_id, "a".repeat(64), "fixture.bin"],
+            )
+            .expect("blob should insert");
+        connection
+            .execute(
+                "INSERT INTO resource_document(
+                    id, workspace_id, blob_id, title, original_name, kind, mime_type,
+                    created_at, updated_at
+                 ) VALUES (?1, ?2, ?3, 'fixture', 'fixture.pdf', 'pdf', 'application/pdf', 1, 1)",
+                rusqlite::params![document_id, workspace_id, blob_id],
+            )
+            .expect("document should insert");
+        connection
+            .execute(
+                "INSERT INTO question(id, workspace_id, document_id, title, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, 'fixture question', 1, 1)",
+                rusqlite::params![question_id, workspace_id, document_id],
+            )
+            .expect("question should insert");
+        drop(connection);
+
+        let use_cases = AiUseCases::new(repository, MemorySecretStore::default(), ProviderRouter);
+        let input = QuestionAiAnalysisInput {
+            question_id,
+            source_fingerprint: "source-v1".to_owned(),
+            prompt: "保存题目解析".to_owned(),
+            image_data_urls: vec!["data:image/png;base64,AAA".to_owned()],
+            max_output_tokens: 100,
+            force_refresh: false,
+        };
+        let first = use_cases
+            .execute_question_analysis(&input)
+            .expect("first question analysis should execute");
+        let usage_after_first = use_cases.overview().expect("overview should load").usage;
+        let second = use_cases
+            .execute_question_analysis(&input)
+            .expect("saved question analysis should load");
+        let usage_after_second = use_cases.overview().expect("overview should reload").usage;
+
+        assert!(!first.cache_hit);
+        assert!(second.cache_hit);
+        assert_eq!(first.response_text, second.response_text);
+        assert_eq!(usage_after_first, usage_after_second);
+
+        let question_id_for_history = input.question_id.clone();
+        let refreshed = use_cases
+            .execute_question_analysis(&QuestionAiAnalysisInput {
+                force_refresh: true,
+                ..input
+            })
+            .expect("forced question analysis should execute");
+        assert!(!refreshed.cache_hit);
+
+        let history = use_cases
+            .question_analysis_history(&question_id_for_history)
+            .expect("question analysis history should load");
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].result.call_id, refreshed.call_id);
     }
 }

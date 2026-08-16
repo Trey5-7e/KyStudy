@@ -151,6 +151,16 @@ const MIGRATION_023: Migration = Migration {
     name: "xmind_import_format",
     sql: include_str!("../../migrations/0023_xmind_import_format.sql"),
 };
+const MIGRATION_024: Migration = Migration {
+    version: 24,
+    name: "question_ai_analysis",
+    sql: include_str!("../../migrations/0024_question_ai_analysis.sql"),
+};
+const MIGRATION_025: Migration = Migration {
+    version: 25,
+    name: "question_ai_analysis_history",
+    sql: include_str!("../../migrations/0025_question_ai_analysis_history.sql"),
+};
 const MIGRATIONS: &[Migration] = &[
     MIGRATION_001,
     MIGRATION_002,
@@ -175,6 +185,8 @@ const MIGRATIONS: &[Migration] = &[
     MIGRATION_021,
     MIGRATION_022,
     MIGRATION_023,
+    MIGRATION_024,
+    MIGRATION_025,
 ];
 
 /// `rusqlite` adapter for the single local workspace used in M1.
@@ -582,8 +594,9 @@ mod tests {
         MIGRATION_013_LEGACY_CHECKSUMS, MIGRATION_014, MIGRATION_015,
         MIGRATION_015_LEGACY_CHECKSUMS, MIGRATION_016, MIGRATION_017,
         MIGRATION_017_LEGACY_CHECKSUMS, MIGRATION_019, MIGRATION_020, MIGRATION_021, MIGRATION_022,
-        MIGRATION_023, MIGRATIONS, Migration, SqliteWorkspaceRepository, apply_migrations,
-        configure_connection, migrate, migration_checksum,
+        MIGRATION_023, MIGRATION_024, MIGRATION_025, MIGRATIONS, Migration,
+        SqliteWorkspaceRepository, apply_migrations, configure_connection, migrate,
+        migration_checksum,
     };
     use crate::application::{PersistenceError, WorkspaceRepository};
     use crate::domain::{LATEST_SCHEMA_VERSION, NewWorkspace};
@@ -1146,6 +1159,16 @@ mod tests {
                 .contains("CREATE TABLE cycle_plan_item_new")
         );
         assert!(MIGRATION_023.sql.contains("'xmind'"));
+        assert!(
+            MIGRATION_024
+                .sql
+                .contains("CREATE TABLE question_ai_analysis")
+        );
+        assert!(
+            MIGRATION_025
+                .sql
+                .contains("CREATE TABLE question_ai_analysis_history")
+        );
     }
 
     #[test]

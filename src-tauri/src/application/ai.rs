@@ -52,6 +52,22 @@ pub(crate) struct AiImagePreviewInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct QuestionAiAnalysisInput {
+    pub(crate) question_id: String,
+    pub(crate) source_fingerprint: String,
+    pub(crate) prompt: String,
+    pub(crate) image_data_urls: Vec<String>,
+    pub(crate) max_output_tokens: u32,
+    pub(crate) force_refresh: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct QuestionAiAnalysisHistoryEntry {
+    pub(crate) source_fingerprint: String,
+    pub(crate) result: AiCallResult,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AiOverview {
     pub(crate) providers: Vec<AiProviderOverview>,
     pub(crate) active_provider_id: String,
@@ -137,8 +153,9 @@ impl AiCallPurpose {
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::FoundationTest => "foundation_test",
-            Self::PlanningChat => "planning_chat",
-            Self::QuestionAnalysis => "question_analysis",
+            // Existing workspaces constrain this column to the pre-question-analysis
+            // purpose values; the per-question record keeps its own identity in v24.
+            Self::PlanningChat | Self::QuestionAnalysis => "planning_chat",
         }
     }
 }
@@ -219,6 +236,21 @@ pub(crate) trait AiRepository: Clone + Send + Sync + 'static {
     fn aggregate_usage(&self, day_start: i64, month_start: i64) -> Result<AiUsageSummary, AiError>;
     fn list_calls(&self, limit: u32) -> Result<Vec<AiCallSummary>, AiError>;
     fn find_cache(&self, fingerprint: &str) -> Result<Option<AiCachedResponse>, AiError>;
+    fn find_question_analysis(
+        &self,
+        question_id: &str,
+        source_fingerprint: &str,
+    ) -> Result<Option<AiCallResult>, AiError>;
+    fn save_question_analysis(
+        &self,
+        question_id: &str,
+        source_fingerprint: &str,
+        result: &AiCallResult,
+    ) -> Result<(), AiError>;
+    fn list_question_analysis_history(
+        &self,
+        question_id: &str,
+    ) -> Result<Vec<QuestionAiAnalysisHistoryEntry>, AiError>;
     fn begin_call(&self, call: &BeginAiCall) -> Result<(), AiError>;
     fn finish_call(
         &self,
@@ -491,12 +523,21 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
 
     pub(crate) fn execute_question_analysis(
         &self,
-        input: &AiImagePreviewInput,
+        input: &QuestionAiAnalysisInput,
     ) -> Result<AiCallResult, AiError> {
         if input.image_data_urls.is_empty() {
             return Err(AiError::InvalidInput);
         }
-        self.execute_for_images(
+        validate_identifier(&input.question_id)?;
+        validate_source_fingerprint(&input.source_fingerprint)?;
+        if !input.force_refresh
+            && let Some(saved) = self
+                .repository
+                .find_question_analysis(&input.question_id, &input.source_fingerprint)?
+        {
+            return Ok(saved);
+        }
+        let result = self.execute_for_images(
             &AiPreviewInput {
                 prompt: input.prompt.clone(),
                 max_output_tokens: input.max_output_tokens,
@@ -504,7 +545,33 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
             &input.image_data_urls,
             AiCallPurpose::QuestionAnalysis,
             None,
-        )
+            !input.force_refresh,
+        )?;
+        self.repository.save_question_analysis(
+            &input.question_id,
+            &input.source_fingerprint,
+            &result,
+        )?;
+        Ok(result)
+    }
+
+    pub(crate) fn question_analysis(
+        &self,
+        question_id: &str,
+        source_fingerprint: &str,
+    ) -> Result<Option<AiCallResult>, AiError> {
+        validate_identifier(question_id)?;
+        validate_source_fingerprint(source_fingerprint)?;
+        self.repository
+            .find_question_analysis(question_id, source_fingerprint)
+    }
+
+    pub(crate) fn question_analysis_history(
+        &self,
+        question_id: &str,
+    ) -> Result<Vec<QuestionAiAnalysisHistoryEntry>, AiError> {
+        validate_identifier(question_id)?;
+        self.repository.list_question_analysis_history(question_id)
     }
 
     pub(crate) fn execute_for(
@@ -513,7 +580,7 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
         purpose: AiCallPurpose,
         conversation_id: Option<String>,
     ) -> Result<AiCallResult, AiError> {
-        self.execute_for_images(input, &[], purpose, conversation_id)
+        self.execute_for_images(input, &[], purpose, conversation_id, true)
     }
 
     fn execute_for_images(
@@ -522,6 +589,7 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
         image_data_urls: &[String],
         purpose: AiCallPurpose,
         conversation_id: Option<String>,
+        allow_cache: bool,
     ) -> Result<AiCallResult, AiError> {
         let preview = self.preview_with_images(input, image_data_urls)?;
         if !preview.allowed {
@@ -530,7 +598,9 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
         let (provider, model, _) = self.repository.load_configuration()?;
         let started_at = current_utc_millis()?;
         let call_id = Uuid::now_v7().to_string();
-        if let Some(cached) = self.repository.find_cache(&preview.request_fingerprint)? {
+        if allow_cache
+            && let Some(cached) = self.repository.find_cache(&preview.request_fingerprint)?
+        {
             let call = BeginAiCall {
                 id: call_id.clone(),
                 provider_id: provider.id,
@@ -663,6 +733,13 @@ fn validate_identifier(value: &str) -> Result<(), AiError> {
     Uuid::parse_str(value)
         .map(|_| ())
         .map_err(|_| AiError::InvalidInput)
+}
+
+fn validate_source_fingerprint(value: &str) -> Result<(), AiError> {
+    if value.is_empty() || value.chars().count() > 20_000 {
+        return Err(AiError::InvalidInput);
+    }
+    Ok(())
 }
 
 fn result_from_response(

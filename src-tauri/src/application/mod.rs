@@ -26,8 +26,8 @@ pub(crate) use ai::AiProviderOverview;
 pub(crate) use ai::{
     AiCachedResponse, AiCallPreview, AiCallPurpose, AiCallResult, AiError, AiImagePreviewInput,
     AiOverview, AiPreviewInput, AiProviderGateway, AiProviderResponse, AiRepository, AiUseCases,
-    BeginAiCall, SaveAiBudgetInput, SaveAiProviderInput, SecretStore, default_provider,
-    estimate_tokens,
+    BeginAiCall, QuestionAiAnalysisHistoryEntry, QuestionAiAnalysisInput, SaveAiBudgetInput,
+    SaveAiProviderInput, SecretStore, default_provider, estimate_tokens,
 };
 pub(crate) use analytics::{
     AnalyticsBacklog, AnalyticsError, AnalyticsInput, AnalyticsOverview, AnalyticsPeriodSummary,

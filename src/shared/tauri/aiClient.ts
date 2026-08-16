@@ -237,6 +237,11 @@ export interface QuestionAiAnalysisRequest {
   maxOutputTokens: number;
 }
 
+export interface QuestionAiAnalysisHistoryEntry {
+  sourceFingerprint: string;
+  result: AiCallResult;
+}
+
 export async function previewQuestionAiAnalysis(
   request: QuestionAiAnalysisRequest,
 ): Promise<AiCallPreview> {
@@ -246,10 +251,42 @@ export async function previewQuestionAiAnalysis(
 }
 
 export async function executeQuestionAiAnalysis(
+  questionId: string,
+  sourceFingerprint: string,
   request: QuestionAiAnalysisRequest,
+  forceRefresh = false,
 ): Promise<AiCallResult> {
   return parseAiCallResult(
-    await invoke("execute_question_ai_analysis", { request }),
+    await invoke("execute_question_ai_analysis", {
+      request: {
+        questionId,
+        sourceFingerprint,
+        ...request,
+        forceRefresh,
+      },
+    }),
+  );
+}
+
+export async function getQuestionAiAnalysis(
+  questionId: string,
+  sourceFingerprint: string,
+): Promise<AiCallResult | undefined> {
+  const value = await invoke("get_question_ai_analysis", {
+    request: { questionId, sourceFingerprint },
+  });
+  return value === null || value === undefined
+    ? undefined
+    : parseAiCallResult(value);
+}
+
+export async function listQuestionAiAnalysisHistory(
+  questionId: string,
+): Promise<QuestionAiAnalysisHistoryEntry[]> {
+  return parseQuestionAiAnalysisHistory(
+    await invoke("list_question_ai_analysis_history", {
+      request: { questionId },
+    }),
   );
 }
 
@@ -342,6 +379,27 @@ export function parseAiCallResult(value: unknown): AiCallResult {
     cacheHit: value.cacheHit,
     finishedAt: value.finishedAt,
   };
+}
+
+export function parseQuestionAiAnalysisHistory(
+  value: unknown,
+): QuestionAiAnalysisHistoryEntry[] {
+  if (!Array.isArray(value)) {
+    throw new Error("AI_HISTORY_INVALID");
+  }
+  return value.map((entry) => {
+    if (
+      !isRecord(entry) ||
+      typeof entry.sourceFingerprint !== "string" ||
+      !("result" in entry)
+    ) {
+      throw new Error("AI_HISTORY_INVALID");
+    }
+    return {
+      sourceFingerprint: entry.sourceFingerprint,
+      result: parseAiCallResult(entry.result),
+    };
+  });
 }
 
 export function normalizeAiError(error: unknown): AiCommandError {

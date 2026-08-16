@@ -12,9 +12,17 @@ import type {
   AttemptResult,
   QuestionType,
 } from "../../shared/tauri/questionClient";
+import {
+  DEFAULT_PAPER_VIEW_STATE,
+  type PaperQuestionFilter,
+  type PaperViewMode,
+  type PaperViewState,
+} from "./paperNavigationModel";
 
 export const PAPER_SETUP_QUOTAS_STORAGE_KEY = "kystudy.paper-quotas.v1";
-export const PAPER_DRAFT_STORAGE_KEY = "kystudy.paper-draft.v1";
+export const PAPER_DRAFT_STORAGE_KEY = "kystudy.paper-draft.v2";
+export const LEGACY_PAPER_DRAFT_STORAGE_KEY = "kystudy.paper-draft.v1";
+export const PAPER_VIEW_MODE_STORAGE_KEY = "kystudy.paper-view-mode.v1";
 const MAX_PAPER_QUOTA = 50;
 
 export interface PaperDraftScopeGroup {
@@ -40,7 +48,34 @@ export interface SavedPaperDraft {
   recipe: PaperDraftRecipe;
   results?: Record<string, AttemptResult>;
   recordedResults?: Record<string, AttemptResult>;
+  view?: PaperViewState;
   savedAt: number;
+}
+
+export function loadPaperViewMode(
+  storage: Storage | undefined = browserStorage(),
+): PaperViewMode {
+  if (storage === undefined) return DEFAULT_PAPER_VIEW_STATE.mode;
+  try {
+    return storage.getItem(PAPER_VIEW_MODE_STORAGE_KEY) === "single"
+      ? "single"
+      : "continuous";
+  } catch {
+    return DEFAULT_PAPER_VIEW_STATE.mode;
+  }
+}
+
+export function savePaperViewMode(
+  mode: PaperViewMode,
+  storage: Storage | undefined = browserStorage(),
+): boolean {
+  if (storage === undefined) return false;
+  try {
+    storage.setItem(PAPER_VIEW_MODE_STORAGE_KEY, mode);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function loadPaperTypeQuotas(
@@ -139,20 +174,23 @@ export function paperSpecFromDraftRecipe(recipe: PaperDraftRecipe): PaperSpec {
 export function savePaperDraft(
   draft: SavedPaperDraft,
   storage: Storage | undefined = browserStorage(),
-): void {
-  if (storage === undefined) return;
+): boolean {
+  if (storage === undefined) return false;
   try {
     storage.setItem(
       PAPER_DRAFT_STORAGE_KEY,
       JSON.stringify({
+        version: 2,
         ...draft,
         questionIds: [...new Set(draft.questionIds)],
         results: normalizeResultRecord(draft.results),
         recordedResults: normalizeResultRecord(draft.recordedResults),
+        view: normalizeViewState(draft.view),
       }),
     );
+    return true;
   } catch {
-    // The current paper remains available even when WebView storage is full.
+    return false;
   }
 }
 
@@ -161,7 +199,9 @@ export function loadPaperDraft(
 ): SavedPaperDraft | undefined {
   if (storage === undefined) return undefined;
   try {
-    const raw = storage.getItem(PAPER_DRAFT_STORAGE_KEY);
+    const raw =
+      storage.getItem(PAPER_DRAFT_STORAGE_KEY) ??
+      storage.getItem(LEGACY_PAPER_DRAFT_STORAGE_KEY);
     if (raw === null) return undefined;
     const parsed: unknown = JSON.parse(raw);
     if (!isRecord(parsed)) return undefined;
@@ -179,6 +219,7 @@ export function loadPaperDraft(
       recipe,
       ...(Object.keys(results).length > 0 ? { results } : {}),
       ...(Object.keys(recordedResults).length > 0 ? { recordedResults } : {}),
+      view: normalizeViewState(parsed.view),
       savedAt,
     };
   } catch {
@@ -268,6 +309,30 @@ function normalizeResultRecord(
   );
 }
 
+function normalizeViewState(value: unknown): PaperViewState {
+  if (!isRecord(value)) return { ...DEFAULT_PAPER_VIEW_STATE };
+  const mode: PaperViewMode = value.mode === "single" ? "single" : "continuous";
+  const selectedQuestionType: PaperQuestionFilter = isPaperQuestionFilter(
+    value.selectedQuestionType,
+  )
+    ? value.selectedQuestionType
+    : "all";
+  const activeQuestionId =
+    typeof value.activeQuestionId === "string" &&
+    value.activeQuestionId.length > 0
+      ? value.activeQuestionId
+      : undefined;
+  return {
+    mode,
+    selectedQuestionType,
+    ...(activeQuestionId === undefined ? {} : { activeQuestionId }),
+  };
+}
+
+function isPaperQuestionFilter(value: unknown): value is PaperQuestionFilter {
+  return value === "all" || isQuestionType(value);
+}
+
 function parseStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
@@ -278,8 +343,11 @@ function isSectionPart(value: string): value is SectionPart {
   return ["basic", "comprehensive", "extended", "other"].includes(value);
 }
 
-function isQuestionType(value: string): value is QuestionType {
-  return ["choice", "blank", "solution", "other"].includes(value);
+function isQuestionType(value: unknown): value is QuestionType {
+  return (
+    typeof value === "string" &&
+    ["choice", "blank", "solution", "other"].includes(value)
+  );
 }
 
 function isPracticeStatus(value: string): value is PracticeStatus {

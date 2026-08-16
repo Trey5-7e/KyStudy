@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeAiError,
   parseAiCallPreview,
+  parseQuestionAiAnalysisHistory,
   parseAiOverview,
 } from "./aiClient";
 
@@ -114,6 +115,35 @@ describe("parseAiCallPreview", () => {
         warnings: ["sql_limit"],
       }),
     ).toThrowError("AI_PREVIEW_INVALID");
+  });
+});
+
+describe("parseQuestionAiAnalysisHistory", () => {
+  it("parses newest-first question analysis entries", () => {
+    const history = parseQuestionAiAnalysisHistory([
+      {
+        sourceFingerprint: "source-v1",
+        result: {
+          callId: "call-id",
+          responseText: "解析内容",
+          inputTokens: 10,
+          outputTokens: 20,
+          cachedInputTokens: 0,
+          reasoningTokens: 0,
+          usageSource: "cache",
+          cacheHit: true,
+          finishedAt: 2,
+        },
+      },
+    ]);
+
+    expect(history[0]?.result.responseText).toBe("解析内容");
+  });
+
+  it("rejects malformed question analysis history", () => {
+    expect(() => parseQuestionAiAnalysisHistory({})).toThrowError(
+      "AI_HISTORY_INVALID",
+    );
   });
 });
 

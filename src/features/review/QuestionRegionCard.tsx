@@ -82,24 +82,63 @@ export function QuestionRegionCard({
   documentId,
   title,
   regions,
+  deferImages = false,
 }: {
   documentId: string;
   title: string;
   regions: QuestionRegion[];
+  deferImages?: boolean;
 }) {
+  const cardRef = useRef<HTMLDivElement>(null);
   const expandedCloseRef = useRef<HTMLButtonElement>(null);
-  const expandedViewerRef = useRef<HTMLElement>(null);
+  const expandedViewerRef = useRef<HTMLDialogElement>(null);
   const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [images, setImages] = useState<RenderedRegion[]>([]);
-  const [status, setStatus] = useState("正在加载题目图片…");
+  const [status, setStatus] = useState(
+    deferImages ? "等待进入视口后加载题目图片…" : "正在加载题目图片…",
+  );
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [shouldLoad, setShouldLoad] = useState(!deferImages);
   const [activeIndex, setActiveIndex] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [drag, setDrag] = useState<DragState>();
+
+  useEffect(() => {
+    if (!deferImages) {
+      queueMicrotask(() => setShouldLoad(true));
+      return;
+    }
+    const card = cardRef.current;
+    if (card === null || typeof IntersectionObserver === "undefined") {
+      queueMicrotask(() => setShouldLoad(true));
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoad(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "320px 0px" },
+    );
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [deferImages]);
+
   useEffect(() => {
     let disposed = false;
     const urls: string[] = [];
+    if (!shouldLoad) {
+      queueMicrotask(() => {
+        if (!disposed) setStatus("等待进入视口后加载题目图片…");
+      });
+      return () => {
+        disposed = true;
+      };
+    }
     queueMicrotask(() => {
       if (disposed) return;
       lastTriggerRef.current = null;
@@ -135,7 +174,7 @@ export function QuestionRegionCard({
         URL.revokeObjectURL(url);
       }
     };
-  }, [documentId, regions]);
+  }, [documentId, loadAttempt, regions, shouldLoad]);
 
   const closeExpanded = useCallback(() => {
     setExpanded(false);
@@ -156,6 +195,15 @@ export function QuestionRegionCard({
     },
     [images.length],
   );
+
+  useEffect(() => {
+    const dialog = expandedViewerRef.current;
+    if (!viewerExpanded || dialog === null) return;
+    if (!dialog.open) dialog.showModal();
+    return () => {
+      if (dialog.open) dialog.close();
+    };
+  }, [viewerExpanded]);
 
   useEffect(() => {
     if (viewerExpanded) {
@@ -222,16 +270,28 @@ export function QuestionRegionCard({
     setExpanded(true);
   };
   return (
-    <div className="review-region-card">
+    <div ref={cardRef} className="review-region-card">
       <div
         className="review-region-card-content"
         inert={viewerExpanded ? true : undefined}
         aria-hidden={viewerExpanded ? true : undefined}
       >
         {status === "" ? null : (
-          <p className="review-region-status" role="status">
-            {status}
-          </p>
+          <div className="review-region-status" role="status">
+            <span>{status}</span>
+            {status === "题目图片加载失败，请确认原 PDF 仍然可用。" ? (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setShouldLoad(true);
+                  setLoadAttempt((current) => current + 1);
+                }}
+              >
+                重试加载题图
+              </button>
+            ) : null}
+          </div>
         )}
         {images.map((image, index) => (
           <button
@@ -253,18 +313,15 @@ export function QuestionRegionCard({
       </div>
 
       {viewerExpanded ? (
-        <section
+        <dialog
           ref={expandedViewerRef}
           className="review-region-expanded"
-          role="dialog"
-          aria-modal="true"
           aria-label={`${title}，区域 ${safeActiveIndex + 1}/${images.length}，第 ${active.pageNumber} 页`}
-          onKeyDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              closeExpanded();
-            }
+          onCancel={(event) => {
+            event.preventDefault();
+            closeExpanded();
           }}
+          onKeyDown={(event) => event.stopPropagation()}
         >
           <div className="review-region-expanded-toolbar">
             <strong>题目大图</strong>
@@ -323,11 +380,6 @@ export function QuestionRegionCard({
           </div>
           <div
             className="review-region-expanded-pan"
-            onClick={(event) => {
-              if (event.target === event.currentTarget) {
-                closeExpanded();
-              }
-            }}
             onPointerDown={(event) => beginDrag(event, setDrag)}
             onPointerMove={(event) =>
               moveDrag(event, drag, offset, setDrag, setOffset)
@@ -346,7 +398,7 @@ export function QuestionRegionCard({
               }}
             />
           </div>
-        </section>
+        </dialog>
       ) : null}
     </div>
   );

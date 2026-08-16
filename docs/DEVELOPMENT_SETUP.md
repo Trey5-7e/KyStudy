@@ -108,11 +108,11 @@ pnpm tauri build --no-bundle
 
 ### 5.1 Windows CI
 
-`.github/workflows/windows-ci.yml` 在固定的 `windows-2025` GitHub 托管 Runner 上重复执行上述质量门槛和 Release 构建。`scripts/test-release-smoke.ps1` 随后在隔离 AppData 下验证主窗口启动、进程稳定性和“启动不自动创建工作区”，并将 EXE 与 JSON 报告上传为短期 Artifact。详细边界与首次验收步骤见 [M1 Windows CI 文档](archive/v0.1.0/M1_WINDOWS_CI.md)。
+`.github/workflows/windows-ci.yml` 在固定的 `windows-2025` GitHub 托管 Runner 上重复执行上述质量门槛和 Release 构建。`scripts/test-release-smoke.ps1` 随后把 EXE 复制到隔离安装目录，在程序旁的 `data` 下验证主窗口启动、进程稳定性和“启动不自动创建工作区”，并将 EXE 与 JSON 报告上传为短期 Artifact。详细边界与首次验收步骤见 [M1 Windows CI 文档](archive/v0.1.0/M1_WINDOWS_CI.md)。
 
 ### 5.2 本地干净首启预览
 
-开发运行和已安装版本使用不同的工作区目录：Debug 为 `%APPDATA%\io.github.kystudy.desktop-dev`，Release/安装版为 `%APPDATA%\io.github.kystudy.desktop`。安装包启动后看到正式版资料，通常是因为该正式目录此前已有工作区，并不表示资料被打进安装包。要查看真正的新用户首启状态，请使用带显式临时数据目录的 Release 预览脚本：
+开发运行和已安装版本使用不同的工作区目录：Debug 为 `%APPDATA%\io.github.kystudy.desktop-dev`，Release/安装版为安装目录旁的 `data`。安装包启动后看到资料，通常是因为该安装目录此前已有工作区，并不表示资料被打进安装包。要查看真正的新用户首启状态，请使用带显式临时数据目录的 Release 预览脚本：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-clean-release-preview.ps1 `
@@ -123,19 +123,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-clean-release-preview.p
 
 ### 5.3 开发工作区与正式工作区隔离
 
-Debug/Tauri 开发构建使用 `%APPDATA%\io.github.kystudy.desktop-dev`，并使用独立的 Windows 凭据服务 `io.github.kystudy.ai-dev`；Release/安装版继续使用 `%APPDATA%\io.github.kystudy.desktop` 和 `io.github.kystudy.ai`。如果本机已有一份过去由开发版写入正式目录的工作区，请先关闭 KyStudy，再显式执行一次迁移：
+Debug/Tauri 开发构建使用 `%APPDATA%\io.github.kystudy.desktop-dev`，并使用独立的 Windows 凭据服务 `io.github.kystudy.ai-dev`；Release/安装版使用安装目录旁的 `data` 和 `io.github.kystudy.ai`。如果本机已有一份旧版写入 `%APPDATA%\io.github.kystudy.desktop` 的工作区，请先关闭 KyStudy，再启动 v0.1.2 安装版；首次启动会在目标 `data` 为空时先备份、校验并迁移旧工作区，失败时保留源目录和诊断信息。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\separate-development-workspace.ps1 -ConfirmMove
-```
-
-迁移脚本只会在目标目录不存在、且没有运行中的 KyStudy 进程时移动目录；它不会合并或覆盖已有目录。迁移完成后，开发版继续使用原来的资料，安装版从正式目录开始，不再读取开发资料。由于凭据服务也已隔离，Debug 首次使用 AI 时需要重新录入 API Key。
-
-如果误把原有个人数据迁移到了 Debug，而你希望日常使用 Release/安装版，可在关闭 KyStudy 后执行恢复脚本。它会先把当前 Release 目录改名为带随机后缀的备份，再把 Debug 数据移回正式目录，不会覆盖现有目录：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\restore-release-workspace.ps1 -ConfirmMove
-```
+`scripts/separate-development-workspace.ps1` 与 `scripts/restore-release-workspace.ps1` 只适用于 v0.1.1 的 AppData 工作区整理，不应把它们作为 v0.1.2 安装版数据迁移的替代路径。
 
 ## 6. TV-01 实验依赖
 
@@ -208,9 +198,9 @@ $OcrPython = 'F:\develop\KyStudy-deps\ocr-py312\Scripts\python.exe'
 .\build_sidecar.ps1 -PythonExecutable $OcrPython
 ```
 
-模型随 `onedir` 组件提供，组件目录约 246 MiB，识别批次峰值内存约 729 MiB，因此仍是可选组件且不得常驻。应用现已支持用户从本地安装、完整性检测、版本显示、重新安装修复和移除组件；R51 已接入带 HTTPS、SHA-256、进度/取消和安全解压的在线下载协议，v0.1.1 Release 已公开 OCR 压缩包并在正式构建时注入固定下载地址与摘要。本地安装仍作为离线和网络失败时的兜底，不影响 PDF 阅读、文字层索引和手动题目管理。
+模型随 `onedir` 组件提供，组件目录约 246 MiB，识别批次峰值内存约 729 MiB，因此仍是可选组件且不得常驻。应用现已支持用户从本地安装、完整性检测、版本显示、重新安装修复和移除组件；R51 已接入带 HTTPS、SHA-256、进度/取消和安全解压的在线下载协议，当前正式构建固定复用独立 `ocr-v0.1.0` Release 的 OCR 压缩包和摘要，普通应用版本不重复上传组件。本地安装仍作为离线和网络失败时的兜底，不影响 PDF 阅读、文字层索引和手动题目管理。
 
-R52 新增 `scripts/package-ocr-component.ps1` 与 `scripts/test-ocr-package.ps1`：前者从已验证的 PyInstaller 目录生成 ZIP、SHA-256 和 manifest，后者使用无用户数据的临时 fixture 验证归档结构。脚本本身不上传 Release；正式发布工作流负责在 Windows runner 上构建组件、注入下载清单并上传资产，仍不替代许可证和 NOTICE 复核。
+R52 新增 `scripts/package-ocr-component.ps1` 与 `scripts/test-ocr-package.ps1`：前者从已验证的 PyInstaller 目录生成 ZIP、SHA-256 和 manifest，后者使用无用户数据的临时 fixture 验证归档结构。脚本本身不上传 Release；OCR 组件变更时单独更新 `ocr-v*` Release，普通应用发布工作流只注入固定下载清单，仍不替代许可证和 NOTICE 复核。
 
 R54 将 AI Provider 管理窗口收敛为“当前 Provider、Token 摘要、Provider 卡片和按需管理”四层主路径；卡片的编辑/删除移入默认折叠的“更多操作”，上下文与输出上限继续在编辑表单的“高级限制”中默认折叠。行为契约、密钥边界、预算、连接测试和调用历史不变，详见 `docs/R54_AI_PROVIDER_SURFACE_REFINEMENT_ACCEPTANCE.md`。
 

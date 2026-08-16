@@ -1,7 +1,7 @@
 //! Concrete application composition for the desktop runtime.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
@@ -112,6 +112,7 @@ impl OcrCoordinator {
 
 /// State managed by Tauri and shared with thin command adapters.
 pub(crate) struct AppState {
+    application_data_directory: PathBuf,
     pub(crate) workspace: WorkspaceUseCases<SqliteWorkspaceRepository>,
     pub(crate) resources: ResourceUseCases<SqliteBlobStore>,
     pub(crate) schedule: ScheduleUseCases<SqliteScheduleRepository>,
@@ -166,6 +167,7 @@ impl AppState {
         let backup_store = SqliteBackupStore::new(application_data_directory);
         let ai = AiUseCases::new(ai_repository, SystemSecretStore, ProviderRouter);
         Self {
+            application_data_directory: application_data_directory.to_path_buf(),
             workspace: WorkspaceUseCases::new(workspace_repository),
             resources: ResourceUseCases::new(blob_store.clone()),
             schedule: ScheduleUseCases::new(schedule_repository.clone()),
@@ -194,6 +196,10 @@ impl AppState {
             ocr_jobs: OcrCoordinator::default(),
             operations: WorkspaceOperationGate::default(),
         }
+    }
+
+    pub(crate) fn data_directory(&self) -> &Path {
+        &self.application_data_directory
     }
 }
 

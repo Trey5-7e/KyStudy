@@ -5,7 +5,7 @@
   <h1>KyStudy</h1>
   <p>面向中国考研学生的本地优先学习规划、习题管理与错题复习桌面应用。</p>
   <p>
-    <a href="https://github.com/Trey5-7e/KyStudy/releases">下载 v0.1.1</a>
+    <a href="https://github.com/Trey5-7e/KyStudy/releases">下载 v0.1.2</a>
     ·
     <a href="https://github.com/Trey5-7e/KyStudy/issues">反馈问题</a>
     ·
@@ -21,10 +21,10 @@
     <img src="https://img.shields.io/badge/license-GPL--3.0--only-blue.svg" alt="GPL-3.0-only license">
   </a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4.svg" alt="Windows 10 and 11 x64">
-  <img src="https://img.shields.io/badge/status-v0.1.1%20candidate-orange.svg" alt="v0.1.1 release candidate">
+  <img src="https://img.shields.io/badge/status-v0.1.2%20preparing-orange.svg" alt="v0.1.2 release preparation">
 </p>
 
-> 当前首版支持 Windows 10/11 x64。v0.1.1 正在进行最终发布前检查；公开稳定版仍为 v0.1.0。
+> 当前首版支持 Windows 10/11 x64。v0.1.2 将用于验证从 v0.1.1 的自动更新流程；OCR 组件复用独立的 `ocr-v0.1.0` Release。
 
 ## 目录
 
@@ -122,7 +122,7 @@ README 只展示四个核心页面，具体的导入、组卷、错题反馈、P
 1. **NSIS 安装包**：推荐使用，默认按当前用户安装，不需要管理员权限；
 2. **ZIP 便携版**：解压后运行 kystudy.exe，适合临时使用或手动管理目录。
 
-安装包不包含用户工作区、PDF、题目图片或 API Key。用户数据默认保存在 Windows 应用数据目录，升级前建议先使用应用内备份。
+安装包不包含用户工作区、PDF、题目图片或 API Key。正式安装版与 ZIP 便携版的数据默认保存在程序旁的 `data` 目录；Debug 和显式干净预览才使用隔离的临时目录。升级前建议先使用应用内备份。
 
 ### 首版边界
 

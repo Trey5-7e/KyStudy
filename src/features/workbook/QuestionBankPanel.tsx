@@ -427,8 +427,21 @@ export function QuestionBankPanel({
             rememberedQuestions,
             ROOT_WINDOW_ORIGIN,
             draft.recipe,
-            draft.results,
-            draft.recordedResults,
+            draft.results === undefined
+              ? undefined
+              : Object.fromEntries(
+                  [...Object.entries(draft.results)].filter(([id]) =>
+                    rememberedQuestions.some((question) => question.id === id),
+                  ),
+                ),
+            draft.recordedResults === undefined
+              ? undefined
+              : Object.fromEntries(
+                  [...Object.entries(draft.recordedResults)].filter(([id]) =>
+                    rememberedQuestions.some((question) => question.id === id),
+                  ),
+                ),
+            draft.view,
           )
         : {
             kind: "dialog" as const,

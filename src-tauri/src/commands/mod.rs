@@ -22,14 +22,15 @@ use crate::application::{
     PlanStageProgress, PlanTaskCreation, PlanTaskPreview, PlanTaskPreviewItem,
     PlanTaskScheduleInput, PlanningChatError, PlanningChatInput, PlanningChatPreview,
     PlanningChatReply, PlanningContextSelection, PlanningConversation, PlanningError,
-    PlanningMessage, PlanningSource, QuestionBankError, QuestionError, QuestionRegionInput,
-    ReassignWorkbookSegmentInput, RecognizePdfPageInput, RecognizeQuestionRegionInput,
-    RecordBulkQuestionAttemptsInput, RenameSubjectInput, RenameWorkbookCategoryInput,
-    RepeatedMistakeAnalytics, ReplaceIndexedQuestionRegionsInput, RescheduleTaskInput,
-    ResourceDocument, ResourceReaderDescriptor, RestoreCyclePlanItemStateInput, RestoreReport,
-    RestoreWorkbookSegmentInput, ReviewError, ReviewSchemeError, ReviewSchemeTypeQuotaInput,
-    RuntimeStatus, SaveAiBudgetInput, SaveAiProviderInput, SaveCyclePlanInput, SavePlanInput,
-    SavePlanStageInput, SaveReviewSchemeInput, ScheduleError, SearchError, SearchResourcesInput,
+    PlanningMessage, PlanningSource, QuestionAiAnalysisHistoryEntry, QuestionBankError,
+    QuestionError, QuestionRegionInput, ReassignWorkbookSegmentInput, RecognizePdfPageInput,
+    RecognizeQuestionRegionInput, RecordBulkQuestionAttemptsInput, RenameSubjectInput,
+    RenameWorkbookCategoryInput, RepeatedMistakeAnalytics, ReplaceIndexedQuestionRegionsInput,
+    RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor,
+    RestoreCyclePlanItemStateInput, RestoreReport, RestoreWorkbookSegmentInput, ReviewError,
+    ReviewSchemeError, ReviewSchemeTypeQuotaInput, RuntimeStatus, SaveAiBudgetInput,
+    SaveAiProviderInput, SaveCyclePlanInput, SavePlanInput, SavePlanStageInput,
+    SaveReviewSchemeInput, ScheduleError, SearchError, SearchResourcesInput,
     SetCyclePlanItemStateInput, SetCyclePlanItemStateResult, SetQuestionGapAcknowledgementInput,
     SetQuestionReviewInput, SetWorkbookSubjectInput, ShiftCyclePlanInput, ShiftCyclePlanPreview,
     ShiftCyclePlanResult, ShiftCyclePlanUndo, SplitChildInput, SplitTaskInput,
@@ -57,8 +58,12 @@ use crate::domain::{
 };
 
 #[tauri::command]
-pub(crate) fn get_runtime_status() -> RuntimeStatus {
-    load_runtime_status()
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri command handlers receive managed State by value"
+)]
+pub(crate) fn get_runtime_status(state: State<'_, AppState>) -> RuntimeStatus {
+    load_runtime_status(state.data_directory())
 }
 
 #[tauri::command]
@@ -241,8 +246,38 @@ pub(crate) async fn preview_question_ai_analysis(
 }
 
 #[tauri::command]
+pub(crate) async fn get_question_ai_analysis(
+    request: QuestionAiAnalysisLookupRequestDto,
+    state: State<'_, AppState>,
+) -> Result<Option<AiCallResultDto>, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.question_analysis(&request.question_id, &request.source_fingerprint)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(|result| result.map(Into::into))
+    .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_question_ai_analysis_history(
+    request: QuestionAiAnalysisHistoryLookupRequestDto,
+    state: State<'_, AppState>,
+) -> Result<Vec<QuestionAiAnalysisHistoryEntryDto>, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.question_analysis_history(&request.question_id)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(|entries| entries.into_iter().map(Into::into).collect())
+    .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn execute_question_ai_analysis(
-    request: AiImagePreviewRequestDto,
+    request: QuestionAiAnalysisRequestDto,
     state: State<'_, AppState>,
 ) -> Result<AiCallResultDto, AppErrorDto> {
     let use_cases = state.ai.clone();
@@ -3882,6 +3917,43 @@ impl From<AiImagePreviewRequestDto> for AiImagePreviewInput {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct QuestionAiAnalysisLookupRequestDto {
+    question_id: String,
+    source_fingerprint: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct QuestionAiAnalysisHistoryLookupRequestDto {
+    question_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct QuestionAiAnalysisRequestDto {
+    question_id: String,
+    source_fingerprint: String,
+    prompt: String,
+    image_data_urls: Vec<String>,
+    max_output_tokens: u32,
+    force_refresh: bool,
+}
+
+impl From<QuestionAiAnalysisRequestDto> for crate::application::QuestionAiAnalysisInput {
+    fn from(request: QuestionAiAnalysisRequestDto) -> Self {
+        Self {
+            question_id: request.question_id,
+            source_fingerprint: request.source_fingerprint,
+            prompt: request.prompt,
+            image_data_urls: request.image_data_urls,
+            max_output_tokens: request.max_output_tokens,
+            force_refresh: request.force_refresh,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct SaveAiSecretRequestDto {
@@ -4055,6 +4127,22 @@ impl From<AiCallResult> for AiCallResultDto {
             usage_source: result.usage_source,
             cache_hit: result.cache_hit,
             finished_at: result.finished_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct QuestionAiAnalysisHistoryEntryDto {
+    source_fingerprint: String,
+    result: AiCallResultDto,
+}
+
+impl From<QuestionAiAnalysisHistoryEntry> for QuestionAiAnalysisHistoryEntryDto {
+    fn from(entry: QuestionAiAnalysisHistoryEntry) -> Self {
+        Self {
+            source_fingerprint: entry.source_fingerprint,
+            result: entry.result.into(),
         }
     }
 }
@@ -6993,7 +7081,7 @@ mod tests {
         ReviewReasonDto, SaveCyclePlanRequestDto, SetCyclePlanItemStateRequestDto,
         SetCyclePlanItemStateResultDto, ShiftCyclePlanPreviewDto, ShiftCyclePlanResultDto,
         SubjectDto, TaskChangeDto, TaskDto, UndoShiftCyclePlanRequestDto,
-        UpdateTaskDetailsRequestDto, get_runtime_status,
+        UpdateTaskDetailsRequestDto,
     };
     use crate::application::{
         AiOverview, AiProviderOverview, BackupReport, CyclePlanError, OcrPageLine,
@@ -7747,13 +7835,6 @@ mod tests {
 
         assert_eq!(input.expected_updated_at, 1_700_000_000_000);
         assert_eq!(input.expected_deleted_at, None);
-    }
-
-    #[test]
-    fn get_runtime_status_delegates_to_the_application_use_case() {
-        let status = get_runtime_status();
-
-        assert_eq!(status, crate::application::get_runtime_status());
     }
 
     #[test]

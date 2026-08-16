@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   PAPER_SETUP_QUOTAS_STORAGE_KEY,
+  LEGACY_PAPER_DRAFT_STORAGE_KEY,
   clearPaperDraft,
   createPaperDraftRecipe,
   loadPaperTypeQuotas,
   loadPaperDraft,
+  loadPaperViewMode,
   paperSpecFromDraftRecipe,
   savePaperDraft,
   savePaperTypeQuotas,
+  savePaperViewMode,
 } from "./paperSetupPreferences";
 
 function memoryStorage(): Storage {
@@ -126,5 +129,45 @@ describe("paper setup preferences", () => {
 
     clearPaperDraft(storage);
     expect(loadPaperDraft(storage)).toBeUndefined();
+  });
+
+  it("reads v1 drafts with safe v2 view defaults", () => {
+    const storage = memoryStorage();
+    const recipe = createPaperDraftRecipe({
+      subjectIds: new Set(["math"]),
+      scopeGroups: [
+        {
+          id: "group-1",
+          name: "范围 1",
+          enabled: true,
+          mode: "include",
+          workbookIds: new Set(),
+          chapterKeys: new Set(),
+          sectionParts: new Set(),
+          questionTypes: new Set(),
+        },
+      ],
+      subjectQuotas: new Map([["math", { choice: 1, blank: 0, solution: 0 }]]),
+      statuses: new Set(["unattempted"]),
+    });
+    storage.setItem(
+      LEGACY_PAPER_DRAFT_STORAGE_KEY,
+      JSON.stringify({ questionIds: ["q1"], recipe, savedAt: 1 }),
+    );
+
+    expect(loadPaperDraft(storage)?.view).toEqual({
+      mode: "continuous",
+      selectedQuestionType: "all",
+    });
+  });
+
+  it("remembers a valid browser view mode and safely falls back", () => {
+    const storage = memoryStorage();
+
+    expect(loadPaperViewMode(storage)).toBe("continuous");
+    expect(savePaperViewMode("single", storage)).toBe(true);
+    expect(loadPaperViewMode(storage)).toBe("single");
+    storage.setItem("kystudy.paper-view-mode.v1", "invalid");
+    expect(loadPaperViewMode(storage)).toBe("continuous");
   });
 });

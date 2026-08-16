@@ -265,11 +265,6 @@ export function EditorDialog({
         event.preventDefault();
         requestClose();
       }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          requestClose();
-        }
-      }}
     >
       <EditorDialogNavigationContext.Provider value={navigation}>
         <div className="editor-dialog-surface">

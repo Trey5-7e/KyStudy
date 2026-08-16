@@ -14,6 +14,7 @@ const runtime: RuntimeStatus = {
   platform: "windows",
   architecture: "x86_64",
   buildProfile: "release",
+  dataDirectory: "C:\\KyStudy\\data",
 };
 
 const workspace: WorkspaceStatus = {
@@ -41,6 +42,7 @@ describe("diagnostic report", () => {
     });
     expect(serialized).not.toContain("sensitive-id");
     expect(serialized).not.toContain("个人工作区");
+    expect(serialized).not.toContain("C:\\KyStudy\\data");
     expect(report.exclusions).toContain("API Key、密钥和凭据");
   });
 

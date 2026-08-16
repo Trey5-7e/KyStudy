@@ -6,13 +6,28 @@ mod commands;
 mod domain;
 mod infrastructure;
 
+#[cfg(any(not(debug_assertions), test))]
+use std::ffi::OsStr;
 use std::ffi::OsString;
+#[cfg(any(not(debug_assertions), test))]
+use std::fs;
+#[cfg(any(not(debug_assertions), test))]
+use std::io::Read;
 use std::path::{Path, PathBuf};
+#[cfg(any(not(debug_assertions), test))]
+use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(any(not(debug_assertions), test))]
+use sha2::{Digest, Sha256};
 use tauri::Manager;
 
 const APPLICATION_DATA_DIRECTORY_OVERRIDE_ENV: &str = "KYSTUDY_APP_DATA_DIR";
+#[cfg(any(not(debug_assertions), test))]
+const LEGACY_MIGRATION_MARKER: &str = ".kystudy-legacy-migration-v1";
+#[cfg(any(not(debug_assertions), test))]
+const DATA_DIRECTORY_MARKER: &str = ".kystudy-data-v1";
 
+#[cfg(any(debug_assertions, test))]
 fn debug_application_data_directory(directory: &Path) -> PathBuf {
     #[cfg(debug_assertions)]
     {
@@ -32,11 +47,40 @@ fn debug_application_data_directory(directory: &Path) -> PathBuf {
 fn resolve_application_data_directory(
     app: &tauri::App,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let directory = app.path().app_data_dir()?;
+    let directory = default_application_data_directory(app)?;
     resolve_configured_application_data_directory(
         &directory,
         std::env::var_os(APPLICATION_DATA_DIRECTORY_OVERRIDE_ENV),
     )
+}
+
+fn default_application_data_directory(
+    app: &tauri::App,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    #[cfg(debug_assertions)]
+    {
+        Ok(debug_application_data_directory(
+            &app.path().app_data_dir()?,
+        ))
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        release_application_data_directory(&app.path().resource_dir()?)
+    }
+}
+
+#[cfg(any(not(debug_assertions), test))]
+fn release_application_data_directory(
+    resource_directory: &Path,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let install_directory = resource_directory.parent().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Tauri resource directory has no installation parent",
+        )
+    })?;
+    Ok(install_directory.join("data"))
 }
 
 fn resolve_configured_application_data_directory(
@@ -44,7 +88,7 @@ fn resolve_configured_application_data_directory(
     override_directory: Option<OsString>,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let Some(override_directory) = override_directory.filter(|value| !value.is_empty()) else {
-        return Ok(debug_application_data_directory(directory));
+        return Ok(directory.to_path_buf());
     };
 
     let override_directory = PathBuf::from(override_directory);
@@ -60,6 +104,9 @@ fn resolve_configured_application_data_directory(
 
 fn initialize_application(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let application_data_directory = resolve_application_data_directory(app)?;
+    #[cfg(not(debug_assertions))]
+    migrate_legacy_application_data_directory(app, &application_data_directory)?;
+    std::fs::create_dir_all(&application_data_directory)?;
     let state = bootstrap::AppState::new(&application_data_directory);
     if let Err(error) = state.resources.recover_and_list() {
         eprintln!("KYSTUDY_IMPORT_RECOVERY_FAILED: {}", error.code());
@@ -72,6 +119,163 @@ fn initialize_application(app: &mut tauri::App) -> Result<(), Box<dyn std::error
     }
     app.manage(state);
     Ok(())
+}
+
+#[cfg(not(debug_assertions))]
+fn migrate_legacy_application_data_directory(
+    app: &tauri::App,
+    target_directory: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::var_os(APPLICATION_DATA_DIRECTORY_OVERRIDE_ENV)
+        .as_ref()
+        .is_some_and(|value| !value.is_empty())
+    {
+        return Ok(());
+    }
+
+    let legacy_directory = app.path().app_data_dir()?;
+    if legacy_directory == target_directory || !legacy_directory.exists() {
+        return Ok(());
+    }
+    migrate_legacy_data_directory(target_directory, &legacy_directory)
+}
+
+#[cfg(any(not(debug_assertions), test))]
+fn migrate_legacy_data_directory(
+    target_directory: &Path,
+    legacy_directory: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if target_directory.join(LEGACY_MIGRATION_MARKER).exists() {
+        return Ok(());
+    }
+    if target_directory.exists()
+        && !directory_is_empty_except(target_directory, &[DATA_DIRECTORY_MARKER])?
+    {
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            "installation data directory is not empty; legacy workspace was not migrated",
+        )));
+    }
+
+    let backup_directory = legacy_backup_directory(legacy_directory)?;
+    copy_directory(legacy_directory, &backup_directory)?;
+    let source_fingerprint = directory_fingerprint(legacy_directory)?;
+    if target_directory.exists() {
+        copy_directory_contents(legacy_directory, target_directory)?;
+    } else {
+        copy_directory(legacy_directory, target_directory)?;
+    }
+    let target_fingerprint =
+        directory_fingerprint_excluding(target_directory, &[DATA_DIRECTORY_MARKER])?;
+    if source_fingerprint != target_fingerprint {
+        let _ = fs::remove_dir_all(target_directory);
+        return Err(Box::new(std::io::Error::other(
+            "legacy workspace verification failed; source data was preserved",
+        )));
+    }
+    fs::write(
+        target_directory.join(LEGACY_MIGRATION_MARKER),
+        b"legacy workspace copied and verified; source retained as rollback copy\n",
+    )?;
+    Ok(())
+}
+
+#[cfg(any(not(debug_assertions), test))]
+fn legacy_backup_directory(legacy_directory: &Path) -> Result<PathBuf, std::io::Error> {
+    let name = legacy_directory
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("kystudy-workspace");
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(std::io::Error::other)?
+        .as_millis();
+    Ok(legacy_directory.with_file_name(format!("{name}.backup-{timestamp}")))
+}
+
+#[cfg(any(not(debug_assertions), test))]
+fn directory_is_empty_except(
+    directory: &Path,
+    ignored_names: &[&str],
+) -> Result<bool, std::io::Error> {
+    for entry in fs::read_dir(directory)? {
+        let entry = entry?;
+        if ignored_names
+            .iter()
+            .any(|name| entry.file_name() == OsStr::new(name))
+        {
+            continue;
+        }
+        return Ok(false);
+    }
+    Ok(true)
+}
+
+#[cfg(any(not(debug_assertions), test))]
+fn copy_directory(source: &Path, target: &Path) -> Result<(), std::io::Error> {
+    fs::create_dir_all(target)?;
+    copy_directory_contents(source, target)
+}
+
+#[cfg(any(not(debug_assertions), test))]
+fn copy_directory_contents(source: &Path, target: &Path) -> Result<(), std::io::Error> {
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_directory(&source_path, &target_path)?;
+        } else if entry.file_type()?.is_file() {
+            fs::copy(source_path, target_path)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(any(not(debug_assertions), test))]
+fn directory_fingerprint(directory: &Path) -> Result<(u64, u64, [u8; 32]), std::io::Error> {
+    directory_fingerprint_excluding(directory, &[])
+}
+
+#[cfg(any(not(debug_assertions), test))]
+fn directory_fingerprint_excluding(
+    directory: &Path,
+    ignored_names: &[&str],
+) -> Result<(u64, u64, [u8; 32]), std::io::Error> {
+    let mut entries = fs::read_dir(directory)?.collect::<Result<Vec<_>, _>>()?;
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    let mut files = 0;
+    let mut bytes = 0;
+    let mut hasher = Sha256::new();
+    for entry in entries {
+        if ignored_names
+            .iter()
+            .any(|name| entry.file_name() == OsStr::new(name))
+        {
+            continue;
+        }
+        let path = entry.path();
+        let name = entry.file_name();
+        if entry.file_type()?.is_dir() {
+            let (nested_files, nested_bytes, nested_hash) =
+                directory_fingerprint_excluding(&path, ignored_names)?;
+            files += nested_files;
+            bytes += nested_bytes;
+            hasher.update(b"D");
+            hasher.update(name.to_string_lossy().as_bytes());
+            hasher.update(nested_hash);
+        } else if entry.file_type()?.is_file() {
+            files += 1;
+            let mut file = fs::File::open(path)?;
+            let mut content = Vec::new();
+            file.read_to_end(&mut content)?;
+            bytes += content.len() as u64;
+            hasher.update(b"F");
+            hasher.update(name.to_string_lossy().as_bytes());
+            hasher.update(content);
+        }
+    }
+    Ok((files, bytes, hasher.finalize().into()))
 }
 
 macro_rules! kystudy_command_handler {
@@ -91,6 +295,8 @@ macro_rules! kystudy_command_handler {
             commands::preview_ai_call,
             commands::execute_ai_call,
             commands::preview_question_ai_analysis,
+            commands::get_question_ai_analysis,
+            commands::list_question_ai_analysis_history,
             commands::execute_question_ai_analysis,
             commands::list_planning_conversations,
             commands::create_planning_conversation,
@@ -264,8 +470,12 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{debug_application_data_directory, resolve_configured_application_data_directory};
+    use super::{
+        DATA_DIRECTORY_MARKER, debug_application_data_directory, migrate_legacy_data_directory,
+        release_application_data_directory, resolve_configured_application_data_directory,
+    };
     use std::ffi::OsString;
+    use std::fs;
     use std::path::{Path, PathBuf};
 
     #[test]
@@ -300,6 +510,17 @@ mod tests {
     }
 
     #[test]
+    fn configured_default_directory_is_not_transformed_again() {
+        let default_directory =
+            PathBuf::from(r"C:\Users\tester\AppData\Roaming\io.github.kystudy.desktop-dev");
+
+        let resolved = resolve_configured_application_data_directory(&default_directory, None)
+            .expect("default data directory should be accepted");
+
+        assert_eq!(resolved, default_directory);
+    }
+
+    #[test]
     fn relative_data_directory_override_is_rejected() {
         let result = resolve_configured_application_data_directory(
             Path::new(r"C:\Users\tester\AppData\Roaming\io.github.kystudy.desktop"),
@@ -307,5 +528,84 @@ mod tests {
         );
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn release_data_directory_is_next_to_installation() {
+        let resource_directory = Path::new(r"D:\Apps\KyStudy\resources");
+
+        let resolved = release_application_data_directory(resource_directory)
+            .expect("resource directory should have an installation parent");
+
+        assert_eq!(resolved, PathBuf::from(r"D:\Apps\KyStudy\data"));
+    }
+
+    #[test]
+    fn release_data_directory_rejects_a_parentless_resource_path() {
+        let result = release_application_data_directory(Path::new(""));
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn legacy_workspace_migration_keeps_a_backup_and_is_idempotent() {
+        let root = tempfile::tempdir().expect("temporary root should be created");
+        let legacy = root.path().join("legacy");
+        let target = root.path().join("install").join("data");
+        fs::create_dir_all(legacy.join("workspaces")).expect("legacy workspace should be created");
+        fs::write(
+            legacy.join("workspaces").join("kystudy.sqlite3"),
+            b"fixture",
+        )
+        .expect("legacy database should be written");
+
+        migrate_legacy_data_directory(&target, &legacy).expect("migration should succeed");
+
+        assert_eq!(
+            fs::read(target.join("workspaces").join("kystudy.sqlite3"))
+                .expect("migrated database should exist"),
+            b"fixture"
+        );
+        assert!(
+            root.path()
+                .join("legacy")
+                .parent()
+                .expect("legacy parent should exist")
+                .read_dir()
+                .expect("backup directory should be readable")
+                .any(|entry| entry
+                    .expect("backup entry should be readable")
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("legacy.backup-"))
+        );
+
+        migrate_legacy_data_directory(&target, &legacy)
+            .expect("verified migration should be idempotent");
+    }
+
+    #[test]
+    fn legacy_workspace_migration_ignores_the_installer_data_marker() {
+        let root = tempfile::tempdir().expect("temporary root should be created");
+        let legacy = root.path().join("legacy");
+        let target = root.path().join("install").join("data");
+        fs::create_dir_all(legacy.join("workspaces")).expect("legacy workspace should be created");
+        fs::create_dir_all(&target).expect("installer data directory should be created");
+        fs::write(
+            target.join(DATA_DIRECTORY_MARKER),
+            b"KyStudy user data directory v1",
+        )
+        .expect("installer marker should be written");
+        fs::write(
+            legacy.join("workspaces").join("kystudy.sqlite3"),
+            b"fixture",
+        )
+        .expect("legacy database should be written");
+
+        migrate_legacy_data_directory(&target, &legacy)
+            .expect("migration should allow the installer marker");
+
+        assert!(target.join(DATA_DIRECTORY_MARKER).exists());
+        assert!(target.join("workspaces").join("kystudy.sqlite3").exists());
     }
 }
