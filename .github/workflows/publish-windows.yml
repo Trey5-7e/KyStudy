@@ -22,6 +22,8 @@ jobs:
     name: Publish signed Windows updater
     runs-on: windows-2025
     timeout-minutes: 45
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
     steps:
       - name: Check out repository
@@ -46,18 +48,53 @@ jobs:
         shell: pwsh
         run: pnpm install --frozen-lockfile
 
+      - name: Set up Python for OCR component
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7f # v6
+        with:
+          python-version: "3.12"
+
+      - name: Build OCR component
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check --upgrade pip
+          python -m pip install --disable-pip-version-check -r experiments\tv-07-ocr\requirements.lock.txt
+          & .\experiments\tv-07-ocr\build_sidecar.ps1 -PythonExecutable (Get-Command python).Source
+
+      - name: Package OCR component asset
+        id: ocr
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP ("kystudy-ocr-worker-{0}.zip" -f $env:RELEASE_TAG)
+          & .\scripts\package-ocr-component.ps1 `
+            -ComponentRoot "experiments\tv-07-ocr\output\pyinstaller\dist\kystudy-ocr-worker" `
+            -OutputArchive $archive
+          $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/$env:RELEASE_TAG/$(Split-Path -Leaf $archive)"
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+          "sha256=$hash" >> $env:GITHUB_OUTPUT
+          "download_url=$downloadUrl" >> $env:GITHUB_OUTPUT
+
       - name: Publish signed Tauri assets
         uses: tauri-apps/tauri-action@1ddc7b49b13c3038297360482fcb3e058764d7c9 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          KYSTUDY_OCR_DOWNLOAD_URL: ${{ steps.ocr.outputs.download_url }}
+          KYSTUDY_OCR_DOWNLOAD_SHA256: ${{ steps.ocr.outputs.sha256 }}
         with:
-          tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          releaseName: KyStudy ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: KyStudy ${{ env.RELEASE_TAG }}
           releaseBody: "请查看仓库中的发布说明和校验清单。"
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true
           uploadUpdaterJson: true
           args: --config src-tauri/tauri.release.conf.json
+
+      - name: Upload OCR component asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OCR_ARCHIVE: ${{ steps.ocr.outputs.archive }}
+        run: gh release upload "$env:RELEASE_TAG" "$env:OCR_ARCHIVE" --repo "${{ github.repository }}" --clobber
