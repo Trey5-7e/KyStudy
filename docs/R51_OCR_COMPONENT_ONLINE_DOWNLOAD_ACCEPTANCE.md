@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-R51 已接入在线下载的安全协议与界面入口，同时保留本地文件夹安装作为兜底。当前版本不会访问未发布或不可信的地址：仓库尚未发布包含固定 SHA-256 摘要的 OCR Release 资产，因此界面会显示“在线下载资产尚未发布”，在线按钮保持禁用。
+R51 已接入在线下载的安全协议与界面入口，同时保留本地文件夹安装作为兜底。v0.1.1 已发布包含固定 SHA-256 摘要的 OCR Release 资产，正式构建会将下载地址和摘要注入应用，在线按钮可用；本地安装仍可在离线或下载失败时使用。
 
 这不是桌面验收通过声明；桌面验收由用户执行。当前批次的可验收范围是协议、错误边界和本地兜底不受影响。
 
@@ -17,22 +17,22 @@ R51 已接入在线下载的安全协议与界面入口，同时保留本地文�
 - 下载复用 OCR 操作协调器，与识别互斥；支持进度事件和取消。
 - 前端只接收状态、进度和稳定错误码，不暴露本地路径或第三方异常。
 
-## 发布前置条件
+## 发布配置
 
-发布在线资产前必须补齐 `src-tauri/src/infrastructure/ocr_worker.rs` 中的：
+发布工作流在构建前生成 OCR ZIP，并通过以下环境变量注入正式构建：
 
-```rust
-const OCR_DOWNLOAD_URL: Option<&str> = Some("https://...");
-const OCR_DOWNLOAD_SHA256: Option<&str> = Some("64 位十六进制 SHA-256");
+```text
+KYSTUDY_OCR_DOWNLOAD_URL=https://github.com/Trey5-7e/KyStudy/releases/download/<tag>/kystudy-ocr-worker-<tag>.zip
+KYSTUDY_OCR_DOWNLOAD_SHA256=<64 位十六进制 SHA-256>
 ```
 
-资产应为 ZIP，根目录固定为 `kystudy-ocr-worker/`，并与当前 `REQUIRED_COMPONENT_FILES` 完全匹配。发布后需要重新构建 Release，并在不联网环境继续验证本地安装、移除和 PDF 阅读。
+资产应为 ZIP，根目录固定为 `kystudy-ocr-worker/`，并与当前 `REQUIRED_COMPONENT_FILES` 完全匹配。v0.1.1 的正式资产已按该规则生成并上传；后续版本继续由发布工作流自动重建和上传。
 
 ## 验收建议
 
-1. 未发布资产时打开“题库 → OCR 组件”：确认在线按钮禁用，提示本地安装仍可用。
+1. 打开“题库 → OCR 组件”：确认已发布资产时在线按钮可用，仍保留本地安装入口。
 2. 使用本地完整组件安装、重新检测、移除；确认 OCR 识别和 PDF 阅读不受影响。
-3. 资产发布后，重新编译最新 Release；在线下载时确认进度、取消、失败重试和校验失败均不替换旧组件。
+3. 在线下载时确认进度、取消、失败重试和校验失败均不替换旧组件。
 4. 断网或代理阻断时，确认显示稳定错误，不影响手动安装入口。
 
 ## 机器验证记录
@@ -43,4 +43,4 @@ const OCR_DOWNLOAD_SHA256: Option<&str> = Some("64 位十六进制 SHA-256");
 - `pnpm exec tsc --noEmit`：通过。
 - 前端 ESLint（本批修改文件）：通过。
 
-完整项目门禁与最新 Release 构建应在本批改动冻结后按 `docs/DEVELOPMENT_WORKFLOW.md` 执行；不要把当前旧 EXE 当作 R51 验收版本。
+v0.1.1 已完成完整发布工作流：OCR 组件构建、归档校验、Tauri 签名构建和 Release 资产上传均通过；桌面在线下载验收仍由用户执行。
