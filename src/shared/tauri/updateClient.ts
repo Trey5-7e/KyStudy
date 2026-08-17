@@ -21,7 +21,10 @@ export interface AvailableApplicationUpdate {
   close(): Promise<void>;
 }
 
-const UPDATE_CHECK_TIMEOUT_MS = 15_000;
+const UPDATE_CHECK_TIMEOUT_MS = 30_000;
+const UPDATE_DOWNLOAD_TIMEOUT_MS = 120_000;
+
+type UpdateErrorPhase = "check" | "download";
 
 function mapProgress(
   downloadedBytes: number,
@@ -57,7 +60,7 @@ function createApplicationUpdate(update: Update): AvailableApplicationUpdate {
 
           onProgress?.(mapProgress(downloadedBytes, contentLength));
         },
-        { timeout: UPDATE_CHECK_TIMEOUT_MS },
+        { timeout: UPDATE_DOWNLOAD_TIMEOUT_MS },
       );
     },
     close: () => update.close(),
@@ -69,10 +72,50 @@ export async function checkForApplicationUpdate(): Promise<AvailableApplicationU
   return update === null ? null : createApplicationUpdate(update);
 }
 
-export function normalizeUpdateError(error: unknown): string {
-  if (error instanceof Error && error.name === "AbortError") {
-    return "更新检查超时，请稍后重试。";
+export function normalizeUpdateError(
+  error: unknown,
+  phase: UpdateErrorPhase = "check",
+): string {
+  if (isUpdateTimeoutError(error)) {
+    return phase === "download"
+      ? "下载更新超时，请检查网络后重试。"
+      : "更新检查超时，请稍后重试。";
+  }
+
+  if (phase === "download") {
+    if (isUpdateSignatureError(error)) {
+      return "更新包签名校验失败，请重新检查更新。";
+    }
+    return "更新包下载或安装失败，请检查网络后重试。";
   }
 
   return "暂时无法连接更新服务，请检查网络后重试。";
+}
+
+function isUpdateTimeoutError(error: unknown): boolean {
+  if (error instanceof Error && error.name === "AbortError") return true;
+  return /(?:timeout|timed[ -]?out|deadline|operation canceled)/i.test(
+    updateErrorText(error),
+  );
+}
+
+function isUpdateSignatureError(error: unknown): boolean {
+  return /(?:signature|public key|pubkey|签名|公钥)/i.test(
+    updateErrorText(error),
+  );
+}
+
+function updateErrorText(error: unknown): string {
+  if (error instanceof Error) return `${error.name} ${error.message}`;
+  if (typeof error === "string") return error;
+  if (isRecord(error)) {
+    return [error.name, error.message, error.code, error.kind, error.reason]
+      .filter((value): value is string => typeof value === "string")
+      .join(" ");
+  }
+  return "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

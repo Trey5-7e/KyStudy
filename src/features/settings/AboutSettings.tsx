@@ -187,7 +187,7 @@ export function AboutSettings() {
     } catch (error: unknown) {
       setUpdateState({
         kind: "error",
-        message: normalizeUpdateError(error),
+        message: normalizeUpdateError(error, "download"),
       });
     }
   };
