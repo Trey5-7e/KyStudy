@@ -73,7 +73,7 @@ jobs:
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true
-          uploadUpdaterJson: true
+          includeUpdaterJson: true
           args: --config src-tauri/tauri.release.conf.json
 
       - name: Package Windows portable archive
