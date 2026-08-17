@@ -15,6 +15,13 @@ export interface PlanningContextSelection {
   searchQuery: string;
 }
 
+export interface PlanningQuestionContext {
+  title: string;
+  documentTitle: string;
+  analysis?: string;
+  imageDataUrls: string[];
+}
+
 export interface PlanningSource {
   documentId: string;
   documentTitle: string;
@@ -42,6 +49,7 @@ export interface PlanningChatRequest {
   conversationId: string;
   question: string;
   contexts: PlanningContextSelection[];
+  questionContext?: PlanningQuestionContext;
   maxOutputTokens: number;
 }
 
@@ -96,6 +104,25 @@ export async function createPlanningConversation(
   );
 }
 
+export async function renamePlanningConversation(
+  conversationId: string,
+  title: string,
+): Promise<PlanningConversation> {
+  return parseConversation(
+    await invoke("rename_planning_conversation", {
+      request: { conversationId, title },
+    }),
+  );
+}
+
+export async function deletePlanningConversation(
+  conversationId: string,
+): Promise<void> {
+  await invoke("delete_planning_conversation", {
+    request: { conversationId },
+  });
+}
+
 export async function previewPlanningChat(
   request: PlanningChatRequest,
 ): Promise<PlanningChatPreview> {
@@ -110,7 +137,10 @@ export async function previewPlanningChat(
 }
 
 export async function executePlanningChat(
-  request: PlanningChatRequest & { confirmedPrompt: string },
+  request: PlanningChatRequest & {
+    confirmedPrompt: string;
+    confirmedRequestFingerprint: string;
+  },
 ): Promise<PlanningChatReply> {
   const value: unknown = await invoke("execute_planning_chat", { request });
   if (!isRecord(value)) {

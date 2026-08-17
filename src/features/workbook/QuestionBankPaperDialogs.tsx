@@ -27,6 +27,7 @@ import type {
 } from "../../shared/tauri/questionClient";
 import { localDateForTimezone } from "../../shared/tauri/scheduleClient";
 import { PaperQuestionCard } from "./PaperQuestionCard";
+import { PaperExportDialog } from "./PaperExportDialog";
 import {
   PaperQuestionNavigator,
   type PaperQuestionOverviewItem,
@@ -449,6 +450,7 @@ export function PaperDialog({
   );
   const [adjustingQuestionId, setAdjustingQuestionId] = useState<string>();
   const [editingQuestionId, setEditingQuestionId] = useState<string>();
+  const [exporting, setExporting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [draftStatus, setDraftStatus] = useState<
@@ -672,6 +674,18 @@ export function PaperDialog({
       </EditorDialog>
     );
   }
+  if (exporting) {
+    return (
+      <PaperExportDialog
+        questions={paperQuestions}
+        onClose={() => setExporting(false)}
+        onSaved={(successMessage) => {
+          setExporting(false);
+          setMessage(successMessage);
+        }}
+      />
+    );
+  }
   const pendingEntries = paperResultEntries(results, recordedResults);
   const persistCurrentDraft = (
     nextResults = results,
@@ -849,6 +863,14 @@ export function PaperDialog({
               onClick={refreshGeneratedPaper}
             >
               刷新组卷
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={paperQuestions.length === 0 || busy}
+              onClick={() => setExporting(true)}
+            >
+              导出 PDF（{paperQuestions.length} 题）
             </button>
           </div>
         </div>

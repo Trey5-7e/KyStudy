@@ -50,6 +50,14 @@ jobs:
         shell: pwsh
         run: pnpm install --frozen-lockfile
 
+      - name: Validate release version
+        shell: pwsh
+        env:
+          EXPECTED_VERSION: ${{ env.RELEASE_TAG }}
+        run: |
+          $version = $env:EXPECTED_VERSION -replace '^v', ''
+          & (Join-Path $env:GITHUB_WORKSPACE 'scripts/check-release-version.ps1') -ExpectedVersion $version
+
       - name: Publish signed Tauri assets
         uses: tauri-apps/tauri-action@1ddc7b49b13c3038297360482fcb3e058764d7c9 # v0.6.2
         env:

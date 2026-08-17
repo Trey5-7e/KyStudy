@@ -213,6 +213,32 @@
   justify-self: end;
 }
 
+.ai-model-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.45rem 0.65rem;
+}
+.ai-model-field label {
+  min-width: 0;
+}
+.ai-model-field input {
+  width: 100%;
+}
+.ai-model-field button {
+  white-space: nowrap;
+}
+.ai-model-field datalist {
+  display: none;
+}
+.ai-model-hint,
+.ai-settings > label > small {
+  grid-column: 1 / -1;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
 .ai-provider-advanced {
   border: 1px solid color-mix(in srgb, var(--color-primary) 14%, transparent);
   border-radius: var(--radius-md);

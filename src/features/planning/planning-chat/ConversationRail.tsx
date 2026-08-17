@@ -11,6 +11,8 @@ interface ConversationRailProps {
   onTitleChange(value: string): void;
   onCreate(event: FormEvent): void;
   onSelect(conversation: PlanningConversation): void;
+  onRename(conversation: PlanningConversation): void;
+  onDelete(conversation: PlanningConversation): void;
 }
 
 export function ConversationRail({
@@ -22,6 +24,8 @@ export function ConversationRail({
   onTitleChange,
   onCreate,
   onSelect,
+  onRename,
+  onDelete,
 }: ConversationRailProps) {
   return (
     <aside className="planning-chat-conversation-rail" aria-label="规划对话">
@@ -53,6 +57,26 @@ export function ConversationRail({
                 <strong>{conversation.title}</strong>
                 <span>{conversation.messages.length} 条消息</span>
               </button>
+              <div className="planning-conversation-item-actions">
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={busy}
+                  aria-label={`重命名 ${conversation.title}`}
+                  onClick={() => onRename(conversation)}
+                >
+                  重命名
+                </button>
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={busy}
+                  aria-label={`删除 ${conversation.title}`}
+                  onClick={() => onDelete(conversation)}
+                >
+                  删除
+                </button>
+              </div>
             </li>
           ))}
         </ul>

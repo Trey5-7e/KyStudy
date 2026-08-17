@@ -1,10 +1,13 @@
 import type {
   PlanningChatPreview,
   PlanningChatRequest,
+  PlanningQuestionContext,
 } from "../../shared/tauri/planningChatClient";
 import type { ResourceSearchResult } from "../../shared/tauri/resourceSearchClient";
 
 export const MAX_PLANNING_CONTEXTS = 6;
+export const MAX_PLANNING_QUESTION_IMAGES = 6;
+export const MAX_PLANNING_QUESTION_CONTEXT_CHARS = 12_000;
 
 export interface SelectedPlanningContext {
   selection: PlanningChatRequest["contexts"][number];
@@ -50,6 +53,7 @@ export function buildPlanningChatRequest(
   question: string,
   contexts: SelectedPlanningContext[],
   outputLimit: string,
+  questionContext?: PlanningQuestionContext,
 ): PlanningChatRequest | undefined {
   const normalizedQuestion = question.trim();
   const maxOutputTokens = Number(outputLimit);
@@ -59,7 +63,8 @@ export function buildPlanningChatRequest(
     contexts.length > MAX_PLANNING_CONTEXTS ||
     !Number.isInteger(maxOutputTokens) ||
     maxOutputTokens < 1 ||
-    maxOutputTokens > 1800
+    maxOutputTokens > 1800 ||
+    !isValidQuestionContext(questionContext)
   ) {
     return undefined;
   }
@@ -67,6 +72,7 @@ export function buildPlanningChatRequest(
     conversationId,
     question: normalizedQuestion,
     contexts: contexts.map((context) => context.selection),
+    questionContext,
     maxOutputTokens,
   };
 }
@@ -79,9 +85,27 @@ export function planningPreviewFingerprint(
     request,
     destination: preview.preview.destination,
     prompt: preview.preview.prompt,
+    providerType: preview.preview.providerType,
+    providerName: preview.preview.providerName,
+    modelName: preview.preview.modelName,
     projectedTokens: preview.preview.projectedTokens,
     sources: preview.sources,
   });
+}
+
+function isValidQuestionContext(
+  value: PlanningQuestionContext | undefined,
+): boolean {
+  if (value === undefined) return true;
+  return (
+    value.title.trim() !== "" &&
+    value.title.length <= 300 &&
+    value.documentTitle.trim() !== "" &&
+    value.documentTitle.length <= 300 &&
+    (value.analysis === undefined ||
+      value.analysis.length <= MAX_PLANNING_QUESTION_CONTEXT_CHARS) &&
+    value.imageDataUrls.length <= MAX_PLANNING_QUESTION_IMAGES
+  );
 }
 
 export function confirmedPromptMatches(

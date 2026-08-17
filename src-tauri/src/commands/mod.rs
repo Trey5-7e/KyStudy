@@ -1,5 +1,7 @@
 //! Thin Tauri command adapters.
 
+use std::{fs, path::Path};
+
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
@@ -7,30 +9,30 @@ use uuid::Uuid;
 
 use crate::application::{
     AddNodeResourceInput, AddPlanReferenceInput, AddQuestionAttemptInput, AddQuestionRegionInput,
-    AiCallPreview, AiCallResult, AiError, AiImagePreviewInput, AiOverview, AiPreviewInput,
-    AnalyticsBacklog, AnalyticsError, AnalyticsInput, AnalyticsOverview, AnalyticsPeriodSummary,
-    BackupError, BackupReport, BatchClassifyQuestionsInput, BeginResourceIndexInput,
-    BulkQuestionAttemptInput, ConfirmPlanningChatInput, ConfirmQuestionRegionOcrInput,
-    ConfirmShiftCyclePlanInput, CreateKnowledgeMapInput, CreateQuestionInput,
-    CreateStudySessionInput, CreateSubjectInput, CreateTaskInput, CreateWorkbookCategoryInput,
-    CyclePlanError, DailyAnalyticsPoint, GenerateReviewQueueInput, GenerateReviewSchemeQueueInput,
-    ImportError, ImportProgress, ImportQuestionIndexInput, IndexedQuestionDraftInput,
-    IndexedQuestionRegionUpdateInput, InsertIndexedQuestionInput, InsertReviewQueueItemInput,
-    KnowledgeAnalytics, KnowledgeError, MoveKnowledgeNodeInput, OcrComponentStatus, OcrError,
-    OcrPageLine, OcrPageRecognition, PinQuestionReviewInput, PlanExecutionProgress,
-    PlanProgressError, PlanProgressInput, PlanProgressSummary, PlanScheduleError,
-    PlanStageProgress, PlanTaskCreation, PlanTaskPreview, PlanTaskPreviewItem,
-    PlanTaskScheduleInput, PlanningChatError, PlanningChatInput, PlanningChatPreview,
-    PlanningChatReply, PlanningContextSelection, PlanningConversation, PlanningError,
-    PlanningMessage, PlanningSource, QuestionAiAnalysisHistoryEntry, QuestionBankError,
-    QuestionError, QuestionRegionInput, ReassignWorkbookSegmentInput, RecognizePdfPageInput,
-    RecognizeQuestionRegionInput, RecordBulkQuestionAttemptsInput, RenameSubjectInput,
-    RenameWorkbookCategoryInput, RepeatedMistakeAnalytics, ReplaceIndexedQuestionRegionsInput,
-    RescheduleTaskInput, ResourceDocument, ResourceReaderDescriptor,
-    RestoreCyclePlanItemStateInput, RestoreReport, RestoreWorkbookSegmentInput, ReviewError,
-    ReviewSchemeError, ReviewSchemeTypeQuotaInput, RuntimeStatus, SaveAiBudgetInput,
-    SaveAiProviderInput, SaveCyclePlanInput, SavePlanInput, SavePlanStageInput,
-    SaveReviewSchemeInput, ScheduleError, SearchError, SearchResourcesInput,
+    AiCallPreview, AiCallResult, AiError, AiImagePreviewInput, AiModelOption, AiOverview,
+    AiPreviewInput, AnalyticsBacklog, AnalyticsError, AnalyticsInput, AnalyticsOverview,
+    AnalyticsPeriodSummary, BackupError, BackupReport, BatchClassifyQuestionsInput,
+    BeginResourceIndexInput, BulkQuestionAttemptInput, ConfirmPlanningChatInput,
+    ConfirmQuestionRegionOcrInput, ConfirmShiftCyclePlanInput, CreateKnowledgeMapInput,
+    CreateQuestionInput, CreateStudySessionInput, CreateSubjectInput, CreateTaskInput,
+    CreateWorkbookCategoryInput, CyclePlanError, DailyAnalyticsPoint, GenerateReviewQueueInput,
+    GenerateReviewSchemeQueueInput, ImportError, ImportProgress, ImportQuestionIndexInput,
+    IndexedQuestionDraftInput, IndexedQuestionRegionUpdateInput, InsertIndexedQuestionInput,
+    InsertReviewQueueItemInput, KnowledgeAnalytics, KnowledgeError, ListAiModelsInput,
+    MoveKnowledgeNodeInput, OcrComponentStatus, OcrError, OcrPageLine, OcrPageRecognition,
+    PinQuestionReviewInput, PlanExecutionProgress, PlanProgressError, PlanProgressInput,
+    PlanProgressSummary, PlanScheduleError, PlanStageProgress, PlanTaskCreation, PlanTaskPreview,
+    PlanTaskPreviewItem, PlanTaskScheduleInput, PlanningChatError, PlanningChatInput,
+    PlanningChatPreview, PlanningChatReply, PlanningContextSelection, PlanningConversation,
+    PlanningError, PlanningMessage, PlanningQuestionContext, PlanningSource,
+    QuestionAiAnalysisHistoryEntry, QuestionBankError, QuestionError, QuestionRegionInput,
+    ReassignWorkbookSegmentInput, RecognizePdfPageInput, RecognizeQuestionRegionInput,
+    RecordBulkQuestionAttemptsInput, RenameSubjectInput, RenameWorkbookCategoryInput,
+    RepeatedMistakeAnalytics, ReplaceIndexedQuestionRegionsInput, RescheduleTaskInput,
+    ResourceDocument, ResourceReaderDescriptor, RestoreCyclePlanItemStateInput, RestoreReport,
+    RestoreWorkbookSegmentInput, ReviewError, ReviewSchemeError, ReviewSchemeTypeQuotaInput,
+    RuntimeStatus, SaveAiBudgetInput, SaveAiProviderInput, SaveCyclePlanInput, SavePlanInput,
+    SavePlanStageInput, SaveReviewSchemeInput, ScheduleError, SearchError, SearchResourcesInput,
     SetCyclePlanItemStateInput, SetCyclePlanItemStateResult, SetQuestionGapAcknowledgementInput,
     SetQuestionReviewInput, SetWorkbookSubjectInput, ShiftCyclePlanInput, ShiftCyclePlanPreview,
     ShiftCyclePlanResult, ShiftCyclePlanUndo, SplitChildInput, SplitTaskInput,
@@ -103,6 +105,85 @@ pub(crate) async fn get_ai_overview(
         .await
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)
+        .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn save_paper_pdf(
+    app: AppHandle,
+    request: SavePaperPdfRequestDto,
+) -> Result<Option<SavePaperPdfDto>, AppErrorDto> {
+    if request.bytes.is_empty()
+        || request.bytes.len() > 50 * 1024 * 1024
+        || !request.bytes.starts_with(b"%PDF-")
+        || !valid_pdf_file_name(&request.file_name)
+    {
+        return Err(AppErrorDto::paper_export_invalid());
+    }
+    let file_name = ensure_pdf_extension(&request.file_name);
+    let dialog_file_name = file_name.clone();
+    let dialog_app = app.clone();
+    let selected = tauri::async_runtime::spawn_blocking(move || {
+        dialog_app
+            .dialog()
+            .file()
+            .set_title("保存练习卷 PDF")
+            .set_file_name(&dialog_file_name)
+            .add_filter("PDF 文件", &["pdf"])
+            .blocking_save_file()
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?;
+    let Some(selected) = selected else {
+        return Ok(None);
+    };
+    let FilePath::Path(path) = selected else {
+        return Err(AppErrorDto::paper_export_write_failed());
+    };
+    let bytes = request.bytes;
+    let saved_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map_or_else(|| file_name.clone(), str::to_owned);
+    tauri::async_runtime::spawn_blocking(move || fs::write(&path, bytes))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map_err(|_| AppErrorDto::paper_export_write_failed())?;
+    Ok(Some(SavePaperPdfDto {
+        file_name: saved_name,
+    }))
+}
+
+fn valid_pdf_file_name(value: &str) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty()
+        && trimmed.len() <= 120
+        && Path::new(trimmed)
+            .file_name()
+            .and_then(|name| name.to_str())
+            == Some(trimmed)
+        && !trimmed.chars().any(char::is_control)
+}
+
+fn ensure_pdf_extension(value: &str) -> String {
+    if value.to_ascii_lowercase().ends_with(".pdf") {
+        value.trim().to_owned()
+    } else {
+        format!("{}.pdf", value.trim())
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn list_ai_models(
+    request: ListAiModelsRequestDto,
+    state: State<'_, AppState>,
+) -> Result<Vec<AiModelOptionDto>, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_models(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|models| models.into_iter().map(Into::into).collect())
         .map_err(|error| AppErrorDto::from_ai(&error))
 }
 
@@ -311,6 +392,33 @@ pub(crate) async fn create_planning_conversation(
         .await
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn rename_planning_conversation(
+    request: RenamePlanningConversationRequestDto,
+    state: State<'_, AppState>,
+) -> Result<PlanningConversationDto, AppErrorDto> {
+    let use_cases = state.planning_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.rename(&request.conversation_id, &request.title)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(Into::into)
+    .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn delete_planning_conversation(
+    request: PlanningConversationIdRequestDto,
+    state: State<'_, AppState>,
+) -> Result<(), AppErrorDto> {
+    let use_cases = state.planning_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.delete(&request.conversation_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
         .map_err(|error| AppErrorDto::from_planning_chat(&error))
 }
 
@@ -3850,6 +3958,39 @@ pub(crate) struct SaveAiProviderRequestDto {
     max_output_tokens: u32,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SavePaperPdfRequestDto {
+    file_name: String,
+    bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SavePaperPdfDto {
+    file_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ListAiModelsRequestDto {
+    provider_id: Option<String>,
+    provider_type: String,
+    base_url: String,
+    api_key: Option<String>,
+}
+
+impl From<ListAiModelsRequestDto> for ListAiModelsInput {
+    fn from(request: ListAiModelsRequestDto) -> Self {
+        Self {
+            provider_id: request.provider_id,
+            provider_type: request.provider_type,
+            base_url: request.base_url,
+            temporary_secret: request.api_key,
+        }
+    }
+}
+
 impl From<SaveAiProviderRequestDto> for SaveAiProviderInput {
     fn from(request: SaveAiProviderRequestDto) -> Self {
         Self {
@@ -3977,6 +4118,24 @@ pub(crate) struct AiProviderDto {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct AiModelOptionDto {
+    id: String,
+    owned_by: Option<String>,
+    created_at: Option<i64>,
+}
+
+impl From<AiModelOption> for AiModelOptionDto {
+    fn from(model: AiModelOption) -> Self {
+        Self {
+            id: model.id,
+            owned_by: model.owned_by,
+            created_at: model.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct AiBudgetDto {
     single_call_limit: u64,
     daily_token_limit: u64,
@@ -4080,6 +4239,7 @@ pub(crate) struct AiCallPreviewDto {
     month_tokens: u64,
     allowed: bool,
     warnings: Vec<String>,
+    request_fingerprint: String,
 }
 
 impl From<AiCallPreview> for AiCallPreviewDto {
@@ -4097,6 +4257,7 @@ impl From<AiCallPreview> for AiCallPreviewDto {
             month_tokens: preview.month_tokens,
             allowed: preview.allowed,
             warnings: preview.warnings,
+            request_fingerprint: preview.request_fingerprint,
         }
     }
 }
@@ -4155,6 +4316,19 @@ pub(crate) struct CreatePlanningConversationRequestDto {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RenamePlanningConversationRequestDto {
+    conversation_id: String,
+    title: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PlanningConversationIdRequestDto {
+    conversation_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct PlanningContextSelectionDto {
     document_id: String,
     page_number: u32,
@@ -4177,6 +4351,7 @@ pub(crate) struct PlanningChatRequestDto {
     conversation_id: String,
     question: String,
     contexts: Vec<PlanningContextSelectionDto>,
+    question_context: Option<PlanningQuestionContextDto>,
     max_output_tokens: u32,
 }
 
@@ -4186,6 +4361,7 @@ impl From<PlanningChatRequestDto> for PlanningChatInput {
             conversation_id: value.conversation_id,
             question: value.question,
             contexts: value.contexts.into_iter().map(Into::into).collect(),
+            question_context: value.question_context.map(Into::into),
             max_output_tokens: value.max_output_tokens,
         }
     }
@@ -4197,8 +4373,10 @@ pub(crate) struct ConfirmPlanningChatRequestDto {
     conversation_id: String,
     question: String,
     contexts: Vec<PlanningContextSelectionDto>,
+    question_context: Option<PlanningQuestionContextDto>,
     max_output_tokens: u32,
     confirmed_prompt: String,
+    confirmed_request_fingerprint: String,
 }
 
 impl From<ConfirmPlanningChatRequestDto> for ConfirmPlanningChatInput {
@@ -4208,9 +4386,31 @@ impl From<ConfirmPlanningChatRequestDto> for ConfirmPlanningChatInput {
                 conversation_id: value.conversation_id,
                 question: value.question,
                 contexts: value.contexts.into_iter().map(Into::into).collect(),
+                question_context: value.question_context.map(Into::into),
                 max_output_tokens: value.max_output_tokens,
             },
             confirmed_prompt: value.confirmed_prompt,
+            confirmed_request_fingerprint: value.confirmed_request_fingerprint,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PlanningQuestionContextDto {
+    title: String,
+    document_title: String,
+    analysis: Option<String>,
+    image_data_urls: Vec<String>,
+}
+
+impl From<PlanningQuestionContextDto> for PlanningQuestionContext {
+    fn from(value: PlanningQuestionContextDto) -> Self {
+        Self {
+            title: value.title,
+            document_title: value.document_title,
+            analysis: value.analysis,
+            image_data_urls: value.image_data_urls,
         }
     }
 }
@@ -4380,6 +4580,24 @@ impl AppErrorDto {
         }
     }
 
+    fn paper_export_invalid() -> Self {
+        Self {
+            code: "PAPER_EXPORT_INVALID",
+            message: "试卷 PDF 内容或文件名无效。",
+            action: "重新生成试卷后重试。",
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    fn paper_export_write_failed() -> Self {
+        Self {
+            code: "PAPER_EXPORT_WRITE_FAILED",
+            message: "无法写入试卷 PDF。",
+            action: "检查保存位置、磁盘空间和文件占用后重试。",
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
     fn from_analytics(error: &AnalyticsError) -> Self {
         let (message, action) = match error {
             AnalyticsError::WorkspaceNotInitialized => (
@@ -4524,11 +4742,27 @@ impl AppErrorDto {
             ),
             AiError::ProviderInvalidResponse => (
                 "AI Provider 返回了无法识别的结果。",
-                "确认该地址兼容 Responses API 后重试。",
+                "确认该地址兼容所选 Provider 协议后重试。",
             ),
             AiError::ProviderRejected => (
                 "AI Provider 拒绝了本次请求。",
                 "检查模型名称和 Provider 账户权限后重试。",
+            ),
+            AiError::ModelListUnsupported => (
+                "该 Provider 不提供兼容的模型列表接口。",
+                "继续手动填写模型 ID，并通过连接测试验证。",
+            ),
+            AiError::ModelListEmpty => (
+                "Provider 未返回可用模型。",
+                "确认 API Key 的权限和账户中已启用的模型，或手动填写模型 ID。",
+            ),
+            AiError::ModelListInvalid => (
+                "Provider 返回的模型列表格式无法识别。",
+                "确认基础地址指向 API 根路径，或手动填写模型 ID。",
+            ),
+            AiError::ModelListTooLarge => (
+                "Provider 返回的模型列表过大。",
+                "缩小账户模型范围后重试，或手动填写模型 ID。",
             ),
             AiError::Persistence(error) => return Self::from_persistence(error),
         };

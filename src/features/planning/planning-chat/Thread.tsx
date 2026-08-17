@@ -1,11 +1,22 @@
-import type { PlanningConversation } from "../../../shared/tauri/planningChatClient";
+import type {
+  PlanningConversation,
+  PlanningMessage,
+} from "../../../shared/tauri/planningChatClient";
+import { MarkdownRenderer } from "../../../shared/components/MarkdownRenderer";
 
 interface ThreadProps {
   conversation?: PlanningConversation;
   onOpenReference(documentId: string, page: number): void;
+  onCopyMessage(message: PlanningMessage): void;
+  onRetryMessage(message: PlanningMessage): void;
 }
 
-export function Thread({ conversation, onOpenReference }: ThreadProps) {
+export function Thread({
+  conversation,
+  onOpenReference,
+  onCopyMessage,
+  onRetryMessage,
+}: ThreadProps) {
   if (conversation === undefined) {
     return <p className="empty-state">新建一段对话后开始规划。</p>;
   }
@@ -21,7 +32,25 @@ export function Thread({ conversation, onOpenReference }: ThreadProps) {
           className={`planning-message planning-message-${message.role}`}
         >
           <strong>{message.role === "user" ? "你" : "AI 建议"}</strong>
-          <p>{message.content}</p>
+          <MarkdownRenderer source={message.content} />
+          <div className="planning-message-actions">
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => onCopyMessage(message)}
+            >
+              复制 Markdown
+            </button>
+            {message.role === "assistant" ? (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => onRetryMessage(message)}
+              >
+                重新生成
+              </button>
+            ) : null}
+          </div>
           {message.sources.length === 0 ? null : (
             <details className="planning-message-sources">
               <summary>查看 {message.sources.length} 个引用来源</summary>

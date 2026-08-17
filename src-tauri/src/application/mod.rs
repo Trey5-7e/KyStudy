@@ -25,9 +25,10 @@ mod workspace;
 pub(crate) use ai::AiProviderOverview;
 pub(crate) use ai::{
     AiCachedResponse, AiCallPreview, AiCallPurpose, AiCallResult, AiError, AiImagePreviewInput,
-    AiOverview, AiPreviewInput, AiProviderGateway, AiProviderResponse, AiRepository, AiUseCases,
-    BeginAiCall, QuestionAiAnalysisHistoryEntry, QuestionAiAnalysisInput, SaveAiBudgetInput,
-    SaveAiProviderInput, SecretStore, default_provider, estimate_tokens,
+    AiModelOption, AiOverview, AiPreviewInput, AiProviderGateway, AiProviderResponse, AiRepository,
+    AiUseCases, BeginAiCall, ListAiModelsInput, QuestionAiAnalysisHistoryEntry,
+    QuestionAiAnalysisInput, SaveAiBudgetInput, SaveAiProviderInput, SecretStore, default_provider,
+    estimate_tokens,
 };
 pub(crate) use analytics::{
     AnalyticsBacklog, AnalyticsError, AnalyticsInput, AnalyticsOverview, AnalyticsPeriodSummary,
@@ -72,8 +73,8 @@ pub(crate) use planning::{
 pub(crate) use planning_chat::{
     ConfirmPlanningChatInput, PlanningChatError, PlanningChatInput, PlanningChatPreview,
     PlanningChatReply, PlanningChatRepository, PlanningChatUseCases, PlanningContextSelection,
-    PlanningConversation, PlanningMessage, PlanningSource, ResolvedPlanningContext,
-    context_token_estimate, trim_chars,
+    PlanningConversation, PlanningMessage, PlanningQuestionContext, PlanningSource,
+    ResolvedPlanningContext, context_token_estimate, trim_chars,
 };
 pub(crate) use question::{
     AddQuestionAttemptInput, AddQuestionRegionInput, BatchClassifyQuestionsInput,

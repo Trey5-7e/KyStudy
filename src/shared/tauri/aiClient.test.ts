@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  parseAiModelOptions,
   normalizeAiError,
   parseAiCallPreview,
   parseQuestionAiAnalysisHistory,
@@ -94,6 +95,37 @@ describe("parseAiOverview", () => {
         ],
       }),
     ).toThrowError("AI_OVERVIEW_INVALID");
+  });
+});
+
+describe("parseAiModelOptions", () => {
+  it("accepts the standard model envelope and sorts unique IDs", () => {
+    const models = parseAiModelOptions({
+      object: "list",
+      data: [
+        { id: "Z-model", owned_by: "provider", created: 2 },
+        { id: "a-model" },
+        { id: "Z-model" },
+      ],
+    });
+
+    expect(models.map((model) => model.id)).toEqual(["a-model", "Z-model"]);
+    expect(models[1]?.ownedBy).toBe("provider");
+  });
+
+  it("allows a missing object field for compatible providers", () => {
+    expect(parseAiModelOptions({ data: [{ id: "model" }] })).toEqual([
+      { id: "model", ownedBy: undefined, createdAt: undefined },
+    ]);
+  });
+
+  it("rejects a non-list envelope or invalid model ID", () => {
+    expect(() =>
+      parseAiModelOptions({ object: "model", data: [{ id: "model" }] }),
+    ).toThrowError("AI_MODEL_LIST_INVALID");
+    expect(() => parseAiModelOptions({ data: [{ id: "" }] })).toThrowError(
+      "AI_MODEL_LIST_INVALID",
+    );
   });
 });
 

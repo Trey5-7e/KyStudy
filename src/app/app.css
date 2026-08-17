@@ -3437,6 +3437,54 @@ button:disabled {
   font-size: 0.72rem;
 }
 
+.generated-paper-overview-grid button.has-result-correct {
+  border-color: #72bd91;
+  color: #176b4b;
+  background: #e5f5ea;
+}
+
+.generated-paper-overview-grid button.has-result-correct small {
+  color: #176b4b;
+}
+
+.generated-paper-overview-grid button.has-result-correct:hover,
+.generated-paper-overview-grid button.has-result-correct.is-active {
+  border-color: #2f7b59;
+  background: #cfeedd;
+}
+
+.generated-paper-overview-grid button.has-result-uncertain {
+  border-color: #e2bd63;
+  color: #865a05;
+  background: #fff4d5;
+}
+
+.generated-paper-overview-grid button.has-result-uncertain small {
+  color: #865a05;
+}
+
+.generated-paper-overview-grid button.has-result-uncertain:hover,
+.generated-paper-overview-grid button.has-result-uncertain.is-active {
+  border-color: #b78315;
+  background: #ffebaf;
+}
+
+.generated-paper-overview-grid button.has-result-incorrect {
+  border-color: #e49b92;
+  color: #a23d34;
+  background: #fde9e6;
+}
+
+.generated-paper-overview-grid button.has-result-incorrect small {
+  color: #a23d34;
+}
+
+.generated-paper-overview-grid button.has-result-incorrect:hover,
+.generated-paper-overview-grid button.has-result-incorrect.is-active {
+  border-color: #b8554b;
+  background: #f8d5d0;
+}
+
 .pdf-index-progress {
   margin: 0;
   padding: 10px 12px;
@@ -3910,6 +3958,79 @@ button:disabled {
 .generated-paper-toolbar-actions button {
   min-height: 38px;
   padding: 7px 12px;
+}
+
+.paper-export-dialog {
+  min-width: min(620px, 78vw);
+}
+
+.paper-export-preview-shell {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.paper-pdf-preview {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.paper-pdf-preview-canvas {
+  min-height: min(64vh, 560px);
+  max-height: min(64vh, 560px);
+  border-radius: 12px;
+}
+
+.markdown-renderer {
+  overflow-wrap: anywhere;
+  line-height: 1.75;
+}
+
+.markdown-renderer > :first-child {
+  margin-top: 0;
+}
+
+.markdown-renderer > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-renderer pre {
+  max-width: 100%;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+}
+
+.markdown-renderer code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.markdown-renderer table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.markdown-renderer th,
+.markdown-renderer td {
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-math {
+  display: inline-block;
+  padding-inline: 2px;
+  font-family: "Times New Roman", serif;
+  font-style: italic;
+  white-space: pre-wrap;
+}
+
+.markdown-math-block {
+  overflow-x: auto;
+  padding-block: 6px;
 }
 
 .generated-paper-nav {

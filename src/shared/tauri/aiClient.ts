@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type AiProviderType = "offline_test" | "openai_responses";
+export type AiProviderType =
+  | "offline_test"
+  | "openai_responses"
+  | "zhipu_chat"
+  | "qwen_chat"
+  | "doubao_responses"
+  | "deepseek_chat";
 export type AiLimitMode = "warn" | "block";
 export type AiCallState = "pending" | "succeeded" | "failed";
 
@@ -14,6 +20,19 @@ export interface AiProviderConfig {
   maxOutputTokens: number;
   hasSecret: boolean;
   active: boolean;
+}
+
+export interface AiModelOption {
+  id: string;
+  ownedBy?: string;
+  createdAt?: number;
+}
+
+export interface ListAiModelsRequest {
+  providerId?: string;
+  providerType: Exclude<AiProviderType, "offline_test">;
+  baseUrl: string;
+  apiKey?: string;
 }
 
 export interface AiBudget {
@@ -62,6 +81,7 @@ export interface AiCallPreview {
   monthTokens: number;
   allowed: boolean;
   warnings: Array<"single_call" | "daily" | "monthly">;
+  requestFingerprint: string;
 }
 
 export interface AiCallResult {
@@ -86,6 +106,10 @@ export interface AiCommandError {
 const PROVIDER_TYPES = new Set<AiProviderType>([
   "offline_test",
   "openai_responses",
+  "zhipu_chat",
+  "qwen_chat",
+  "doubao_responses",
+  "deepseek_chat",
 ]);
 const LIMIT_MODES = new Set<AiLimitMode>(["warn", "block"]);
 const CALL_STATES = new Set<AiCallState>(["pending", "succeeded", "failed"]);
@@ -143,11 +167,27 @@ const ERROR_COPY: Record<string, { message: string; action: string }> = {
   },
   AI_PROVIDER_RESPONSE_INVALID: {
     message: "Provider 返回了无法识别的结果。",
-    action: "确认该地址兼容 Responses API。",
+    action: "确认该地址兼容所选 Provider 协议。",
   },
   AI_PROVIDER_REQUEST_REJECTED: {
     message: "Provider 拒绝了本次请求。",
     action: "检查模型名称和账户权限。",
+  },
+  AI_MODEL_LIST_UNSUPPORTED: {
+    message: "该 Provider 不提供兼容的模型列表接口。",
+    action: "继续手动填写模型 ID，并通过连接测试验证。",
+  },
+  AI_MODEL_LIST_EMPTY: {
+    message: "Provider 未返回可用模型。",
+    action: "确认 API Key 权限，或手动填写模型 ID。",
+  },
+  AI_MODEL_LIST_INVALID: {
+    message: "Provider 返回的模型列表格式无法识别。",
+    action: "确认基础地址指向 API 根路径，或手动填写模型 ID。",
+  },
+  AI_MODEL_LIST_TOO_LARGE: {
+    message: "Provider 返回的模型列表过大。",
+    action: "缩小模型范围后重试，或手动填写模型 ID。",
   },
   DATABASE_BUSY: {
     message: "本地数据库正在被占用。",
@@ -157,6 +197,23 @@ const ERROR_COPY: Record<string, { message: string; action: string }> = {
 
 export async function getAiOverview(): Promise<AiOverview> {
   return parseAiOverview(await invoke("get_ai_overview"));
+}
+
+export async function listAiModels(
+  request: ListAiModelsRequest,
+): Promise<AiModelOption[]> {
+  return parseAiModelOptions(
+    await invoke("list_ai_models", {
+      request: {
+        providerId: request.providerId,
+        providerType: request.providerType,
+        baseUrl: request.baseUrl,
+        ...(request.apiKey === undefined || request.apiKey.trim() === ""
+          ? {}
+          : { apiKey: request.apiKey }),
+      },
+    }),
+  );
 }
 
 export interface SaveAiProviderRequest {
@@ -318,6 +375,59 @@ export function parseAiOverview(value: unknown): AiOverview {
   };
 }
 
+export function parseAiModelOptions(value: unknown): AiModelOption[] {
+  let entries: unknown[];
+  if (Array.isArray(value)) {
+    entries = value;
+  } else if (isRecord(value)) {
+    if (typeof value.object === "string" && value.object !== "list") {
+      throw new Error("AI_MODEL_LIST_INVALID");
+    }
+    if (!Array.isArray(value.data)) {
+      throw new Error("AI_MODEL_LIST_INVALID");
+    }
+    entries = value.data;
+  } else {
+    throw new Error("AI_MODEL_LIST_INVALID");
+  }
+
+  const seen = new Set<string>();
+  const models: AiModelOption[] = [];
+  for (const entry of entries) {
+    if (!isRecord(entry) || typeof entry.id !== "string") {
+      throw new Error("AI_MODEL_LIST_INVALID");
+    }
+    const id = entry.id.trim();
+    if (id.length === 0 || id.length > 120 || seen.has(id)) {
+      if (id.length === 0 || id.length > 120) {
+        throw new Error("AI_MODEL_LIST_INVALID");
+      }
+      continue;
+    }
+    const ownedBy = entry.ownedBy ?? entry.owned_by;
+    const createdAt = entry.createdAt ?? entry.created;
+    if (!optionalString(ownedBy) || !optionalNonnegativeInteger(createdAt)) {
+      throw new Error("AI_MODEL_LIST_INVALID");
+    }
+    seen.add(id);
+    models.push({
+      id,
+      ownedBy,
+      createdAt,
+    });
+  }
+  models.sort((left, right) => {
+    const leftId = left.id.toLowerCase();
+    const rightId = right.id.toLowerCase();
+    if (leftId < rightId) return -1;
+    if (leftId > rightId) return 1;
+    if (left.id < right.id) return -1;
+    if (left.id > right.id) return 1;
+    return 0;
+  });
+  return models;
+}
+
 export function parseAiCallPreview(value: unknown): AiCallPreview {
   if (
     !isRecord(value) ||
@@ -332,6 +442,7 @@ export function parseAiCallPreview(value: unknown): AiCallPreview {
     !nonnegativeInteger(value.todayTokens) ||
     !nonnegativeInteger(value.monthTokens) ||
     typeof value.allowed !== "boolean" ||
+    typeof value.requestFingerprint !== "string" ||
     !Array.isArray(value.warnings) ||
     !value.warnings.every((warning) => isEnum(warning, WARNING_TYPES))
   ) {
@@ -350,6 +461,7 @@ export function parseAiCallPreview(value: unknown): AiCallPreview {
     monthTokens: value.monthTokens,
     allowed: value.allowed,
     warnings: [...value.warnings],
+    requestFingerprint: value.requestFingerprint,
   };
 }
 

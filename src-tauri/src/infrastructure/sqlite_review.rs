@@ -1547,7 +1547,7 @@ mod tests {
                  ALTER TABLE question DROP COLUMN classification_source;
                  ALTER TABLE question DROP COLUMN question_type;
                  ALTER TABLE question DROP COLUMN subject_id;
-                 DELETE FROM schema_migration WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25);
+                 DELETE FROM schema_migration WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26);
                  PRAGMA user_version = 7;",
             )
             .expect("fixture should become schema v7");

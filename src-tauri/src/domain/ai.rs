@@ -1,8 +1,12 @@
-/// Provider protocols supported by the first AI foundation.
+/// Provider protocols supported by the AI foundation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AiProviderType {
     OfflineTest,
     OpenAiResponses,
+    ZhipuChat,
+    QwenChat,
+    DoubaoResponses,
+    DeepSeekChat,
 }
 
 impl AiProviderType {
@@ -10,6 +14,10 @@ impl AiProviderType {
         match self {
             Self::OfflineTest => "offline_test",
             Self::OpenAiResponses => "openai_responses",
+            Self::ZhipuChat => "zhipu_chat",
+            Self::QwenChat => "qwen_chat",
+            Self::DoubaoResponses => "doubao_responses",
+            Self::DeepSeekChat => "deepseek_chat",
         }
     }
 
@@ -17,8 +25,16 @@ impl AiProviderType {
         match value {
             "offline_test" => Some(Self::OfflineTest),
             "openai_responses" => Some(Self::OpenAiResponses),
+            "zhipu_chat" => Some(Self::ZhipuChat),
+            "qwen_chat" => Some(Self::QwenChat),
+            "doubao_responses" => Some(Self::DoubaoResponses),
+            "deepseek_chat" => Some(Self::DeepSeekChat),
             _ => None,
         }
+    }
+
+    pub(crate) const fn is_remote(self) -> bool {
+        !matches!(self, Self::OfflineTest)
     }
 }
 

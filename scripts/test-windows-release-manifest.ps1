@@ -11,20 +11,20 @@ $scriptPath = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) 'write
 
 try {
     New-Item -ItemType Directory -Path $artifactDirectory -Force | Out-Null
-    $setup = Join-Path $artifactDirectory 'KyStudy_0.1.2_x64-setup.exe'
-    $signature = Join-Path $artifactDirectory 'KyStudy_0.1.2_x64-setup.exe.sig'
+    $setup = Join-Path $artifactDirectory 'KyStudy_0.1.3_x64-setup.exe'
+    $signature = Join-Path $artifactDirectory 'KyStudy_0.1.3_x64-setup.exe.sig'
     $portable = Join-Path $artifactDirectory 'kystudy-windows-x64-portable.zip'
     Set-Content -LiteralPath $setup -Value 'setup-fixture' -Encoding ascii
     Set-Content -LiteralPath $signature -Value 'signature-fixture' -Encoding ascii
     Set-Content -LiteralPath $portable -Value 'portable-fixture' -Encoding ascii
 
     & $scriptPath `
-        -Version '0.1.2' `
+        -Version '0.1.3' `
         -OutputPath $manifest `
         -ArtifactPath @($setup, $signature, $portable)
 
     $metadata = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
-    if ($metadata.schemaVersion -ne 1 -or $metadata.version -ne '0.1.2') {
+    if ($metadata.schemaVersion -ne 1 -or $metadata.version -ne '0.1.3') {
         throw 'Release manifest header is invalid.'
     }
     if ($metadata.artifacts.Count -ne 3) {
@@ -40,7 +40,7 @@ try {
     }
 
     try {
-        & $scriptPath -Version '0.1.2' -OutputPath (Join-Path $testRoot 'duplicate.json') -ArtifactPath @($setup, $setup)
+        & $scriptPath -Version '0.1.3' -OutputPath (Join-Path $testRoot 'duplicate.json') -ArtifactPath @($setup, $setup)
         throw 'Duplicate artifact names should have been rejected.'
     }
     catch {
@@ -50,7 +50,7 @@ try {
     }
 
     try {
-        & $scriptPath -Version '0.1.2' -OutputPath (Join-Path $testRoot 'directory.json') -ArtifactPath $artifactDirectory
+        & $scriptPath -Version '0.1.3' -OutputPath (Join-Path $testRoot 'directory.json') -ArtifactPath $artifactDirectory
         throw 'Directory artifacts should have been rejected.'
     }
     catch {

@@ -32,6 +32,29 @@ export interface PaperQuestionOverviewItem {
   active: boolean;
 }
 
+export function paperQuestionOverviewResultLabel(
+  result: AttemptResult | undefined,
+): string {
+  if (result === undefined) return "未作答";
+  return result === "correct"
+    ? "做对"
+    : result === "uncertain"
+      ? "不全对"
+      : "做错";
+}
+
+export function paperQuestionOverviewClassName(
+  result: AttemptResult | undefined,
+  active: boolean,
+): string {
+  return [
+    active ? "is-active" : undefined,
+    result === undefined ? undefined : `has-result-${result}`,
+  ]
+    .filter((value): value is string => value !== undefined)
+    .join(" ");
+}
+
 const FILTERS: readonly { value: PaperQuestionFilter; label: string }[] = [
   { value: "all", label: "全部" },
   { value: "choice", label: "选择题" },
@@ -130,19 +153,17 @@ export function PaperQuestionNavigator({
             <div key={question.id} role="listitem">
               <button
                 type="button"
-                className={question.active ? "is-active" : undefined}
+                className={paperQuestionOverviewClassName(
+                  question.result,
+                  question.active,
+                )}
                 aria-current={question.active ? "step" : undefined}
+                aria-label={`${question.label}，${paperQuestionOverviewResultLabel(question.result)}`}
                 onClick={() => onQuestionSelect(question.id)}
               >
                 <span>{question.label}</span>
                 <small>
-                  {question.result === undefined
-                    ? "未作答"
-                    : question.result === "correct"
-                      ? "做对"
-                      : question.result === "uncertain"
-                        ? "不全对"
-                        : "做错"}
+                  {paperQuestionOverviewResultLabel(question.result)}
                 </small>
               </button>
             </div>

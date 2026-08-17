@@ -19,6 +19,7 @@ import {
   type AvailableApplicationUpdate,
   type ApplicationUpdateProgress,
 } from "../../shared/tauri/updateClient";
+import { shouldRunAutomaticUpdateCheck } from "../../shared/tauri/updatePolicy";
 import { Badge } from "../../shared/ui/Badge";
 import { Button } from "../../shared/ui/Button";
 import { SectionHeader } from "../../shared/ui/SectionHeader";
@@ -28,7 +29,6 @@ const GITHUB_REPOSITORY_URL = "https://github.com/Trey5-7e/KyStudy";
 const GITHUB_ISSUES_URL = `${GITHUB_REPOSITORY_URL}/issues`;
 const AUTO_UPDATE_CHECK_KEY = "kystudy.settings.autoUpdateCheck";
 const LAST_UPDATE_CHECK_KEY = "kystudy.settings.lastUpdateCheck";
-const AUTO_UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 async function openExternalUrl(
   event: MouseEvent<HTMLAnchorElement>,
@@ -154,17 +154,21 @@ export function AboutSettings() {
   }, []);
 
   useEffect(() => {
-    if (!isReleaseBuild || !autoCheck) {
-      return;
-    }
-    if (Date.now() - readLastCheckAt() < AUTO_UPDATE_CHECK_INTERVAL_MS) {
+    if (
+      !shouldRunAutomaticUpdateCheck({
+        buildProfile: runtime?.buildProfile ?? null,
+        enabled: autoCheck,
+        lastCheckedAt: readLastCheckAt(),
+        now: Date.now(),
+      })
+    ) {
       return;
     }
     const timer = window.setTimeout(() => {
       void checkForUpdate(true);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [autoCheck, checkForUpdate, isReleaseBuild]);
+  }, [autoCheck, checkForUpdate, isReleaseBuild, runtime?.buildProfile]);
 
   useEffect(() => closePendingUpdate, [closePendingUpdate]);
 

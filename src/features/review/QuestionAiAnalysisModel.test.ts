@@ -98,6 +98,23 @@ describe("QuestionAiAnalysisModel", () => {
     ).not.toBe(questionAiSourceFingerprint(question, [region]));
   });
 
+  it("isolates saved analyses by provider and model", () => {
+    const openAi = questionAiSourceFingerprint(question, [region], undefined, {
+      providerId: "openai",
+      modelName: "gpt-4.1",
+    });
+    const deepSeek = questionAiSourceFingerprint(
+      question,
+      [region],
+      undefined,
+      {
+        providerId: "deepseek",
+        modelName: "deepseek-chat",
+      },
+    );
+    expect(openAi).not.toBe(deepSeek);
+  });
+
   it("loads the complete saved prompt and refreshes only the question context", () => {
     const firstContext = questionAiPromptContext(question, 2);
     const customPrompt = [

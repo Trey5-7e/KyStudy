@@ -10,6 +10,8 @@ const MAXIMUM_HISTORY_MESSAGES: u32 = 8;
 const MAXIMUM_CONTEXT_CHARS: usize = 1_200;
 const MAXIMUM_HISTORY_CHARS: usize = 6_000;
 const MAXIMUM_OUTPUT_TOKENS: u32 = 1_800;
+const MAXIMUM_QUESTION_IMAGES: usize = 6;
+const MAXIMUM_QUESTION_CONTEXT_CHARS: usize = 12_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PlanningContextSelection {
@@ -23,13 +25,23 @@ pub(crate) struct PlanningChatInput {
     pub(crate) conversation_id: String,
     pub(crate) question: String,
     pub(crate) contexts: Vec<PlanningContextSelection>,
+    pub(crate) question_context: Option<PlanningQuestionContext>,
     pub(crate) max_output_tokens: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PlanningQuestionContext {
+    pub(crate) title: String,
+    pub(crate) document_title: String,
+    pub(crate) analysis: Option<String>,
+    pub(crate) image_data_urls: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ConfirmPlanningChatInput {
     pub(crate) chat: PlanningChatInput,
     pub(crate) confirmed_prompt: String,
+    pub(crate) confirmed_request_fingerprint: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -120,6 +132,13 @@ pub(crate) trait PlanningChatRepository: Clone + Send + Sync + 'static {
         title: &str,
         now: i64,
     ) -> Result<PlanningConversation, PlanningChatError>;
+    fn rename_conversation(
+        &self,
+        conversation_id: &str,
+        title: &str,
+        now: i64,
+    ) -> Result<PlanningConversation, PlanningChatError>;
+    fn delete_conversation(&self, conversation_id: &str) -> Result<(), PlanningChatError>;
     fn load_history(
         &self,
         conversation_id: &str,
@@ -173,15 +192,34 @@ impl<R: PlanningChatRepository, A: AiRepository, S: SecretStore, G: AiProviderGa
         )
     }
 
+    pub(crate) fn rename(
+        &self,
+        conversation_id: &str,
+        title: &str,
+    ) -> Result<PlanningConversation, PlanningChatError> {
+        validate_id(conversation_id)?;
+        let title = required_text(title, 120)?;
+        self.repository
+            .rename_conversation(conversation_id, title, current_utc_millis()?)
+    }
+
+    pub(crate) fn delete(&self, conversation_id: &str) -> Result<(), PlanningChatError> {
+        validate_id(conversation_id)?;
+        self.repository.delete_conversation(conversation_id)
+    }
+
     pub(crate) fn preview(
         &self,
         input: &PlanningChatInput,
     ) -> Result<PlanningChatPreview, PlanningChatError> {
-        let (prompt, contexts) = self.compile_prompt(input)?;
-        let preview = self.ai.preview(&AiPreviewInput {
-            prompt,
-            max_output_tokens: input.max_output_tokens,
-        })?;
+        let (prompt, contexts, images) = self.compile_prompt(input)?;
+        let preview = self.ai.preview_with_images(
+            &AiPreviewInput {
+                prompt,
+                max_output_tokens: input.max_output_tokens,
+            },
+            &images,
+        )?;
         Ok(PlanningChatPreview {
             preview,
             sources: contexts.into_iter().map(|context| context.source).collect(),
@@ -192,17 +230,28 @@ impl<R: PlanningChatRepository, A: AiRepository, S: SecretStore, G: AiProviderGa
         &self,
         input: &ConfirmPlanningChatInput,
     ) -> Result<PlanningChatReply, PlanningChatError> {
-        let (prompt, contexts) = self.compile_prompt(&input.chat)?;
-        if prompt != input.confirmed_prompt {
+        let (prompt, contexts, images) = self.compile_prompt(&input.chat)?;
+        let preview = self.ai.preview_with_images(
+            &AiPreviewInput {
+                prompt: prompt.clone(),
+                max_output_tokens: input.chat.max_output_tokens,
+            },
+            &images,
+        )?;
+        if prompt != input.confirmed_prompt
+            || preview.request_fingerprint != input.confirmed_request_fingerprint
+        {
             return Err(PlanningChatError::PreviewStale);
         }
-        let result = self.ai.execute_for(
+        let result = self.ai.execute_for_images(
             &AiPreviewInput {
                 prompt,
                 max_output_tokens: input.chat.max_output_tokens,
             },
+            &images,
             AiCallPurpose::PlanningChat,
             Some(input.chat.conversation_id.clone()),
+            true,
         )?;
         let conversation = self.repository.append_exchange(
             &input.chat.conversation_id,
@@ -236,7 +285,7 @@ impl<R: PlanningChatRepository, A: AiRepository, S: SecretStore, G: AiProviderGa
     fn compile_prompt(
         &self,
         input: &PlanningChatInput,
-    ) -> Result<(String, Vec<ResolvedPlanningContext>), PlanningChatError> {
+    ) -> Result<(String, Vec<ResolvedPlanningContext>, Vec<String>), PlanningChatError> {
         validate_id(&input.conversation_id)?;
         let question = required_text(&input.question, 4_000)?;
         if input.contexts.len() > MAXIMUM_CONTEXTS {
@@ -245,12 +294,24 @@ impl<R: PlanningChatRepository, A: AiRepository, S: SecretStore, G: AiProviderGa
         if input.max_output_tokens == 0 || input.max_output_tokens > MAXIMUM_OUTPUT_TOKENS {
             return Err(PlanningChatError::InvalidInput);
         }
+        if let Some(question_context) = input.question_context.as_ref() {
+            validate_question_context(question_context)?;
+        }
         let history = self
             .repository
             .load_history(&input.conversation_id, MAXIMUM_HISTORY_MESSAGES)?;
         let contexts = self.repository.resolve_contexts(&input.contexts)?;
-        let prompt = build_prompt(&history, &contexts, question);
-        Ok((prompt, contexts))
+        let images = input
+            .question_context
+            .as_ref()
+            .map_or_else(Vec::new, |context| context.image_data_urls.clone());
+        let prompt = build_prompt(
+            &history,
+            &contexts,
+            question,
+            input.question_context.as_ref(),
+        );
+        Ok((prompt, contexts, images))
     }
 }
 
@@ -258,6 +319,7 @@ fn build_prompt(
     history: &[PlanningMessage],
     contexts: &[ResolvedPlanningContext],
     question: &str,
+    question_context: Option<&PlanningQuestionContext>,
 ) -> String {
     let mut prompt = String::from(
         "你是 KyStudy 的考研规划助手。只提供可核对的建议，不替用户修改任何正式学习数据。\n引用资料时使用对应的 [资料N] 标签；资料不足时明确说明，不得编造页码。\n",
@@ -273,6 +335,22 @@ fn build_prompt(
             prompt.push_str(" 页\n");
             prompt.push_str(&trim_chars(&context.text, MAXIMUM_CONTEXT_CHARS));
             prompt.push('\n');
+        }
+    }
+    if let Some(question_context) = question_context {
+        prompt.push_str("\n当前题目上下文（仅用于本次调用，不写入对话附件）：\n");
+        prompt.push_str("题目：");
+        prompt.push_str(&question_context.title);
+        prompt.push_str("\n来源：");
+        prompt.push_str(&question_context.document_title);
+        prompt.push('\n');
+        if let Some(analysis) = question_context.analysis.as_deref() {
+            prompt.push_str("当前解析：\n");
+            prompt.push_str(&trim_chars(analysis, MAXIMUM_QUESTION_CONTEXT_CHARS));
+            prompt.push('\n');
+        }
+        if !question_context.image_data_urls.is_empty() {
+            prompt.push_str("已附加题目图片，按图片顺序理解题目区域。\n");
         }
     }
     if !history.is_empty() {
@@ -302,6 +380,22 @@ fn build_prompt(
     prompt
 }
 
+fn validate_question_context(context: &PlanningQuestionContext) -> Result<(), PlanningChatError> {
+    if context.title.trim().is_empty()
+        || context.title.chars().count() > 300
+        || context.document_title.trim().is_empty()
+        || context.document_title.chars().count() > 300
+        || context.image_data_urls.len() > MAXIMUM_QUESTION_IMAGES
+        || context
+            .analysis
+            .as_deref()
+            .is_some_and(|value| value.chars().count() > MAXIMUM_QUESTION_CONTEXT_CHARS)
+    {
+        return Err(PlanningChatError::InvalidInput);
+    }
+    Ok(())
+}
+
 fn required_text(value: &str, maximum: usize) -> Result<&str, PlanningChatError> {
     let value = value.trim();
     if value.is_empty() || value.chars().count() > maximum {
@@ -327,7 +421,10 @@ pub(crate) fn context_token_estimate(value: &str) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{PlanningMessage, build_prompt, trim_chars};
+    use super::{
+        PlanningMessage, PlanningQuestionContext, build_prompt, trim_chars,
+        validate_question_context,
+    };
 
     #[test]
     fn prompt_keeps_only_bounded_recent_history() {
@@ -339,7 +436,7 @@ mod tests {
             created_at: 1,
         }];
 
-        let prompt = build_prompt(&history, &[], "如何安排强化阶段？");
+        let prompt = build_prompt(&history, &[], "如何安排强化阶段？", None);
 
         assert!(prompt.chars().count() < 8_000);
         assert!(prompt.contains("如何安排强化阶段？"));
@@ -348,5 +445,26 @@ mod tests {
     #[test]
     fn character_trimming_preserves_unicode_boundaries() {
         assert_eq!(trim_chars("考研规划", 2), "考研");
+    }
+
+    #[test]
+    fn question_context_is_bounded_and_images_are_not_prompt_text() {
+        let context = PlanningQuestionContext {
+            title: "题目标题".to_owned(),
+            document_title: "资料.pdf".to_owned(),
+            analysis: Some("当前解析".to_owned()),
+            image_data_urls: vec!["data:image/png;base64,AAA".to_owned()],
+        };
+        validate_question_context(&context).expect("question context should be valid");
+        let prompt = build_prompt(&[], &[], "继续讲解", Some(&context));
+        assert!(prompt.contains("题目标题"));
+        assert!(prompt.contains("当前解析"));
+        assert!(!prompt.contains("data:image/png"));
+
+        let too_many_images = PlanningQuestionContext {
+            image_data_urls: vec!["image".to_owned(); 7],
+            ..context
+        };
+        assert!(validate_question_context(&too_many_images).is_err());
     }
 }

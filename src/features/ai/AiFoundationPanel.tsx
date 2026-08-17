@@ -7,6 +7,7 @@ import {
   deleteAiSecret,
   executeAiCall,
   getAiOverview,
+  listAiModels,
   normalizeAiError,
   previewAiCall,
   saveAiBudget,
@@ -16,6 +17,7 @@ import {
   type AiCallResult,
   type AiCommandError,
   type AiLimitMode,
+  type AiModelOption,
   type AiOverview,
   type AiProviderConfig,
   type AiProviderType,
@@ -52,6 +54,57 @@ const EMPTY_PROVIDER: ProviderDraft = {
   maxOutputTokens: "800",
 };
 
+const PROVIDER_DEFAULTS: Record<
+  Exclude<AiProviderType, "offline_test">,
+  { label: string; baseUrl: string }
+> = {
+  openai_responses: {
+    label: "OpenAI Responses API",
+    baseUrl: "https://api.openai.com/v1",
+  },
+  zhipu_chat: {
+    label: "智谱 Chat Completions",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+  },
+  qwen_chat: {
+    label: "千问 OpenAI 兼容",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  },
+  doubao_responses: {
+    label: "豆包 Responses API",
+    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+  },
+  deepseek_chat: {
+    label: "DeepSeek OpenAI 兼容",
+    baseUrl: "https://api.deepseek.com",
+  },
+};
+
+function isRemoteProviderType(
+  providerType: AiProviderType,
+): providerType is Exclude<AiProviderType, "offline_test"> {
+  return providerType !== "offline_test";
+}
+
+function providerLabel(providerType: AiProviderType): string {
+  return providerType === "offline_test"
+    ? "离线测试"
+    : PROVIDER_DEFAULTS[providerType].label;
+}
+
+function defaultBaseUrl(providerType: AiProviderType): string {
+  return providerType === "offline_test"
+    ? ""
+    : PROVIDER_DEFAULTS[providerType].baseUrl;
+}
+
+function modelListHint(providerType: AiProviderType, baseUrl: string): string {
+  if (providerType === "zhipu_chat" || providerType === "doubao_responses") {
+    return "该 Provider 不保证标准 /models 接口；获取失败时可继续手动填写模型 ID。";
+  }
+  return `模型列表将从 ${baseUrl || "<基础地址>"}/models 获取。`;
+}
+
 const INITIAL_BUDGET: BudgetDraft = {
   singleCallLimit: "8000",
   dailyTokenLimit: "50000",
@@ -69,7 +122,7 @@ function draftFromProvider(provider: AiProviderConfig): ProviderDraft {
   return {
     providerType: provider.providerType,
     displayName: provider.displayName,
-    baseUrl: provider.baseUrl ?? "https://api.openai.com/v1",
+    baseUrl: provider.baseUrl ?? defaultBaseUrl(provider.providerType),
     modelName: provider.modelName,
     contextLimit: String(provider.contextLimit),
     maxOutputTokens: String(provider.maxOutputTokens),
@@ -80,8 +133,9 @@ function providerRequest(draft: ProviderDraft): SaveAiProviderRequest {
   return {
     providerType: draft.providerType,
     displayName: draft.displayName,
-    baseUrl:
-      draft.providerType === "openai_responses" ? draft.baseUrl : undefined,
+    baseUrl: isRemoteProviderType(draft.providerType)
+      ? draft.baseUrl
+      : undefined,
     modelName: draft.modelName,
     contextLimit: Number(draft.contextLimit),
     maxOutputTokens: Number(draft.maxOutputTokens),
@@ -119,6 +173,7 @@ export function AiFoundationPanel() {
   const [initialProviderDraft, setInitialProviderDraft] =
     useState<ProviderDraft>(EMPTY_PROVIDER);
   const [secret, setSecret] = useState("");
+  const [modelOptions, setModelOptions] = useState<AiModelOption[]>([]);
   const [secretDeleteConfirmation, setSecretDeleteConfirmation] =
     useState(false);
   const [deleteConfirmationId, setDeleteConfirmationId] = useState<string>();
@@ -216,6 +271,7 @@ export function AiFoundationPanel() {
     setProviderDraft(next);
     setInitialProviderDraft(next);
     setSecret("");
+    setModelOptions([]);
     setSecretDeleteConfirmation(false);
     setDialogMode("provider-form");
     setDeleteConfirmationId(undefined);
@@ -227,6 +283,7 @@ export function AiFoundationPanel() {
     setProviderDraft(next);
     setInitialProviderDraft(next);
     setSecret("");
+    setModelOptions([]);
     setSecretDeleteConfirmation(false);
     setDialogMode("provider-form");
     setDeleteConfirmationId(undefined);
@@ -249,6 +306,7 @@ export function AiFoundationPanel() {
     }
     setEditingProviderId(undefined);
     setSecret("");
+    setModelOptions([]);
     setSecretDeleteConfirmation(false);
     setDeleteConfirmationId(undefined);
   };
@@ -257,6 +315,7 @@ export function AiFoundationPanel() {
     setDialogMode("providers");
     setEditingProviderId(undefined);
     setSecret("");
+    setModelOptions([]);
     setSecretDeleteConfirmation(false);
     setDeleteConfirmationId(undefined);
   };
@@ -297,7 +356,7 @@ export function AiFoundationPanel() {
         return;
       }
       if (
-        providerDraft.providerType === "openai_responses" &&
+        isRemoteProviderType(providerDraft.providerType) &&
         secret.trim() !== ""
       ) {
         if (providerId === undefined) {
@@ -349,6 +408,28 @@ export function AiFoundationPanel() {
     });
   };
 
+  const fetchModels = () => {
+    if (!isRemoteProviderType(providerDraft.providerType)) {
+      return;
+    }
+    if (providerDraft.baseUrl.trim() === "") {
+      setNotice("请先填写 API 基础地址，再获取模型。");
+      return;
+    }
+    const providerType = providerDraft.providerType;
+    const baseUrl = providerDraft.baseUrl;
+    void run("models", async () => {
+      const models = await listAiModels({
+        providerId: editingProviderId,
+        providerType,
+        baseUrl,
+        apiKey: secret.trim() === "" ? undefined : secret,
+      });
+      setModelOptions(models);
+      setNotice(`已获取 ${models.length} 个模型，请选择要使用的模型 ID。`);
+    });
+  };
+
   const submitBudget = (event: FormEvent) => {
     event.preventDefault();
     void run("budget", async () => {
@@ -369,7 +450,7 @@ export function AiFoundationPanel() {
   const preparePreview = (event: FormEvent) => {
     event.preventDefault();
     if (activeProvider === undefined) {
-      setNotice("请先配置一个 Responses API Provider，再进行连接测试。");
+      setNotice("请先配置一个远程 AI Provider，再进行连接测试。");
       return;
     }
     void run("preview", async () => {
@@ -389,7 +470,7 @@ export function AiFoundationPanel() {
       !confirmed ||
       preview === undefined ||
       !preview.allowed ||
-      preview.providerType !== "openai_responses"
+      !isRemoteProviderType(preview.providerType)
     ) {
       return;
     }
@@ -412,6 +493,10 @@ export function AiFoundationPanel() {
       : dialogMode === "budget"
         ? JSON.stringify(budget) !== JSON.stringify(initialBudget)
         : false;
+  const canFetchModels =
+    isRemoteProviderType(providerDraft.providerType) &&
+    providerDraft.baseUrl.trim() !== "" &&
+    (secret.trim() !== "" || editingProvider?.hasSecret === true);
 
   return (
     <section className="ai-card" aria-labelledby="ai-title">
@@ -459,7 +544,7 @@ export function AiFoundationPanel() {
           <p className="ai-provider-summary-empty">正在加载 Provider 配置…</p>
         ) : activeProvider === undefined ? (
           <p className="ai-provider-summary-empty">
-            尚未配置可用的 AI Provider，请先添加一个 Responses API 配置。
+            尚未配置可用的 AI Provider，请先添加一个远程 AI 配置。
           </p>
         ) : (
           <div className="ai-provider-summary-main">
@@ -470,14 +555,10 @@ export function AiFoundationPanel() {
               </div>
               <p>{activeProvider.modelName}</p>
               <small>
-                Responses API
+                {providerLabel(activeProvider.providerType)}
                 {" · "}
                 {providerDestination(activeProvider)}
-                {activeProvider.providerType === "openai_responses"
-                  ? activeProvider.hasSecret
-                    ? " · 密钥已保存"
-                    : " · 未保存密钥"
-                  : ""}
+                {activeProvider.hasSecret ? " · 密钥已保存" : " · 未保存密钥"}
               </small>
             </div>
           </div>
@@ -639,14 +720,10 @@ export function AiFoundationPanel() {
                       </div>
                       <p>{provider.modelName}</p>
                       <small>
-                        Responses API
+                        {providerLabel(provider.providerType)}
                         {" · "}
                         {providerDestination(provider)}
-                        {provider.providerType === "openai_responses"
-                          ? provider.hasSecret
-                            ? " · 密钥已保存"
-                            : " · 未保存密钥"
-                          : ""}
+                        {provider.hasSecret ? " · 密钥已保存" : " · 未保存密钥"}
                       </small>
                     </div>
                     <div className="ai-provider-actions">
@@ -742,13 +819,19 @@ export function AiFoundationPanel() {
                   onChange={(event) => {
                     const providerType = event.target.value as AiProviderType;
                     setSecretDeleteConfirmation(false);
+                    setModelOptions([]);
                     setProviderDraft((current) => ({
                       ...current,
                       providerType,
+                      baseUrl: defaultBaseUrl(providerType),
                     }));
                   }}
                 >
-                  <option value="openai_responses">Responses API</option>
+                  <option value="openai_responses">OpenAI Responses API</option>
+                  <option value="zhipu_chat">智谱 Chat Completions</option>
+                  <option value="qwen_chat">千问 OpenAI 兼容</option>
+                  <option value="doubao_responses">豆包 Responses API</option>
+                  <option value="deepseek_chat">DeepSeek OpenAI 兼容</option>
                 </select>
               </label>
               <label>
@@ -768,7 +851,7 @@ export function AiFoundationPanel() {
                   required
                 />
               </label>
-              {providerDraft.providerType === "openai_responses" ? (
+              {isRemoteProviderType(providerDraft.providerType) ? (
                 <label className="ai-wide-field">
                   API 基础地址
                   <input
@@ -779,35 +862,72 @@ export function AiFoundationPanel() {
                     autoComplete="off"
                     spellCheck={false}
                     disabled={busy !== undefined}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      setModelOptions([]);
                       setProviderDraft((current) => ({
                         ...current,
                         baseUrl: event.target.value,
+                      }));
+                    }}
+                    required
+                  />
+                  <small>
+                    {modelListHint(
+                      providerDraft.providerType,
+                      providerDraft.baseUrl,
+                    )}
+                  </small>
+                </label>
+              ) : null}
+              <div className="ai-model-field ai-wide-field">
+                <label>
+                  模型 ID
+                  <input
+                    name="ai-provider-model"
+                    list="ai-model-options"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={providerDraft.modelName}
+                    maxLength={120}
+                    disabled={busy !== undefined}
+                    onChange={(event) =>
+                      setProviderDraft((current) => ({
+                        ...current,
+                        modelName: event.target.value,
                       }))
                     }
                     required
                   />
                 </label>
-              ) : null}
-              <label className="ai-wide-field">
-                模型 ID
-                <input
-                  name="ai-provider-model"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={providerDraft.modelName}
-                  maxLength={120}
-                  disabled={busy !== undefined}
-                  onChange={(event) =>
-                    setProviderDraft((current) => ({
-                      ...current,
-                      modelName: event.target.value,
-                    }))
-                  }
-                  required
-                />
-              </label>
-              {providerDraft.providerType === "openai_responses" ? (
+                {isRemoteProviderType(providerDraft.providerType) ? (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={fetchModels}
+                    disabled={busy !== undefined || !canFetchModels}
+                  >
+                    {busy === "models" ? "获取中…" : "获取模型"}
+                  </button>
+                ) : null}
+                <datalist id="ai-model-options">
+                  {modelOptions.map((model) => (
+                    <option key={model.id} value={model.id} />
+                  ))}
+                </datalist>
+                {modelOptions.length > 0 ? (
+                  <small className="ai-model-hint">
+                    已获取 {modelOptions.length}{" "}
+                    个模型，请从候选项中选择；也可以继续手动填写。
+                  </small>
+                ) : isRemoteProviderType(providerDraft.providerType) &&
+                  editingProviderId === undefined &&
+                  secret.trim() === "" ? (
+                  <small className="ai-model-hint">
+                    请输入 API Key 后获取模型。
+                  </small>
+                ) : null}
+              </div>
+              {isRemoteProviderType(providerDraft.providerType) ? (
                 <div className="ai-key-field ai-wide-field">
                   <label>
                     API Key

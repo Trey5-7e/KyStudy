@@ -86,6 +86,35 @@ impl PlanningChatRepository for SqlitePlanningChatRepository {
         })
     }
 
+    fn rename_conversation(
+        &self,
+        conversation_id: &str,
+        title: &str,
+        now: i64,
+    ) -> Result<PlanningConversation, PlanningChatError> {
+        let connection = self.open()?;
+        ensure_conversation(&connection, conversation_id)?;
+        connection
+            .execute(
+                "UPDATE ai_conversation SET title = ?2, updated_at = ?3 WHERE id = ?1",
+                params![conversation_id, title, now],
+            )
+            .map_err(database_error)?;
+        load_conversation_by_id(&connection, conversation_id)
+    }
+
+    fn delete_conversation(&self, conversation_id: &str) -> Result<(), PlanningChatError> {
+        let connection = self.open()?;
+        ensure_conversation(&connection, conversation_id)?;
+        connection
+            .execute(
+                "DELETE FROM ai_conversation WHERE id = ?1",
+                [conversation_id],
+            )
+            .map_err(database_error)?;
+        Ok(())
+    }
+
     fn load_history(
         &self,
         conversation_id: &str,
@@ -629,13 +658,21 @@ mod tests {
             conversation_id: conversation.id,
             question: "如何安排每天的复习？".to_owned(),
             contexts: Vec::new(),
+            question_context: None,
             max_output_tokens: 300,
         };
         let preview = use_cases.preview(&chat).expect("preview should compile");
+        let stale = use_cases.execute(&ConfirmPlanningChatInput {
+            chat: chat.clone(),
+            confirmed_prompt: preview.preview.prompt.clone(),
+            confirmed_request_fingerprint: "0".repeat(64),
+        });
+        assert!(matches!(stale, Err(PlanningChatError::PreviewStale)));
         let reply = use_cases
             .execute(&ConfirmPlanningChatInput {
                 chat,
                 confirmed_prompt: preview.preview.prompt,
+                confirmed_request_fingerprint: preview.preview.request_fingerprint,
             })
             .expect("confirmed chat should execute");
 

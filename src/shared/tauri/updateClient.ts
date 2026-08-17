@@ -22,9 +22,12 @@ export interface AvailableApplicationUpdate {
 }
 
 const UPDATE_CHECK_TIMEOUT_MS = 30_000;
-const UPDATE_DOWNLOAD_TIMEOUT_MS = 120_000;
+// Allow slower networks and larger signed installers enough time to finish.
+const UPDATE_DOWNLOAD_TIMEOUT_MS = 600_000;
 
 type UpdateErrorPhase = "check" | "download";
+
+let inFlightCheck: Promise<AvailableApplicationUpdate | null> | null = null;
 
 function mapProgress(
   downloadedBytes: number,
@@ -67,9 +70,21 @@ function createApplicationUpdate(update: Update): AvailableApplicationUpdate {
   };
 }
 
-export async function checkForApplicationUpdate(): Promise<AvailableApplicationUpdate | null> {
-  const update = await check({ timeout: UPDATE_CHECK_TIMEOUT_MS });
-  return update === null ? null : createApplicationUpdate(update);
+export function checkForApplicationUpdate(): Promise<AvailableApplicationUpdate | null> {
+  if (inFlightCheck !== null) return inFlightCheck;
+
+  const request = Promise.resolve()
+    .then(() => check({ timeout: UPDATE_CHECK_TIMEOUT_MS }))
+    .then((update) =>
+      update === null ? null : createApplicationUpdate(update),
+    );
+  const trackedRequest = request.finally(() => {
+    if (inFlightCheck === trackedRequest) {
+      inFlightCheck = null;
+    }
+  });
+  inFlightCheck = trackedRequest;
+  return trackedRequest;
 }
 
 export function normalizeUpdateError(

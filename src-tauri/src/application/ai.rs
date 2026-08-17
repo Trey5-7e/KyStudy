@@ -31,6 +31,21 @@ pub(crate) struct SaveAiProviderInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ListAiModelsInput {
+    pub(crate) provider_id: Option<String>,
+    pub(crate) provider_type: String,
+    pub(crate) base_url: String,
+    pub(crate) temporary_secret: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AiModelOption {
+    pub(crate) id: String,
+    pub(crate) owned_by: Option<String>,
+    pub(crate) created_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SaveAiBudgetInput {
     pub(crate) single_call_limit: u64,
     pub(crate) daily_token_limit: u64,
@@ -186,6 +201,14 @@ pub(crate) enum AiError {
     ProviderInvalidResponse,
     #[error("AI provider rejected the request")]
     ProviderRejected,
+    #[error("AI provider does not expose a supported model list")]
+    ModelListUnsupported,
+    #[error("AI provider returned an empty model list")]
+    ModelListEmpty,
+    #[error("AI provider returned an invalid model list")]
+    ModelListInvalid,
+    #[error("AI provider model list exceeded the safe response limit")]
+    ModelListTooLarge,
     #[error(transparent)]
     Persistence(#[from] PersistenceError),
 }
@@ -205,6 +228,10 @@ impl AiError {
             Self::ProviderUnavailable => "AI_PROVIDER_UNAVAILABLE",
             Self::ProviderInvalidResponse => "AI_PROVIDER_RESPONSE_INVALID",
             Self::ProviderRejected => "AI_PROVIDER_REQUEST_REJECTED",
+            Self::ModelListUnsupported => "AI_MODEL_LIST_UNSUPPORTED",
+            Self::ModelListEmpty => "AI_MODEL_LIST_EMPTY",
+            Self::ModelListInvalid => "AI_MODEL_LIST_INVALID",
+            Self::ModelListTooLarge => "AI_MODEL_LIST_TOO_LARGE",
             Self::Persistence(error) => error.code(),
         }
     }
@@ -280,6 +307,13 @@ pub(crate) trait AiProviderGateway: Clone + Send + Sync + 'static {
         max_output_tokens: u32,
         secret: Option<&str>,
     ) -> Result<AiProviderResponse, AiError>;
+
+    fn list_models(
+        &self,
+        provider_type: AiProviderType,
+        base_url: &str,
+        secret: &str,
+    ) -> Result<Vec<AiModelOption>, AiError>;
 }
 
 #[derive(Clone)]
@@ -444,11 +478,40 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
         self.overview()
     }
 
+    pub(crate) fn list_models(
+        &self,
+        input: &ListAiModelsInput,
+    ) -> Result<Vec<AiModelOption>, AiError> {
+        let provider_type =
+            AiProviderType::parse(input.provider_type.trim()).ok_or(AiError::InvalidInput)?;
+        if !provider_type.is_remote() {
+            return Err(AiError::ModelListUnsupported);
+        }
+        let base_url = normalize_base_url(Some(&input.base_url))?;
+        let secret = if let Some(secret) = input
+            .temporary_secret
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            secret.to_owned()
+        } else {
+            let provider_id = input.provider_id.as_deref().ok_or(AiError::SecretMissing)?;
+            validate_identifier(provider_id)?;
+            let (provider, _) = self.repository.load_provider(provider_id)?;
+            let reference = provider.secret_ref.ok_or(AiError::SecretMissing)?;
+            self.secrets
+                .get(&reference)?
+                .ok_or(AiError::SecretMissing)?
+        };
+        self.gateway.list_models(provider_type, &base_url, &secret)
+    }
+
     pub(crate) fn preview(&self, input: &AiPreviewInput) -> Result<AiCallPreview, AiError> {
         self.preview_with_images(input, &[])
     }
 
-    fn preview_with_images(
+    pub(crate) fn preview_with_images(
         &self,
         input: &AiPreviewInput,
         image_data_urls: &[String],
@@ -583,7 +646,7 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
         self.execute_for_images(input, &[], purpose, conversation_id, true)
     }
 
-    fn execute_for_images(
+    pub(crate) fn execute_for_images(
         &self,
         input: &AiPreviewInput,
         image_data_urls: &[String],
@@ -703,7 +766,7 @@ fn validated_provider(
     }
     let (base_url, secret_ref) = match provider_type {
         AiProviderType::OfflineTest => (None, None),
-        AiProviderType::OpenAiResponses => (
+        _ => (
             Some(normalize_base_url(input.base_url.as_deref())?),
             Some(existing_secret_ref.unwrap_or_else(|| provider_id.clone())),
         ),
@@ -863,7 +926,7 @@ fn validate_image_data_urls(values: &[String]) -> Result<(), AiError> {
 fn destination_label(provider: &AiProviderConfig) -> String {
     match provider.provider_type {
         AiProviderType::OfflineTest => "本机离线测试 Provider".to_owned(),
-        AiProviderType::OpenAiResponses => provider
+        _ => provider
             .base_url
             .as_deref()
             .and_then(|url| url.split_once("://"))

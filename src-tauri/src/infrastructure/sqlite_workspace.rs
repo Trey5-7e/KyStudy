@@ -161,6 +161,11 @@ const MIGRATION_025: Migration = Migration {
     name: "question_ai_analysis_history",
     sql: include_str!("../../migrations/0025_question_ai_analysis_history.sql"),
 };
+const MIGRATION_026: Migration = Migration {
+    version: 26,
+    name: "ai_provider_protocols",
+    sql: include_str!("../../migrations/0026_ai_provider_protocols.sql"),
+};
 const MIGRATIONS: &[Migration] = &[
     MIGRATION_001,
     MIGRATION_002,
@@ -187,6 +192,7 @@ const MIGRATIONS: &[Migration] = &[
     MIGRATION_023,
     MIGRATION_024,
     MIGRATION_025,
+    MIGRATION_026,
 ];
 
 /// `rusqlite` adapter for the single local workspace used in M1.
@@ -594,7 +600,7 @@ mod tests {
         MIGRATION_013_LEGACY_CHECKSUMS, MIGRATION_014, MIGRATION_015,
         MIGRATION_015_LEGACY_CHECKSUMS, MIGRATION_016, MIGRATION_017,
         MIGRATION_017_LEGACY_CHECKSUMS, MIGRATION_019, MIGRATION_020, MIGRATION_021, MIGRATION_022,
-        MIGRATION_023, MIGRATION_024, MIGRATION_025, MIGRATIONS, Migration,
+        MIGRATION_023, MIGRATION_024, MIGRATION_025, MIGRATION_026, MIGRATIONS, Migration,
         SqliteWorkspaceRepository, apply_migrations, configure_connection, migrate,
         migration_checksum,
     };
@@ -1169,6 +1175,50 @@ mod tests {
                 .sql
                 .contains("CREATE TABLE question_ai_analysis_history")
         );
+        assert!(MIGRATION_026.sql.contains("provider_protocol"));
+    }
+
+    #[test]
+    fn migration_v26_preserves_existing_provider_and_adds_protocol_column() {
+        let directory = tempdir().expect("temporary directory should exist");
+        let repository = SqliteWorkspaceRepository::new(directory.path());
+        std::fs::create_dir_all(repository.workspace_directory())
+            .expect("workspace directory should exist");
+        let mut connection =
+            Connection::open(repository.database_path()).expect("workspace database should open");
+        configure_connection(&connection).expect("connection should configure");
+        apply_migrations(&mut connection, &MIGRATIONS[..25]).expect("v25 schema should create");
+        connection
+            .execute_batch(
+                "INSERT INTO workspace(
+                    singleton_key, id, name, timezone, daily_review_quota,
+                    early_fill_enabled, created_at, updated_at, revision
+                 ) VALUES (
+                    1, '019f7328-4b66-7613-9729-e3570fc41525', 'test',
+                    'Asia/Shanghai', 5, 0, 1, 1, 1
+                 );
+                 INSERT INTO ai_provider_config(
+                    id, workspace_id, provider_type, display_name, base_url,
+                    secret_ref, enabled, created_at, updated_at
+                 ) VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41526',
+                    '019f7328-4b66-7613-9729-e3570fc41525',
+                    'openai_responses', 'OpenAI', 'https://api.openai.com/v1',
+                    'secret', 1, 1, 1
+                 );",
+            )
+            .expect("v25 provider fixture should be inserted");
+
+        apply_migrations(&mut connection, &[MIGRATION_026]).expect("v26 should migrate");
+
+        let protocol: String = connection
+            .query_row(
+                "SELECT provider_protocol FROM ai_provider_config WHERE id = ?1",
+                ["019f7328-4b66-7613-9729-e3570fc41526"],
+                |row| row.get(0),
+            )
+            .expect("existing provider protocol should be readable");
+        assert_eq!(protocol, "openai_responses");
     }
 
     #[test]

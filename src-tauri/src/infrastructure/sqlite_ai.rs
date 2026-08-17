@@ -131,7 +131,7 @@ impl AiRepository for SqliteAiRepository {
         let connection = self.open()?;
         let mut statement = connection
             .prepare(
-                "SELECT p.id, p.provider_type, p.display_name, p.base_url, p.secret_ref,
+                "SELECT p.id, COALESCE(p.provider_protocol, p.provider_type), p.display_name, p.base_url, p.secret_ref,
                         p.enabled, p.updated_at, m.id, m.model_name, m.context_limit,
                         m.max_output_tokens, m.updated_at
                  FROM ai_provider_config p
@@ -152,7 +152,7 @@ impl AiRepository for SqliteAiRepository {
         let connection = self.open()?;
         connection
             .query_row(
-                "SELECT p.id, p.provider_type, p.display_name, p.base_url, p.secret_ref,
+                "SELECT p.id, COALESCE(p.provider_protocol, p.provider_type), p.display_name, p.base_url, p.secret_ref,
                         p.enabled, p.updated_at, m.id, m.model_name, m.context_limit,
                         m.max_output_tokens, m.updated_at, b.single_call_limit,
                         b.daily_token_limit, b.monthly_token_limit, b.limit_mode, b.updated_at
@@ -205,7 +205,7 @@ impl AiRepository for SqliteAiRepository {
         let connection = self.open()?;
         connection
             .query_row(
-                "SELECT p.id, p.provider_type, p.display_name, p.base_url, p.secret_ref,
+                "SELECT p.id, COALESCE(p.provider_protocol, p.provider_type), p.display_name, p.base_url, p.secret_ref,
                         p.enabled, p.updated_at, m.id, m.model_name, m.context_limit,
                         m.max_output_tokens, m.updated_at
                  FROM ai_provider_config p
@@ -255,11 +255,12 @@ impl AiRepository for SqliteAiRepository {
         let changed = transaction
             .execute(
                 "UPDATE ai_provider_config
-                 SET provider_type = ?2, display_name = ?3, base_url = ?4, secret_ref = ?5,
-                     enabled = ?6, updated_at = ?7
+                 SET provider_type = ?2, provider_protocol = ?3, display_name = ?4,
+                     base_url = ?5, secret_ref = ?6, enabled = ?7, updated_at = ?8
                  WHERE id = ?1 AND deleted_at IS NULL",
                 params![
                     provider.id,
+                    legacy_provider_type(provider.provider_type),
                     provider.provider_type.as_str(),
                     provider.display_name,
                     provider.base_url,
@@ -710,12 +711,13 @@ fn insert_provider(
     connection
         .execute(
             "INSERT INTO ai_provider_config(
-                id, workspace_id, provider_type, display_name, base_url, secret_ref,
-                enabled, created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                id, workspace_id, provider_type, provider_protocol, display_name,
+                base_url, secret_ref, enabled, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 provider.id,
                 workspace_id,
+                legacy_provider_type(provider.provider_type),
                 provider.provider_type.as_str(),
                 provider.display_name,
                 provider.base_url,
@@ -727,6 +729,14 @@ fn insert_provider(
         )
         .map_err(database_error)?;
     Ok(())
+}
+
+fn legacy_provider_type(provider_type: AiProviderType) -> &'static str {
+    if matches!(provider_type, AiProviderType::OfflineTest) {
+        "offline_test"
+    } else {
+        "openai_responses"
+    }
 }
 
 fn insert_model(

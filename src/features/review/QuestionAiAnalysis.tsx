@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import {
   executeQuestionAiAnalysis,
+  getAiOverview,
   listQuestionAiAnalysisHistory,
   normalizeAiError,
   previewQuestionAiAnalysis,
@@ -23,6 +24,10 @@ import {
   saveQuestionAiPrompt,
   type QuestionAiInput,
 } from "./QuestionAiAnalysisModel";
+import {
+  MarkdownRenderer,
+  markdownToPlainText,
+} from "../../shared/components/MarkdownRenderer";
 
 interface PendingPreview {
   preview: AiCallPreview;
@@ -61,6 +66,7 @@ export function QuestionAiAnalysis({
   );
   const [pending, setPending] = useState<PendingPreview>();
   const [result, setResult] = useState<AiCallResult>();
+  const [resultSource, setResultSource] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
@@ -87,6 +93,7 @@ export function QuestionAiAnalysis({
       if (cancelled || !mountedRef.current) return;
       setPending(undefined);
       setResult(undefined);
+      setResultSource(undefined);
       setError("");
       setBusy(false);
       setCopyStatus("");
@@ -145,10 +152,20 @@ export function QuestionAiAnalysis({
         imageDataUrls.length,
       );
       const prompt = loadQuestionAiPrompt(question, imageDataUrls.length);
+      const overview = await getAiOverview();
+      const activeProvider = overview.providers.find(
+        (provider) => provider.id === overview.activeProviderId,
+      );
       const sourceFingerprint = questionAiSourceFingerprint(
         question,
         regions,
         prompt,
+        activeProvider === undefined
+          ? undefined
+          : {
+              providerId: activeProvider.id,
+              modelName: activeProvider.modelName,
+            },
       );
       const request: QuestionAiAnalysisRequest = {
         prompt,
@@ -238,6 +255,9 @@ export function QuestionAiAnalysis({
       );
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
       setResult(nextResult);
+      setResultSource(
+        `${current.preview.providerName} · ${current.preview.modelName}`,
+      );
       setPending(undefined);
       setHistoryOpen(false);
       setHistory(undefined);
@@ -313,9 +333,10 @@ export function QuestionAiAnalysis({
                       Token
                     </span>
                   </header>
-                  <div className="question-ai-history-text">
-                    {entry.result.responseText}
-                  </div>
+                  <MarkdownRenderer
+                    className="question-ai-history-text"
+                    source={entry.result.responseText}
+                  />
                 </article>
               ))}
             </div>
@@ -458,6 +479,9 @@ export function QuestionAiAnalysis({
                   ? "已保存解析 · 0 Token"
                   : `本次 ${result.inputTokens + result.outputTokens} Token`}
               </span>
+              {resultSource === undefined ? null : (
+                <span>来源：{resultSource}</span>
+              )}
               <button
                 type="button"
                 className="text-button"
@@ -471,7 +495,10 @@ export function QuestionAiAnalysis({
           <p className="question-ai-warning">
             请自行核对结论；这不是练习册标准答案，也不会影响错题推荐算法。
           </p>
-          <div className="question-ai-text">{result.responseText}</div>
+          <MarkdownRenderer
+            className="question-ai-text"
+            source={result.responseText}
+          />
           <div className="question-ai-result-actions">
             <button
               type="button"
@@ -482,12 +509,30 @@ export function QuestionAiAnalysis({
                   return;
                 }
                 void navigator.clipboard.writeText(result.responseText).then(
-                  () => setCopyStatus("解析已复制。"),
+                  () => setCopyStatus("Markdown 已复制。"),
                   () => setCopyStatus("复制失败，请手动选择文本复制。"),
                 );
               }}
             >
-              复制解析
+              复制 Markdown
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => {
+                if (!navigator.clipboard) {
+                  setCopyStatus("当前环境不支持自动复制，请手动选择文本复制。");
+                  return;
+                }
+                void navigator.clipboard
+                  .writeText(markdownToPlainText(result.responseText))
+                  .then(
+                    () => setCopyStatus("纯文本已复制。"),
+                    () => setCopyStatus("复制失败，请手动选择文本复制。"),
+                  );
+              }}
+            >
+              复制纯文本
             </button>
           </div>
           {copyStatus === "" ? null : (

@@ -24,6 +24,11 @@ export interface QuestionAiInput {
   updatedAt?: number;
 }
 
+export interface QuestionAiProviderSnapshot {
+  providerId: string;
+  modelName: string;
+}
+
 export function questionAiInputFingerprint(
   question: QuestionAiInput,
   regions: QuestionRegion[],
@@ -56,21 +61,22 @@ export function questionAiSourceFingerprint(
   question: QuestionAiInput,
   regions: QuestionRegion[],
   promptPreference = DEFAULT_QUESTION_AI_INSTRUCTIONS,
+  provider?: QuestionAiProviderSnapshot,
 ): string {
   const normalizedPromptPreference =
     promptPreference.trim() || DEFAULT_QUESTION_AI_INSTRUCTIONS;
   const stablePreference = stablePromptPreference(normalizedPromptPreference);
   const defaultPreference = `${DEFAULT_QUESTION_AI_CONTEXT_PREFIX}\n${DEFAULT_QUESTION_AI_INSTRUCTIONS}`;
-  if (
+  const source =
     normalizedPromptPreference === DEFAULT_QUESTION_AI_INSTRUCTIONS ||
     stablePreference === defaultPreference
-  ) {
-    return questionAiInputFingerprint(question, regions);
-  }
-  return JSON.stringify({
-    source: questionAiInputFingerprint(question, regions),
-    instructions: stablePreference,
-  });
+      ? questionAiInputFingerprint(question, regions)
+      : JSON.stringify({
+          source: questionAiInputFingerprint(question, regions),
+          instructions: stablePreference,
+        });
+  if (provider === undefined) return source;
+  return JSON.stringify({ source, provider });
 }
 
 export function analysisPrompt(

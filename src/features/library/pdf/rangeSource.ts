@@ -4,6 +4,34 @@ export interface PdfRangeSource {
   read(begin: number, end: number, signal: AbortSignal): Promise<Uint8Array>;
 }
 
+export class MemoryRangeSource implements PdfRangeSource {
+  readonly length: number;
+  private readonly bytes: Uint8Array;
+
+  constructor(
+    readonly name: string,
+    bytes: Uint8Array,
+  ) {
+    this.bytes = bytes.slice();
+    this.length = this.bytes.length;
+    if (!Number.isSafeInteger(this.length) || this.length <= 0) {
+      throw new RangeSourceError("PDF_LENGTH_INVALID");
+    }
+  }
+
+  async read(
+    begin: number,
+    end: number,
+    signal: AbortSignal,
+  ): Promise<Uint8Array> {
+    validateRange(begin, end, this.length);
+    if (signal.aborted) {
+      throw new RangeSourceError("PDF_RANGE_ABORTED");
+    }
+    return this.bytes.slice(begin, end);
+  }
+}
+
 export class HttpRangeSource implements PdfRangeSource {
   constructor(
     readonly name: string,
