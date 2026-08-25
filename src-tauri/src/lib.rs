@@ -102,6 +102,17 @@ fn resolve_configured_application_data_directory(
 fn initialize_application(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let application_data_directory = resolve_application_data_directory(app)?;
     #[cfg(not(debug_assertions))]
+    {
+        eprintln!(
+            "KYSTUDY_DATA_DIRECTORY: {}",
+            application_data_directory.display()
+        );
+        eprintln!(
+            "KYSTUDY_RESOURCE_DIR: {}",
+            app.path().resource_dir()?.display()
+        );
+    }
+    #[cfg(not(debug_assertions))]
     migrate_legacy_application_data_directory(app, &application_data_directory)?;
     std::fs::create_dir_all(&application_data_directory)?;
     let state = bootstrap::AppState::new(&application_data_directory);

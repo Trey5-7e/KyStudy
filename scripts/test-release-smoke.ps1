@@ -108,6 +108,8 @@ try {
         throw 'Startup Smoke created a workspace database without user action.'
     }
     if (-not (Test-Path -LiteralPath $smokeDataDirectory -PathType Container)) {
+        Get-ChildItem -LiteralPath $smokeRoot -Recurse -Depth 2 -Force |
+            ForEach-Object { Write-Output ("SMOKE_TREE: " + $_.FullName) }
         throw 'Startup Smoke did not initialize the installation-side data directory.'
     }
 
