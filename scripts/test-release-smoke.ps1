@@ -111,6 +111,26 @@ try {
         throw 'Startup Smoke created a workspace database without user action.'
     }
     if (-not (Test-Path -LiteralPath $smokeDataDirectory -PathType Container)) {
+        for ($grace = 0; $grace -lt 30; $grace++) {
+            Start-Sleep -Seconds 1
+            $process.Refresh()
+            if (Test-Path -LiteralPath $smokeDataDirectory -PathType Container) {
+                Write-Output ("SMOKE_RECOVERED after " + ($grace + 1) + " extra seconds")
+                break
+            }
+            if ($process.HasExited) {
+                Write-Output ("SMOKE_PROCESS_EXITED during grace period, code " + $process.ExitCode)
+                break
+            }
+        }
+    }
+    if (-not (Test-Path -LiteralPath $smokeDataDirectory -PathType Container)) {
+        $process.Refresh()
+        Write-Output (
+            "SMOKE_PROCESS alive={0} handle={1} title={2} threads={3}" -f (
+                -not $process.HasExited
+            ), $process.MainWindowHandle, $process.MainWindowTitle, $process.Threads.Count
+        )
         Get-ChildItem -LiteralPath $smokeRoot -Recurse -Depth 2 -Force |
             ForEach-Object { Write-Output ("SMOKE_TREE: " + $_.FullName) }
         foreach ($log in @($smokeStdOut, $smokeStdErr)) {

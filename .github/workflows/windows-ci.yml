@@ -98,7 +98,7 @@ jobs:
         run: pnpm package:windows-portable
 
       - name: Run isolated Release startup Smoke
-        shell: pwsh
+        shell: powershell
         run: |
           & .\scripts\test-release-smoke.ps1 `
             -ExecutablePath .\src-tauri\target\release\kystudy.exe `
