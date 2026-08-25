@@ -79,7 +79,10 @@ try {
 
     $env:APPDATA = $smokeAppData
     $env:LOCALAPPDATA = $smokeLocalAppData
-    $process = Start-Process -FilePath $smokeExecutable -PassThru -WindowStyle Hidden
+    $smokeStdOut = Join-Path $smokeRoot 'stdout.log'
+    $smokeStdErr = Join-Path $smokeRoot 'stderr.log'
+    $process = Start-Process -FilePath $smokeExecutable -PassThru -WindowStyle Hidden `
+        -RedirectStandardOutput $smokeStdOut -RedirectStandardError $smokeStdErr
 
     $deadline = [DateTime]::UtcNow.AddSeconds(20)
     do {
@@ -110,6 +113,12 @@ try {
     if (-not (Test-Path -LiteralPath $smokeDataDirectory -PathType Container)) {
         Get-ChildItem -LiteralPath $smokeRoot -Recurse -Depth 2 -Force |
             ForEach-Object { Write-Output ("SMOKE_TREE: " + $_.FullName) }
+        foreach ($log in @($smokeStdOut, $smokeStdErr)) {
+            if (Test-Path -LiteralPath $log) {
+                Write-Output ("SMOKE_LOG " + (Split-Path -Leaf $log) + ":")
+                Get-Content -LiteralPath $log | ForEach-Object { Write-Output ("  " + $_) }
+            }
+        }
         throw 'Startup Smoke did not initialize the installation-side data directory.'
     }
 
