@@ -66,21 +66,18 @@ fn default_application_data_directory(
 
     #[cfg(not(debug_assertions))]
     {
-        release_application_data_directory(&app.path().resource_dir()?)
+        Ok(release_application_data_directory(
+            &app.path().resource_dir()?,
+        ))
     }
 }
 
 #[cfg(any(not(debug_assertions), test))]
-fn release_application_data_directory(
-    resource_directory: &Path,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let install_directory = resource_directory.parent().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Tauri resource directory has no installation parent",
-        )
-    })?;
-    Ok(install_directory.join("data"))
+fn release_application_data_directory(resource_directory: &Path) -> PathBuf {
+    // On Windows the Tauri resource directory is the executable's own folder,
+    // so the installation-side data directory lives next to kystudy.exe —
+    // matching the portable package layout and the NSIS install layout.
+    resource_directory.join("data")
 }
 
 fn resolve_configured_application_data_directory(
@@ -143,6 +140,20 @@ fn migrate_legacy_application_data_directory(
         .is_some_and(|value| !value.is_empty())
     {
         return Ok(());
+    }
+
+    // v0.1.2–v0.1.4 resolved the installation data directory to the parent of
+    // the resource directory; that location is the newest legacy source and
+    // already contains any earlier app-data migration from that era.
+    let resource_directory = app.path().resource_dir()?;
+    if let Some(previous_installation_directory) = resource_directory.parent() {
+        let previous_installation_directory = previous_installation_directory.join("data");
+        if previous_installation_directory != target_directory
+            && previous_installation_directory.exists()
+        {
+            migrate_legacy_data_directory(target_directory, &previous_installation_directory)?;
+            return Ok(());
+        }
     }
 
     let legacy_directory = app.path().app_data_dir()?;
@@ -569,20 +580,12 @@ mod tests {
     }
 
     #[test]
-    fn release_data_directory_is_next_to_installation() {
-        let resource_directory = Path::new(r"D:\Apps\KyStudy\resources");
+    fn release_data_directory_lives_inside_the_installation() {
+        let resource_directory = Path::new(r"D:\Apps\KyStudy");
 
-        let resolved = release_application_data_directory(resource_directory)
-            .expect("resource directory should have an installation parent");
+        let resolved = release_application_data_directory(resource_directory);
 
         assert_eq!(resolved, PathBuf::from(r"D:\Apps\KyStudy\data"));
-    }
-
-    #[test]
-    fn release_data_directory_rejects_a_parentless_resource_path() {
-        let result = release_application_data_directory(Path::new(""));
-
-        assert!(result.is_err());
     }
 
     #[test]
