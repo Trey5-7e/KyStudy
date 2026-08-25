@@ -78,14 +78,14 @@ export function QuestionAiAnalysis({
   const requestIdRef = useRef(0);
   const historyRequestIdRef = useRef(0);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
       mountedRef.current = false;
       requestIdRef.current += 1;
       historyRequestIdRef.current += 1;
-    },
-    [],
-  );
+    };
+  }, []);
   useEffect(() => {
     requestIdRef.current += 1;
     let cancelled = false;
@@ -170,7 +170,7 @@ export function QuestionAiAnalysis({
       const request: QuestionAiAnalysisRequest = {
         prompt,
         imageDataUrls,
-        maxOutputTokens: 800,
+        maxOutputTokens: 8192,
       };
       const fingerprint = questionAiInputFingerprint(
         question,

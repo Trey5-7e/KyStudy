@@ -474,7 +474,15 @@ export function QuestionIndexBrowserDialog({
                 >
                   <span>第 {item.questionNumber} 题</span>
                   <small>
-                    {item.chapter} · {typeLabel(item.questionType)}
+                    {[
+                      item.sectionPart !== "other"
+                        ? partLabel(item.sectionPart)
+                        : undefined,
+                      typeLabel(item.questionType),
+                      item.chapter,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </small>
                   <span
                     className={`question-status question-status-${practiceStatus(item)}`}

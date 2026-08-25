@@ -24,8 +24,8 @@ jobs:
     timeout-minutes: 45
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-      KYSTUDY_OCR_DOWNLOAD_URL: https://github.com/Trey5-7e/KyStudy/releases/download/ocr-v0.1.0/kystudy-ocr-worker-v0.1.0.zip
-      KYSTUDY_OCR_DOWNLOAD_SHA256: bb5a3e16a898713adde85717f4debe8cfbdf22cae10eb632752368f200513b01
+      KYSTUDY_OCR_DOWNLOAD_URL: https://github.com/Trey5-7e/KyStudy/releases/download/ocr-v0.1.4/kystudy-ocr-worker-v0.1.4.zip
+      KYSTUDY_OCR_DOWNLOAD_SHA256: 3d339393de86f7759dc764fb844d97761e4ddf8354dd2330b71eb1a765c3fe6f
 
     steps:
       - name: Check out repository

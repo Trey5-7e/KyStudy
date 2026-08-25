@@ -5,7 +5,7 @@
   <h1>KyStudy</h1>
   <p>面向中国考研学生的本地优先学习规划、习题管理与错题复习桌面应用。</p>
   <p>
-    <a href="https://github.com/Trey5-7e/KyStudy/releases">下载 v0.1.3</a>
+    <a href="https://github.com/Trey5-7e/KyStudy/releases">下载 v0.1.4</a>
     ·
     <a href="https://github.com/Trey5-7e/KyStudy/issues">反馈问题</a>
     ·
@@ -21,10 +21,10 @@
     <img src="https://img.shields.io/badge/license-GPL--3.0--only-blue.svg" alt="GPL-3.0-only license">
   </a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4.svg" alt="Windows 10 and 11 x64">
-  <img src="https://img.shields.io/badge/status-v0.1.3%20ready-success.svg" alt="v0.1.3 release ready">
+  <img src="https://img.shields.io/badge/status-v0.1.4%20ready-success.svg" alt="v0.1.4 release ready">
 </p>
 
-> 当前首版支持 Windows 10/11 x64。v0.1.3 已完成练习卷 PDF、AI 可读化和签名更新流程；OCR 组件复用独立的 `ocr-v0.1.0` Release。
+> 当前首版支持 Windows 10/11 x64。v0.1.4 已完成独立 AI 学习助手、模型与 API 管理中心、做题本 PDF 结构化识别基线与低干扰 Token 预算；OCR 组件复用独立的 `ocr-v0.1.0` Release。
 
 ## 目录
 

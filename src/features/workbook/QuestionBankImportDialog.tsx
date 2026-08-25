@@ -41,6 +41,12 @@ import {
   findMatchingSegments,
   segmentAssignmentConflict,
 } from "./questionBankModel";
+import { resolveWorkbookPdfProfile } from "./workbookPdfProfiles";
+import {
+  buildWorkbookPdfBaseline,
+  serializeWorkbookPdfBaseline,
+  workbookPdfBaselineFileName,
+} from "./workbookPdfBaseline";
 
 function bestSubjectMatch(
   subjects: StudySubject[],
@@ -163,6 +169,9 @@ export function ImportIndexDialog({
     segments,
   ]);
   const hasAssignmentConflicts = assignmentConflicts.size > 0;
+  const selectedResource = resources.find(
+    (resource) => resource.id === effectiveDocumentId,
+  );
   const cancelCurrentAnalysis = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = undefined;
@@ -248,6 +257,7 @@ export function ImportIndexDialog({
       }
       if (runRef.current !== runId || controller.signal.aborted) return;
       setOcrStatus(status);
+      const profile = resolveWorkbookPdfProfile(descriptor.title);
       const recognizePage =
         status?.state === "available"
           ? async (pageNumber: number, imageBytes: Uint8Array) => {
@@ -269,6 +279,7 @@ export function ImportIndexDialog({
       const result = await analyzeWorkbookPdf(descriptor, setProgress, {
         signal: controller.signal,
         recognizePage,
+        profile,
         onProgress: (next) => {
           if (runRef.current !== runId) return;
           if (next.phase === "ocr" && next.page !== undefined) {
@@ -420,6 +431,30 @@ export function ImportIndexDialog({
     } finally {
       setBusy(false);
     }
+  };
+
+  const exportBaseline = () => {
+    if (detected.length === 0 || selectedResource === undefined) return;
+    const report = buildWorkbookPdfBaseline({
+      title: selectedResource.title,
+      sha256: selectedResource.sha256,
+      pageCount: selectedResource.pageCount,
+      subjects: detected,
+    });
+    const blob = new Blob([serializeWorkbookPdfBaseline(report)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = workbookPdfBaselineFileName(selectedResource.title);
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setMessage(
+      "已导出本次 PDF 分析基线 JSON。报告不包含题目正文、本地路径或密钥。",
+    );
   };
 
   const requestClose = () => {
@@ -581,14 +616,24 @@ export function ImportIndexDialog({
                   道题
                 </span>
               </div>
-              <button
-                type="button"
-                className="text-button question-bank-import-back"
-                disabled={busy}
-                onClick={() => setStep("source")}
-              >
-                返回选择 PDF
-              </button>
+              <div className="question-bank-import-assignment-actions">
+                <button
+                  type="button"
+                  className="text-button question-bank-import-export"
+                  disabled={busy || selectedResource === undefined}
+                  onClick={exportBaseline}
+                >
+                  导出诊断 JSON
+                </button>
+                <button
+                  type="button"
+                  className="text-button question-bank-import-back"
+                  disabled={busy}
+                  onClick={() => setStep("source")}
+                >
+                  返回选择 PDF
+                </button>
+              </div>
             </div>
             <div className="pdf-detected-subject-list">
               {detected.map((value) => {
@@ -641,6 +686,9 @@ export function ImportIndexDialog({
                           {value.warningCount === 0
                             ? ""
                             : ` · ${value.warningCount} 待复核`}
+                          {value.unresolvedMarkerCount === 0
+                            ? ""
+                            : ` · ${value.unresolvedMarkerCount} 页未识别题号`}
                         </span>
                       </summary>
                       <header>
@@ -651,9 +699,27 @@ export function ImportIndexDialog({
                         <span>
                           PDF {value.pageStart}～{value.pageEnd} 页 ·{" "}
                           {value.questions.length} 道 · OCR {value.ocrPageCount}{" "}
-                          页
+                          页 · 解析规则 {value.profileId}
                         </span>
                       </header>
+                      <dl className="pdf-diagnostics" aria-label="PDF 分析诊断">
+                        <div>
+                          <dt>跨页题目</dt>
+                          <dd>{value.crossPageQuestionCount}</dd>
+                        </div>
+                        <div>
+                          <dt>未识别题号</dt>
+                          <dd>{value.unresolvedMarkerCount}</dd>
+                        </div>
+                        <div>
+                          <dt>待复核警告</dt>
+                          <dd>{value.warningCount}</dd>
+                        </div>
+                        <div>
+                          <dt>OCR 页面</dt>
+                          <dd>{value.ocrPageCount}</dd>
+                        </div>
+                      </dl>
                       <div className="pdf-subject-assignment">
                         <label>
                           归入科目

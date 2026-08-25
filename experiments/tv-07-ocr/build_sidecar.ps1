@@ -20,6 +20,63 @@ $Arguments = @(
     (Join-Path $ExperimentRoot "tv07_ocr\worker.py")
 )
 
+# PaddleOCR is an optional formula-recognition enhancement. Keep the base
+# Worker lightweight when the selected Python environment only has RapidOCR,
+# while allowing the Paddle environment to produce a self-contained package.
+$PaddleProbe = & $PythonExecutable -c "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('paddleocr') else 1)"
+$PaddleAvailable = $LASTEXITCODE -eq 0
+if ($PaddleAvailable) {
+    $Arguments += @(
+        "--collect-all", "paddleocr",
+        "--collect-all", "paddlex",
+        "--collect-all", "paddle",
+        # PaddleX checks optional OCR dependencies through importlib.metadata;
+        # PyInstaller does not preserve those distributions automatically.
+        "--copy-metadata", "paddlex",
+        "--copy-metadata", "paddleocr",
+        "--copy-metadata", "paddlepaddle",
+        "--copy-metadata", "beautifulsoup4",
+        "--copy-metadata", "einops",
+        "--copy-metadata", "ftfy",
+        "--copy-metadata", "imagesize",
+        "--copy-metadata", "Jinja2",
+        "--copy-metadata", "latex2mathml",
+        "--copy-metadata", "lxml",
+        "--copy-metadata", "opencv-contrib-python",
+        "--copy-metadata", "openpyxl",
+        "--copy-metadata", "premailer",
+        "--copy-metadata", "pyclipper",
+        "--copy-metadata", "pypdfium2",
+        "--copy-metadata", "python-bidi",
+        "--copy-metadata", "regex",
+        "--copy-metadata", "safetensors",
+        "--copy-metadata", "scikit-learn",
+        "--copy-metadata", "scipy",
+        "--copy-metadata", "sentencepiece",
+        "--copy-metadata", "shapely",
+        "--copy-metadata", "tiktoken",
+        "--copy-metadata", "tokenizers"
+    )
+
+    $FormulaModelDirectory = $env:KYSTUDY_OCR_FORMULA_MODEL_DIR
+    if ([string]::IsNullOrWhiteSpace($FormulaModelDirectory)) {
+        $FormulaModelDirectory = Join-Path $env:USERPROFILE ".paddlex\official_models\PP-FormulaNet_plus-M"
+    }
+    if (Test-Path -LiteralPath $FormulaModelDirectory -PathType Container) {
+        $Arguments += @(
+            "--add-data",
+            "$FormulaModelDirectory;formula_models\PP-FormulaNet_plus-M"
+        )
+        Write-Host "Including optional formula model: $FormulaModelDirectory"
+    }
+    else {
+        Write-Warning "PaddleOCR is installed but the optional formula model was not found: $FormulaModelDirectory"
+    }
+}
+else {
+    Write-Host "PaddleOCR not installed; building RapidOCR-only Worker."
+}
+
 & $PythonExecutable @Arguments
 
 if ($LASTEXITCODE -ne 0) {

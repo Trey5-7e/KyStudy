@@ -18,6 +18,12 @@ const OVERVIEW = {
       modelName: "kystudy-offline-test-v1",
       contextLimit: 128000,
       maxOutputTokens: 800,
+      capabilities: {
+        supportsImage: "unknown",
+        supportsFile: "unknown",
+        supportsPdf: "unknown",
+        capabilitySource: "unknown",
+      },
       hasSecret: false,
       active: true,
       secretRef: "private-reference",
@@ -55,6 +61,7 @@ describe("parseAiOverview", () => {
     const serialized = JSON.stringify(overview);
 
     expect(overview.providers[0]?.providerType).toBe("offline_test");
+    expect(overview.providers[0]?.capabilities.supportsPdf).toBe("unknown");
     expect(serialized).not.toContain("secretRef");
     expect(serialized).not.toContain("requestFingerprint");
     expect(serialized).not.toContain("databasePath");
@@ -96,6 +103,25 @@ describe("parseAiOverview", () => {
       }),
     ).toThrowError("AI_OVERVIEW_INVALID");
   });
+
+  it("accepts the SenseNova native chat provider type", () => {
+    const overview = parseAiOverview({
+      ...OVERVIEW,
+      providers: [
+        {
+          ...OVERVIEW.providers[0],
+          providerType: "sensenova_chat",
+          displayName: "SenseNova",
+          baseUrl: "https://api.sensenova.cn/v1/llm",
+          modelName: "SenseNova-V6-5-Pro",
+          hasSecret: true,
+          active: true,
+        },
+      ],
+    });
+
+    expect(overview.providers[0]?.providerType).toBe("sensenova_chat");
+  });
 });
 
 describe("parseAiModelOptions", () => {
@@ -117,6 +143,12 @@ describe("parseAiModelOptions", () => {
     expect(parseAiModelOptions({ data: [{ id: "model" }] })).toEqual([
       { id: "model", ownedBy: undefined, createdAt: undefined },
     ]);
+  });
+
+  it("accepts SenseNova's uppercase LIST envelope", () => {
+    expect(
+      parseAiModelOptions({ object: "LIST", data: [{ id: "SenseNova" }] }),
+    ).toEqual([{ id: "SenseNova", ownedBy: undefined, createdAt: undefined }]);
   });
 
   it("rejects a non-list envelope or invalid model ID", () => {
@@ -188,5 +220,48 @@ describe("normalizeAiError", () => {
     });
     expect(JSON.stringify(error)).not.toContain("sk-secret");
     expect(JSON.stringify(error)).not.toContain("SELECT");
+  });
+
+  it("explains workspace persistence failures without exposing internals", () => {
+    const error = normalizeAiError({
+      code: "MIGRATION_FAILED",
+      message: "raw sqlite error",
+      action: "ALTER TABLE ...",
+    });
+
+    expect(error).toEqual({
+      code: "MIGRATION_FAILED",
+      message: "工作区数据库升级未能安全完成。",
+      action: "不要覆盖工作区文件，请重启应用后重试。",
+      operationId: undefined,
+    });
+    expect(JSON.stringify(error)).not.toContain("sqlite");
+    expect(JSON.stringify(error)).not.toContain("ALTER TABLE");
+  });
+
+  it("keeps the provider error copy when Tauri rejects with an Error", () => {
+    const error = normalizeAiError(new Error("AI_PROVIDER_RESPONSE_INVALID"));
+
+    expect(error).toEqual({
+      code: "AI_PROVIDER_RESPONSE_INVALID",
+      message: "Provider 返回了无法识别的结果。",
+      action: "确认该地址兼容所选 Provider 协议。",
+      operationId: undefined,
+    });
+  });
+
+  it("explains local contract failures instead of hiding their stable code", () => {
+    const error = normalizeAiError(new Error("AI_RESULT_INVALID"));
+
+    expect(error.code).toBe("AI_RESULT_INVALID");
+    expect(error.message).toBe("AI 回复数据格式不完整。");
+    expect(error.message).not.toContain("无法识别的 AI 数据");
+  });
+
+  it("does not echo arbitrary Error messages as AI codes", () => {
+    const error = normalizeAiError(new Error("provider body: sk-secret"));
+
+    expect(error.code).toBe("AI_UNAVAILABLE");
+    expect(JSON.stringify(error)).not.toContain("sk-secret");
   });
 });

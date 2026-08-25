@@ -19,6 +19,12 @@ import {
 } from "../../shared/tauri/scheduleClient";
 import { findSegmentRestoreConflicts } from "./questionBankModel";
 
+export const SEGMENT_TRASH_PURGE_BUSY_ID = "__purge_all__";
+
+export function segmentTrashDeleteBusyId(segmentId: string): string {
+  return `delete:${segmentId}`;
+}
+
 export function SegmentTrashDialog({
   snapshot,
   segments,
@@ -30,6 +36,8 @@ export function SegmentTrashDialog({
   onClose,
   onRefresh,
   onRestore,
+  onDelete,
+  onDeleteAll,
 }: {
   snapshot: QuestionBankSnapshot;
   segments: readonly TrashedWorkbookDocumentSegment[];
@@ -44,13 +52,19 @@ export function SegmentTrashDialog({
     segment: TrashedWorkbookDocumentSegment,
     trigger: HTMLButtonElement,
   ): void;
+  onDelete(
+    segment: TrashedWorkbookDocumentSegment,
+    trigger: HTMLButtonElement,
+  ): void;
+  onDeleteAll(trigger: HTMLButtonElement): void;
 }) {
+  const busy = busyId !== undefined;
   return (
     <EditorDialog
       title="分段回收站"
-      description="查看被移除的 PDF 分段；恢复会按删除时间校验，避免覆盖新的归类。分段回收站不包含单独移除的题目。"
+      description="查看被移除的 PDF 分段；恢复会按删除时间校验，避免覆盖新的归类。彻底删除会连同题目、作答和复习记录一起清除，且不可恢复。分段回收站不包含单独移除的题目。"
       dirty={false}
-      closeDisabled={busyId !== undefined}
+      closeDisabled={busy}
       initialFocusRef={headingRef}
       onRequestClose={onClose}
       size="large"
@@ -63,14 +77,39 @@ export function SegmentTrashDialog({
             </h3>
             <p>题目区域、作答记录和复习历史会随可恢复题目保留。</p>
           </div>
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={loading || busyId !== undefined}
-            onClick={onRefresh}
-          >
-            刷新列表
-          </button>
+          <div className="question-bank-segment-trash-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={loading || busy}
+              onClick={onRefresh}
+            >
+              刷新列表
+            </button>
+            <button
+              type="button"
+              className="danger-button"
+              disabled={loading || busy || segments.length === 0}
+              onClick={(event) => {
+                const count = segments.reduce(
+                  (total, segment) => total + segment.restorableQuestionCount,
+                  0,
+                );
+                if (
+                  !window.confirm(
+                    `确定一键清空分段回收站吗？共 ${segments.length} 个分段、约 ${count} 道题将被永久删除，无法恢复。`,
+                  )
+                ) {
+                  return;
+                }
+                onDeleteAll(event.currentTarget);
+              }}
+            >
+              {busyId === SEGMENT_TRASH_PURGE_BUSY_ID
+                ? "正在清空…"
+                : "一键清空"}
+            </button>
+          </div>
         </header>
         {error === undefined ? null : (
           <div className="question-bank-segment-trash-error" role="alert">
@@ -100,30 +139,49 @@ export function SegmentTrashDialog({
                         <strong>{segment.sourceHeading}</strong>
                         <span>{segment.documentTitle}</span>
                       </div>
-                      <button
-                        ref={(button) => {
-                          if (button === null) {
-                            restoreButtonRefs.current.delete(segment.id);
-                          } else {
-                            restoreButtonRefs.current.set(segment.id, button);
+                      <div className="question-bank-segment-trash-card-actions">
+                        <button
+                          ref={(button) => {
+                            if (button === null) {
+                              restoreButtonRefs.current.delete(segment.id);
+                            } else {
+                              restoreButtonRefs.current.set(segment.id, button);
+                            }
+                          }}
+                          type="button"
+                          className="secondary-button"
+                          disabled={busy || conflict !== undefined}
+                          aria-describedby={
+                            conflict === undefined
+                              ? undefined
+                              : `segment-restore-conflict-${segment.id}`
                           }
-                        }}
-                        type="button"
-                        className="secondary-button"
-                        disabled={
-                          busy || busyId !== undefined || conflict !== undefined
-                        }
-                        aria-describedby={
-                          conflict === undefined
-                            ? undefined
-                            : `segment-restore-conflict-${segment.id}`
-                        }
-                        onClick={(event) =>
-                          onRestore(segment, event.currentTarget)
-                        }
-                      >
-                        {busy ? "正在恢复…" : "恢复分段"}
-                      </button>
+                          onClick={(event) =>
+                            onRestore(segment, event.currentTarget)
+                          }
+                        >
+                          {busyId === segment.id ? "正在恢复…" : "恢复分段"}
+                        </button>
+                        <button
+                          type="button"
+                          className="danger-button"
+                          disabled={busy}
+                          onClick={(event) => {
+                            if (
+                              !window.confirm(
+                                `确定彻底删除“${segment.sourceHeading}”（第 ${segment.pageStart}–${segment.pageEnd} 页）吗？其中约 ${segment.restorableQuestionCount} 道题及作答、复习记录将被永久删除，无法恢复。`,
+                              )
+                            ) {
+                              return;
+                            }
+                            onDelete(segment, event.currentTarget);
+                          }}
+                        >
+                          {busyId === segmentTrashDeleteBusyId(segment.id)
+                            ? "正在删除…"
+                            : "彻底删除"}
+                        </button>
+                      </div>
                     </header>
                     <dl className="question-bank-segment-trash-details">
                       <div>

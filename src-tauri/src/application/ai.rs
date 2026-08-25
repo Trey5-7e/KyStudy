@@ -1,17 +1,21 @@
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use super::{PersistenceError, current_utc_millis};
 use crate::domain::{
-    AiBudget, AiCallSummary, AiModelProfile, AiProviderConfig, AiProviderType, AiUsageSummary,
+    AiBudget, AiCallSummary, AiCapabilitySource, AiModelCapabilities, AiModelProfile,
+    AiProviderConfig, AiProviderType, AiUsageSummary,
 };
 
 const MAX_PROMPT_CHARS: usize = 20_000;
 const DEFAULT_CONTEXT_LIMIT: u32 = 128_000;
-const DEFAULT_MAX_OUTPUT_TOKENS: u32 = 800;
-const DEFAULT_SINGLE_LIMIT: u64 = 8_000;
-const DEFAULT_DAILY_LIMIT: u64 = 50_000;
-const DEFAULT_MONTHLY_LIMIT: u64 = 1_000_000;
+const DEFAULT_MAX_OUTPUT_TOKENS: u32 = 131_072;
+const DEFAULT_SINGLE_LIMIT: u64 = 100_000;
+const DEFAULT_DAILY_LIMIT: u64 = 500_000;
+const DEFAULT_MONTHLY_LIMIT: u64 = 10_000_000;
 const CHINA_OFFSET_MILLIS: i64 = 8 * 60 * 60 * 1_000;
 const DAY_MILLIS: i64 = 24 * 60 * 60 * 1_000;
 const MAXIMUM_PROVIDERS: u64 = 20;
@@ -19,6 +23,10 @@ const MAXIMUM_IMAGE_COUNT: usize = 6;
 const MAXIMUM_IMAGE_DATA_URL_BYTES: usize = 4 * 1024 * 1024;
 const MAXIMUM_IMAGE_TOTAL_BYTES: usize = 12 * 1024 * 1024;
 const ESTIMATED_TOKENS_PER_IMAGE: u64 = 1_200;
+const MAXIMUM_FILE_COUNT: usize = 6;
+const MAXIMUM_FILE_BYTES: u64 = 24 * 1024 * 1024;
+const ESTIMATED_TOKENS_PER_FILE: u64 = 2_000;
+const SENSENOVA_MAX_OUTPUT_TOKENS: u32 = 2_048;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SaveAiProviderInput {
@@ -28,6 +36,11 @@ pub(crate) struct SaveAiProviderInput {
     pub(crate) model_name: String,
     pub(crate) context_limit: u32,
     pub(crate) max_output_tokens: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SaveAiProviderCapabilitiesInput {
+    pub(crate) capabilities: AiModelCapabilities,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +77,17 @@ pub(crate) struct AiImagePreviewInput {
     pub(crate) prompt: String,
     pub(crate) image_data_urls: Vec<String>,
     pub(crate) max_output_tokens: u32,
+}
+
+/// A file that has already crossed the native picker boundary and is safe for
+/// the Rust provider gateway to read. The path never leaves the backend.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AiFileAttachment {
+    pub(crate) file_name: String,
+    pub(crate) mime_type: String,
+    pub(crate) path: PathBuf,
+    pub(crate) size_bytes: u64,
+    pub(crate) sha256: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -161,6 +185,7 @@ pub(crate) struct BeginAiCall {
 pub(crate) enum AiCallPurpose {
     FoundationTest,
     PlanningChat,
+    GeneralChat,
     QuestionAnalysis,
 }
 
@@ -171,6 +196,7 @@ impl AiCallPurpose {
             // Existing workspaces constrain this column to the pre-question-analysis
             // purpose values; the per-question record keeps its own identity in v24.
             Self::PlanningChat | Self::QuestionAnalysis => "planning_chat",
+            Self::GeneralChat => "general_chat",
         }
     }
 }
@@ -201,6 +227,8 @@ pub(crate) enum AiError {
     ProviderInvalidResponse,
     #[error("AI provider rejected the request")]
     ProviderRejected,
+    #[error("AI call was interrupted")]
+    Canceled,
     #[error("AI provider does not expose a supported model list")]
     ModelListUnsupported,
     #[error("AI provider returned an empty model list")]
@@ -209,6 +237,10 @@ pub(crate) enum AiError {
     ModelListInvalid,
     #[error("AI provider model list exceeded the safe response limit")]
     ModelListTooLarge,
+    #[error("AI attachment integrity validation failed")]
+    AttachmentIntegrityFailed,
+    #[error("AI attachment exceeds the native upload limit")]
+    NativeAttachmentTooLarge,
     #[error(transparent)]
     Persistence(#[from] PersistenceError),
 }
@@ -228,10 +260,13 @@ impl AiError {
             Self::ProviderUnavailable => "AI_PROVIDER_UNAVAILABLE",
             Self::ProviderInvalidResponse => "AI_PROVIDER_RESPONSE_INVALID",
             Self::ProviderRejected => "AI_PROVIDER_REQUEST_REJECTED",
+            Self::Canceled => "AI_CALL_INTERRUPTED",
             Self::ModelListUnsupported => "AI_MODEL_LIST_UNSUPPORTED",
             Self::ModelListEmpty => "AI_MODEL_LIST_EMPTY",
             Self::ModelListInvalid => "AI_MODEL_LIST_INVALID",
             Self::ModelListTooLarge => "AI_MODEL_LIST_TOO_LARGE",
+            Self::AttachmentIntegrityFailed => "AI_ATTACHMENT_INTEGRITY_FAILED",
+            Self::NativeAttachmentTooLarge => "AI_ATTACHMENT_NATIVE_TOO_LARGE",
             Self::Persistence(error) => error.code(),
         }
     }
@@ -298,14 +333,36 @@ pub(crate) trait SecretStore: Clone + Send + Sync + 'static {
 }
 
 pub(crate) trait AiProviderGateway: Clone + Send + Sync + 'static {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The gateway boundary keeps provider, model, prompt, attachments, budget and secret explicit"
+    )]
     fn execute(
         &self,
         provider: &AiProviderConfig,
         model: &AiModelProfile,
         prompt: &str,
         image_data_urls: &[String],
+        file_attachments: &[AiFileAttachment],
         max_output_tokens: u32,
         secret: Option<&str>,
+    ) -> Result<AiProviderResponse, AiError>;
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Streaming gateway keeps cancellation, stream sink, provider, model, prompt, attachments, budget and secret explicit"
+    )]
+    fn execute_stream(
+        &self,
+        provider: &AiProviderConfig,
+        model: &AiModelProfile,
+        prompt: &str,
+        image_data_urls: &[String],
+        file_attachments: &[AiFileAttachment],
+        max_output_tokens: u32,
+        secret: Option<&str>,
+        canceled: Option<&AtomicBool>,
+        on_chunk: &mut dyn FnMut(&str) -> Result<(), AiError>,
     ) -> Result<AiProviderResponse, AiError>;
 
     fn list_models(
@@ -378,7 +435,15 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
         }
         let provider_id = Uuid::now_v7().to_string();
         let model_id = Uuid::now_v7().to_string();
-        let (provider, model) = validated_provider(input, provider_id, model_id, false, None, now)?;
+        let (provider, model) = validated_provider(
+            input,
+            provider_id,
+            model_id,
+            false,
+            None,
+            AiModelCapabilities::default(),
+            now,
+        )?;
         self.repository.create_provider(&provider, &model)?;
         self.overview()
     }
@@ -399,6 +464,7 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
             existing_model.id,
             existing.enabled,
             previous_secret_ref.clone(),
+            existing_model.capabilities,
             now,
         )?;
         if provider.secret_ref.is_none()
@@ -406,6 +472,22 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
         {
             self.secrets.delete(&reference)?;
         }
+        self.repository.update_provider(&provider, &model)?;
+        self.overview()
+    }
+
+    pub(crate) fn save_provider_capabilities(
+        &self,
+        provider_id: &str,
+        input: &SaveAiProviderCapabilitiesInput,
+    ) -> Result<AiOverview, AiError> {
+        validate_identifier(provider_id)?;
+        let now = current_utc_millis()?;
+        self.repository.ensure_defaults(now)?;
+        let (provider, mut model) = self.repository.load_provider(provider_id)?;
+        model.capabilities = input.capabilities;
+        model.capabilities.capability_source = AiCapabilitySource::Manual;
+        model.updated_at = now;
         self.repository.update_provider(&provider, &model)?;
         self.overview()
     }
@@ -507,6 +589,14 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
         self.gateway.list_models(provider_type, &base_url, &secret)
     }
 
+    pub(crate) fn active_model_transport(
+        &self,
+    ) -> Result<(AiProviderType, AiModelCapabilities), AiError> {
+        self.repository.ensure_defaults(current_utc_millis()?)?;
+        let (provider, model, _) = self.repository.load_configuration()?;
+        Ok((provider.provider_type, model.capabilities))
+    }
+
     pub(crate) fn preview(&self, input: &AiPreviewInput) -> Result<AiCallPreview, AiError> {
         self.preview_with_images(input, &[])
     }
@@ -516,23 +606,36 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
         input: &AiPreviewInput,
         image_data_urls: &[String],
     ) -> Result<AiCallPreview, AiError> {
+        self.preview_with_images_and_files(input, image_data_urls, &[])
+    }
+
+    pub(crate) fn preview_with_images_and_files(
+        &self,
+        input: &AiPreviewInput,
+        image_data_urls: &[String],
+        file_attachments: &[AiFileAttachment],
+    ) -> Result<AiCallPreview, AiError> {
         let prompt = normalize_prompt(&input.prompt)?;
         validate_image_data_urls(image_data_urls)?;
+        validate_file_attachments(file_attachments)?;
         self.repository.ensure_defaults(current_utc_millis()?)?;
         let (provider, model, budget) = self.repository.load_configuration()?;
         if input.max_output_tokens == 0
-            || input.max_output_tokens > model.max_output_tokens
-            || u64::from(input.max_output_tokens) >= u64::from(model.context_limit)
+            || (provider.provider_type == AiProviderType::SenseNovaChat
+                && input.max_output_tokens > SENSENOVA_MAX_OUTPUT_TOKENS)
         {
             return Err(AiError::InvalidInput);
         }
-        let input_token_estimate = estimate_tokens(&prompt).saturating_add(
-            ESTIMATED_TOKENS_PER_IMAGE.saturating_mul(image_data_urls.len() as u64),
-        );
-        let projected_tokens = input_token_estimate + u64::from(input.max_output_tokens);
-        if projected_tokens >= u64::from(model.context_limit) {
-            return Err(AiError::InvalidInput);
-        }
+        let input_token_estimate = estimate_tokens(&prompt)
+            .saturating_add(ESTIMATED_TOKENS_PER_IMAGE.saturating_mul(image_data_urls.len() as u64))
+            .saturating_add(
+                file_attachments
+                    .iter()
+                    .map(file_token_estimate)
+                    .sum::<u64>(),
+            );
+        let projected_tokens =
+            input_token_estimate.saturating_add(u64::from(input.max_output_tokens));
         let now = current_utc_millis()?;
         let (day_start, month_start) = usage_period_starts(now);
         let usage = self.repository.aggregate_usage(day_start, month_start)?;
@@ -545,6 +648,7 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
             &model.model_name,
             &prompt,
             image_data_urls,
+            file_attachments,
             input.max_output_tokens,
         );
         Ok(AiCallPreview {
@@ -654,9 +758,215 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
         conversation_id: Option<String>,
         allow_cache: bool,
     ) -> Result<AiCallResult, AiError> {
-        let preview = self.preview_with_images(input, image_data_urls)?;
+        self.execute_for_images_and_files(
+            input,
+            image_data_urls,
+            &[],
+            purpose,
+            conversation_id,
+            allow_cache,
+        )
+    }
+
+    pub(crate) fn execute_for_images_and_files(
+        &self,
+        input: &AiPreviewInput,
+        image_data_urls: &[String],
+        file_attachments: &[AiFileAttachment],
+        purpose: AiCallPurpose,
+        conversation_id: Option<String>,
+        allow_cache: bool,
+    ) -> Result<AiCallResult, AiError> {
+        self.execute_for_images_internal(
+            input,
+            image_data_urls,
+            file_attachments,
+            purpose,
+            conversation_id,
+            allow_cache,
+            None,
+        )
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Cancellation and request metadata stay explicit at the application boundary"
+    )]
+    pub(crate) fn execute_for_images_and_files_with_cancel(
+        &self,
+        input: &AiPreviewInput,
+        image_data_urls: &[String],
+        file_attachments: &[AiFileAttachment],
+        purpose: AiCallPurpose,
+        conversation_id: Option<String>,
+        allow_cache: bool,
+        canceled: &AtomicBool,
+    ) -> Result<AiCallResult, AiError> {
+        self.execute_for_images_internal(
+            input,
+            image_data_urls,
+            file_attachments,
+            purpose,
+            conversation_id,
+            allow_cache,
+            Some(canceled),
+        )
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Streaming execution keeps cancellation, chunk callback, cache and request metadata explicit"
+    )]
+    pub(crate) fn execute_for_images_and_files_stream(
+        &self,
+        input: &AiPreviewInput,
+        image_data_urls: &[String],
+        file_attachments: &[AiFileAttachment],
+        purpose: AiCallPurpose,
+        conversation_id: Option<String>,
+        allow_cache: bool,
+        canceled: Option<&AtomicBool>,
+        on_chunk: &mut dyn FnMut(&str) -> Result<(), AiError>,
+    ) -> Result<AiCallResult, AiError> {
+        let preview =
+            self.preview_with_images_and_files(input, image_data_urls, file_attachments)?;
         if !preview.allowed {
             return Err(AiError::BudgetBlocked);
+        }
+        if canceled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            return Err(AiError::Canceled);
+        }
+        let (provider, model, _) = self.repository.load_configuration()?;
+        let started_at = current_utc_millis()?;
+        let call_id = Uuid::now_v7().to_string();
+        if allow_cache
+            && let Some(cached) = self.repository.find_cache(&preview.request_fingerprint)?
+        {
+            let call = BeginAiCall {
+                id: call_id.clone(),
+                provider_id: provider.id,
+                model_id: model.id,
+                conversation_id,
+                purpose,
+                request_fingerprint: preview.request_fingerprint.clone(),
+                input_token_estimate: preview.input_token_estimate,
+                output_token_limit: input.max_output_tokens,
+                cache_hit: true,
+                started_at,
+            };
+            self.repository.begin_call(&call)?;
+            on_chunk(&cached.text)?;
+            let response = AiProviderResponse {
+                text: cached.text,
+                input_tokens: 0,
+                output_tokens: 0,
+                cached_input_tokens: 0,
+                reasoning_tokens: 0,
+                usage_source: "cache".to_owned(),
+            };
+            let finished_at = current_utc_millis()?;
+            if canceled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+                self.repository
+                    .fail_call(&call_id, AiError::Canceled.code(), finished_at)?;
+                return Err(AiError::Canceled);
+            }
+            self.repository.finish_call(
+                &call_id,
+                &preview.request_fingerprint,
+                &response,
+                true,
+                finished_at,
+            )?;
+            return Ok(result_from_response(call_id, response, true, finished_at));
+        }
+
+        let secret = match provider.secret_ref.as_deref() {
+            Some(reference) => self.secrets.get(reference)?,
+            None => None,
+        };
+        let call = BeginAiCall {
+            id: call_id.clone(),
+            provider_id: provider.id.clone(),
+            model_id: model.id.clone(),
+            conversation_id,
+            purpose,
+            request_fingerprint: preview.request_fingerprint.clone(),
+            input_token_estimate: preview.input_token_estimate,
+            output_token_limit: input.max_output_tokens,
+            cache_hit: false,
+            started_at,
+        };
+        self.repository.begin_call(&call)?;
+        if canceled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            let finished_at = current_utc_millis()?;
+            self.repository
+                .fail_call(&call_id, AiError::Canceled.code(), finished_at)?;
+            return Err(AiError::Canceled);
+        }
+        let response = self.gateway.execute_stream(
+            &provider,
+            &model,
+            &preview.prompt,
+            image_data_urls,
+            file_attachments,
+            input.max_output_tokens,
+            secret.as_deref(),
+            canceled,
+            on_chunk,
+        );
+        let finished_at = current_utc_millis()?;
+        match response {
+            Ok(response) => {
+                if canceled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+                    self.repository
+                        .fail_call(&call_id, AiError::Canceled.code(), finished_at)?;
+                    return Err(AiError::Canceled);
+                }
+                self.repository.finish_call(
+                    &call_id,
+                    &preview.request_fingerprint,
+                    &response,
+                    false,
+                    finished_at,
+                )?;
+                Ok(result_from_response(call_id, response, false, finished_at))
+            }
+            Err(error) => {
+                if canceled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+                    self.repository
+                        .fail_call(&call_id, AiError::Canceled.code(), finished_at)?;
+                } else {
+                    self.repository
+                        .fail_call(&call_id, error.code(), finished_at)?;
+                }
+                Err(error)
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Internal execution keeps cancellation, cache and request metadata explicit"
+    )]
+    fn execute_for_images_internal(
+        &self,
+        input: &AiPreviewInput,
+        image_data_urls: &[String],
+        file_attachments: &[AiFileAttachment],
+        purpose: AiCallPurpose,
+        conversation_id: Option<String>,
+        allow_cache: bool,
+        canceled: Option<&AtomicBool>,
+    ) -> Result<AiCallResult, AiError> {
+        let preview =
+            self.preview_with_images_and_files(input, image_data_urls, file_attachments)?;
+        if !preview.allowed {
+            return Err(AiError::BudgetBlocked);
+        }
+        if canceled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            return Err(AiError::Canceled);
         }
         let (provider, model, _) = self.repository.load_configuration()?;
         let started_at = current_utc_millis()?;
@@ -686,6 +996,11 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
                 usage_source: "cache".to_owned(),
             };
             let finished_at = current_utc_millis()?;
+            if canceled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+                self.repository
+                    .fail_call(&call_id, AiError::Canceled.code(), finished_at)?;
+                return Err(AiError::Canceled);
+            }
             self.repository.finish_call(
                 &call_id,
                 &preview.request_fingerprint,
@@ -713,17 +1028,29 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
             started_at,
         };
         self.repository.begin_call(&call)?;
+        if canceled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            let finished_at = current_utc_millis()?;
+            self.repository
+                .fail_call(&call_id, AiError::Canceled.code(), finished_at)?;
+            return Err(AiError::Canceled);
+        }
         let response = self.gateway.execute(
             &provider,
             &model,
             &preview.prompt,
             image_data_urls,
+            file_attachments,
             input.max_output_tokens,
             secret.as_deref(),
         );
         let finished_at = current_utc_millis()?;
         match response {
             Ok(response) => {
+                if canceled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+                    self.repository
+                        .fail_call(&call_id, AiError::Canceled.code(), finished_at)?;
+                    return Err(AiError::Canceled);
+                }
                 self.repository.finish_call(
                     &call_id,
                     &preview.request_fingerprint,
@@ -734,6 +1061,11 @@ impl<R: AiRepository, S: SecretStore, G: AiProviderGateway> AiUseCases<R, S, G> 
                 Ok(result_from_response(call_id, response, false, finished_at))
             }
             Err(error) => {
+                if canceled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+                    self.repository
+                        .fail_call(&call_id, AiError::Canceled.code(), finished_at)?;
+                    return Err(AiError::Canceled);
+                }
                 self.repository
                     .fail_call(&call_id, error.code(), finished_at)?;
                 Err(error)
@@ -748,6 +1080,7 @@ fn validated_provider(
     model_id: String,
     enabled: bool,
     existing_secret_ref: Option<String>,
+    capabilities: AiModelCapabilities,
     updated_at: i64,
 ) -> Result<(AiProviderConfig, AiModelProfile), AiError> {
     let provider_type =
@@ -760,7 +1093,8 @@ fn validated_provider(
         || model_name.chars().count() > 120
         || !(1_024..=2_000_000).contains(&input.context_limit)
         || !(1..=131_072).contains(&input.max_output_tokens)
-        || input.max_output_tokens >= input.context_limit
+        || (provider_type == AiProviderType::SenseNovaChat
+            && input.max_output_tokens > SENSENOVA_MAX_OUTPUT_TOKENS)
     {
         return Err(AiError::InvalidInput);
     }
@@ -787,6 +1121,7 @@ fn validated_provider(
             model_name: model_name.to_owned(),
             context_limit: input.context_limit,
             max_output_tokens: input.max_output_tokens,
+            capabilities,
             updated_at,
         },
     ))
@@ -878,6 +1213,7 @@ fn request_fingerprint(
     model_name: &str,
     prompt: &str,
     image_data_urls: &[String],
+    file_attachments: &[AiFileAttachment],
     max_output_tokens: u32,
 ) -> String {
     let mut hasher = Sha256::new();
@@ -895,8 +1231,50 @@ fn request_fingerprint(
         hasher.update(image.as_bytes());
         hasher.update([0]);
     }
+    for file in file_attachments {
+        for value in [
+            file.file_name.as_str(),
+            file.mime_type.as_str(),
+            file.sha256.as_str(),
+        ] {
+            hasher.update(value.as_bytes());
+            hasher.update([0]);
+        }
+        hasher.update(file.size_bytes.to_le_bytes());
+    }
     hasher.update(max_output_tokens.to_le_bytes());
     format!("{:X}", hasher.finalize())
+}
+
+fn validate_file_attachments(values: &[AiFileAttachment]) -> Result<(), AiError> {
+    if values.len() > MAXIMUM_FILE_COUNT {
+        return Err(AiError::InvalidInput);
+    }
+    for value in values {
+        if value.file_name.trim().is_empty()
+            || value.file_name.chars().count() > 240
+            || value.mime_type.trim().is_empty()
+            || value.mime_type.chars().count() > 120
+            || value.size_bytes > MAXIMUM_FILE_BYTES
+            || value.sha256.len() != 64
+            || !value
+                .sha256
+                .chars()
+                .all(|character| character.is_ascii_hexdigit())
+            || !value.path.is_absolute()
+        {
+            return Err(if value.size_bytes > MAXIMUM_FILE_BYTES {
+                AiError::NativeAttachmentTooLarge
+            } else {
+                AiError::InvalidInput
+            });
+        }
+    }
+    Ok(())
+}
+
+fn file_token_estimate(file: &AiFileAttachment) -> u64 {
+    ESTIMATED_TOKENS_PER_FILE.saturating_add((file.size_bytes / 4).min(32_000))
 }
 
 fn validate_image_data_urls(values: &[String]) -> Result<(), AiError> {
@@ -988,13 +1366,14 @@ pub(crate) fn default_provider(now: i64) -> (AiProviderConfig, AiModelProfile, A
             model_name: "kystudy-offline-test-v1".to_owned(),
             context_limit: DEFAULT_CONTEXT_LIMIT,
             max_output_tokens: DEFAULT_MAX_OUTPUT_TOKENS,
+            capabilities: AiModelCapabilities::default(),
             updated_at: now,
         },
         AiBudget {
             single_call_limit: DEFAULT_SINGLE_LIMIT,
             daily_token_limit: DEFAULT_DAILY_LIMIT,
             monthly_token_limit: DEFAULT_MONTHLY_LIMIT,
-            limit_mode: "block".to_owned(),
+            limit_mode: "warn".to_owned(),
             updated_at: now,
         },
     )
@@ -1003,9 +1382,14 @@ pub(crate) fn default_provider(now: i64) -> (AiProviderConfig, AiModelProfile, A
 #[cfg(test)]
 mod tests {
     use super::{
-        AiBudget, AiProviderType, AiUsageSummary, budget_warnings, estimate_tokens,
+        AiBudget, AiCallPurpose, AiProviderType, AiUsageSummary, budget_warnings, estimate_tokens,
         normalize_base_url, request_fingerprint, usage_period_starts, validate_image_data_urls,
     };
+
+    #[test]
+    fn general_chat_has_a_distinct_call_purpose() {
+        assert_eq!(AiCallPurpose::GeneralChat.as_str(), "general_chat");
+    }
 
     #[test]
     fn token_estimate_counts_chinese_more_conservatively_than_ascii() {
@@ -1063,6 +1447,7 @@ mod tests {
             "model",
             "解析",
             &["data:image/png;base64,AAA".to_owned()],
+            &[],
             800,
         );
         let second = request_fingerprint(
@@ -1071,6 +1456,7 @@ mod tests {
             "model",
             "解析",
             &["data:image/png;base64,BBB".to_owned()],
+            &[],
             800,
         );
 

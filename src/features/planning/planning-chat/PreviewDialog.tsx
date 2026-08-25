@@ -65,6 +65,14 @@ export function PreviewDialog({
             <dt>来源</dt>
             <dd>{preview.sources.length}</dd>
           </div>
+          <div>
+            <dt>浼犺緭妯″紡</dt>
+            <dd>{transportLabel(preview.transport)}</dd>
+          </div>
+          <div>
+            <dt>闄勪欢</dt>
+            <dd>{preview.attachments.length}</dd>
+          </div>
         </dl>
         <p className="planning-preview-budget">
           输入估算 {preview.preview.inputTokenEstimate}；输出上限{" "}
@@ -91,6 +99,25 @@ export function PreviewDialog({
               </button>
             ))}
           </div>
+        )}
+        {preview.attachments.length === 0 ? null : (
+          <ul
+            className="planning-preview-attachments"
+            aria-label="闄勪欢浼犺緭璇婃柇"
+          >
+            {preview.attachments.map((attachment) => (
+              <li key={attachment.id}>
+                <strong>{attachment.fileName}</strong>
+                <span>{transportLabel(attachment.transport)}</span>
+                {attachment.indexedPages === undefined ? null : (
+                  <span>宸茬储寮曪細{attachment.indexedPages} 页</span>
+                )}
+                {attachment.warning === undefined ? null : (
+                  <small>{attachment.warning}</small>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
         <pre data-confirmed-prompt="true">{preview.preview.prompt}</pre>
         {preview.preview.warnings.length === 0 ? null : (
@@ -119,4 +146,19 @@ export function PreviewDialog({
       </section>
     </EditorDialog>
   );
+}
+
+function transportLabel(value: string): string {
+  switch (value) {
+    case "native_file":
+      return "Provider 原生文件";
+    case "local_text_image":
+      return "本地文本 + 页面图片";
+    case "local_text":
+      return "本地索引文本";
+    case "mixed":
+      return "混合传输";
+    default:
+      return "无附件";
+  }
 }

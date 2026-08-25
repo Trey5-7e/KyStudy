@@ -6,6 +6,8 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import {
+  deleteAllTrashedWorkbookSegments,
+  deleteTrashedWorkbookSegment,
   getQuestionGapAcknowledgements,
   listTrashedWorkbookSegments,
   normalizeQuestionBankError,
@@ -172,13 +174,16 @@ describe("question bank client", () => {
   });
 
   it("bridges trashed segment listing and optimistic restore", async () => {
+    const snapshot = {
+      workbooks: [{ id: "w", name: "880", createdAt: 1, updatedAt: 1 }],
+      segments: [SEGMENT],
+      questions: [QUESTION],
+    };
     mockedInvoke
       .mockResolvedValueOnce([TRASHED_SEGMENT])
-      .mockResolvedValueOnce({
-        workbooks: [{ id: "w", name: "880", createdAt: 1, updatedAt: 1 }],
-        segments: [SEGMENT],
-        questions: [QUESTION],
-      });
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(snapshot);
 
     await expect(listTrashedWorkbookSegments()).resolves.toEqual([
       TRASHED_SEGMENT,
@@ -194,6 +199,24 @@ describe("question bank client", () => {
     expect(mockedInvoke).toHaveBeenLastCalledWith("restore_workbook_segment", {
       input: { segmentId: "g", expectedDeletedAt: 100 },
     });
+
+    await expect(deleteTrashedWorkbookSegment("g", 100)).resolves.toMatchObject(
+      {
+        segments: [SEGMENT],
+        questions: [{ id: "q" }],
+      },
+    );
+    expect(mockedInvoke).toHaveBeenLastCalledWith("delete_workbook_segment", {
+      input: { segmentId: "g", expectedDeletedAt: 100 },
+    });
+
+    await expect(deleteAllTrashedWorkbookSegments()).resolves.toMatchObject({
+      segments: [SEGMENT],
+      questions: [{ id: "q" }],
+    });
+    expect(mockedInvoke).toHaveBeenLastCalledWith(
+      "delete_all_trashed_workbook_segments",
+    );
   });
 
   it("bridges gap acknowledgement commands with camel-case request fields", async () => {

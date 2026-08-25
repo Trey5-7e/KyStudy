@@ -2,7 +2,6 @@ import type { RefObject } from "react";
 
 import type { IndexedQuestion } from "../../shared/tauri/questionBankClient";
 import type { AttemptResult } from "../../shared/tauri/questionClient";
-import { QuestionAiAnalysis } from "../review/QuestionAiAnalysis";
 import { QuestionRegionCard } from "../review/QuestionRegionCard";
 import { partLabel, typeLabel } from "./QuestionIndexDialogs";
 
@@ -20,6 +19,7 @@ export function PaperQuestionCard({
   onResult,
   onAdjust,
   onEdit,
+  onAiAnalysis,
 }: {
   question: IndexedQuestion;
   index: number;
@@ -30,6 +30,7 @@ export function PaperQuestionCard({
   onResult(questionId: string, result: AttemptResult): void;
   onAdjust(questionId: string): void;
   onEdit(questionId: string): void;
+  onAiAnalysis(questionId: string): void;
 }) {
   return (
     <article
@@ -69,6 +70,13 @@ export function PaperQuestionCard({
             >
               编辑题目
             </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => onAiAnalysis(question.id)}
+            >
+              AI 解析
+            </button>
           </div>
         </div>
       </header>
@@ -78,7 +86,6 @@ export function PaperQuestionCard({
         regions={question.regions}
         deferImages={deferImages}
       />
-      <QuestionAiAnalysis question={question} regions={question.regions} />
       <div
         className="paper-result-buttons"
         role="group"

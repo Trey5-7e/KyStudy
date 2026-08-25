@@ -117,6 +117,18 @@ fn initialize_application(app: &mut tauri::App) -> Result<(), Box<dyn std::error
     if let Err(error) = state.ai.recover_interrupted() {
         eprintln!("KYSTUDY_AI_RECOVERY_FAILED: {}", error.code());
     }
+    if let Err(error) = state.planning_chat.expire_temporary_attachments() {
+        eprintln!(
+            "KYSTUDY_PLANNING_TEMP_ATTACHMENTS_EXPIRE_FAILED: {}",
+            error.code()
+        );
+    }
+    if let Err(error) = state.ai_chat.expire_temporary_attachments() {
+        eprintln!(
+            "KYSTUDY_CHAT_TEMP_ATTACHMENTS_EXPIRE_FAILED: {}",
+            error.code()
+        );
+    }
     app.manage(state);
     Ok(())
 }
@@ -289,6 +301,7 @@ macro_rules! kystudy_command_handler {
             commands::save_paper_pdf,
             commands::create_ai_provider,
             commands::update_ai_provider,
+            commands::save_ai_provider_capabilities,
             commands::activate_ai_provider,
             commands::delete_ai_provider,
             commands::save_ai_budget,
@@ -304,9 +317,28 @@ macro_rules! kystudy_command_handler {
             commands::create_planning_conversation,
             commands::rename_planning_conversation,
             commands::delete_planning_conversation,
+            commands::list_ai_attachments,
+            commands::attach_resource_to_ai_conversation,
+            commands::attach_temporary_ai_attachment,
+            commands::remove_ai_attachment,
+            commands::retry_ai_attachment,
             commands::preview_planning_chat,
             commands::execute_planning_chat,
+            commands::execute_planning_chat_stream,
+            commands::cancel_ai_chat,
             commands::save_planning_reply_as_draft,
+            commands::list_ai_chat_conversations,
+            commands::create_ai_chat_conversation,
+            commands::rename_ai_chat_conversation,
+            commands::delete_ai_chat_conversation,
+            commands::list_ai_chat_attachments,
+            commands::attach_resource_to_ai_chat,
+            commands::attach_temporary_ai_chat_attachment,
+            commands::remove_ai_chat_attachment,
+            commands::retry_ai_chat_attachment,
+            commands::preview_ai_chat,
+            commands::execute_ai_chat,
+            commands::execute_ai_chat_stream,
             commands::get_workspace_status,
             commands::initialize_default_workspace,
             commands::list_subjects,
@@ -383,6 +415,8 @@ macro_rules! kystudy_command_handler {
             commands::trash_indexed_question,
             commands::trash_workbook_segment,
             commands::restore_workbook_segment,
+            commands::delete_workbook_segment,
+            commands::delete_all_trashed_workbook_segments,
             commands::reassign_workbook_segment,
             commands::get_workbook_profile,
             commands::set_workbook_default_subject,

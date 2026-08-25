@@ -7,7 +7,7 @@ import { MarkdownRenderer } from "../../../shared/components/MarkdownRenderer";
 interface ThreadProps {
   conversation?: PlanningConversation;
   onOpenReference(documentId: string, page: number): void;
-  onCopyMessage(message: PlanningMessage): void;
+  onCopyMessage(message: PlanningMessage, format?: "markdown" | "text"): void;
   onRetryMessage(message: PlanningMessage): void;
 }
 
@@ -32,14 +32,25 @@ export function Thread({
           className={`planning-message planning-message-${message.role}`}
         >
           <strong>{message.role === "user" ? "你" : "AI 建议"}</strong>
-          <MarkdownRenderer source={message.content} />
+          <MarkdownRenderer
+            source={message.content}
+            sources={message.sources}
+            onOpenReference={onOpenReference}
+          />
           <div className="planning-message-actions">
             <button
               type="button"
               className="text-button"
-              onClick={() => onCopyMessage(message)}
+              onClick={() => onCopyMessage(message, "markdown")}
             >
               复制 Markdown
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => onCopyMessage(message, "text")}
+            >
+              Copy plain text
             </button>
             {message.role === "assistant" ? (
               <button

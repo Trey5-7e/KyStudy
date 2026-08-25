@@ -24,10 +24,11 @@ mod workspace;
 #[cfg(test)]
 pub(crate) use ai::AiProviderOverview;
 pub(crate) use ai::{
-    AiCachedResponse, AiCallPreview, AiCallPurpose, AiCallResult, AiError, AiImagePreviewInput,
-    AiModelOption, AiOverview, AiPreviewInput, AiProviderGateway, AiProviderResponse, AiRepository,
-    AiUseCases, BeginAiCall, ListAiModelsInput, QuestionAiAnalysisHistoryEntry,
-    QuestionAiAnalysisInput, SaveAiBudgetInput, SaveAiProviderInput, SecretStore, default_provider,
+    AiCachedResponse, AiCallPreview, AiCallPurpose, AiCallResult, AiError, AiFileAttachment,
+    AiImagePreviewInput, AiModelOption, AiOverview, AiPreviewInput, AiProviderGateway,
+    AiProviderResponse, AiRepository, AiUseCases, BeginAiCall, ListAiModelsInput,
+    QuestionAiAnalysisHistoryEntry, QuestionAiAnalysisInput, SaveAiBudgetInput,
+    SaveAiProviderCapabilitiesInput, SaveAiProviderInput, SecretStore, default_provider,
     estimate_tokens,
 };
 pub(crate) use analytics::{
@@ -54,7 +55,7 @@ pub(crate) use mindmap::{
 pub(crate) use ocr::{
     ConfirmQuestionRegionOcrInput, OCR_ENGINE_NAME, OcrComponentDownloader, OcrComponentManager,
     OcrComponentState, OcrComponentStatus, OcrEngine, OcrEngineLine, OcrEngineOutput, OcrError,
-    OcrPageLine, OcrPageRecognition, OcrRegionSource, OcrRepository, OcrUseCases,
+    OcrPackageOption, OcrPageLine, OcrPageRecognition, OcrRegionSource, OcrRepository, OcrUseCases,
     RecognizePdfPageInput, RecognizeQuestionRegionInput,
 };
 pub(crate) use plan_progress::{
@@ -71,10 +72,11 @@ pub(crate) use planning::{
     SavePlanStageInput,
 };
 pub(crate) use planning_chat::{
-    ConfirmPlanningChatInput, PlanningChatError, PlanningChatInput, PlanningChatPreview,
-    PlanningChatReply, PlanningChatRepository, PlanningChatUseCases, PlanningContextSelection,
-    PlanningConversation, PlanningMessage, PlanningQuestionContext, PlanningSource,
-    ResolvedPlanningContext, context_token_estimate, trim_chars,
+    AiAttachmentRef, ConfirmPlanningChatInput, PlanningAttachmentPreview, PlanningChatError,
+    PlanningChatInput, PlanningChatPreview, PlanningChatReply, PlanningChatRepository,
+    PlanningChatUseCases, PlanningContextSelection, PlanningConversation, PlanningMessage,
+    PlanningQuestionContext, PlanningSource, ResolvedPlanningAttachment, ResolvedPlanningContext,
+    ResolvedPlanningFile, TemporaryAttachmentInput, context_token_estimate, trim_chars,
 };
 pub(crate) use question::{
     AddQuestionAttemptInput, AddQuestionRegionInput, BatchClassifyQuestionsInput,
@@ -83,10 +85,10 @@ pub(crate) use question::{
     ValidatedQuestionUpdate,
 };
 pub(crate) use question_bank::{
-    BulkQuestionAttemptInput, CreateWorkbookCategoryInput, ImportQuestionIndexInput,
-    IndexedQuestionDraftInput, IndexedQuestionRegionUpdateInput, InsertIndexedQuestionInput,
-    QuestionBankError, QuestionBankRepository, QuestionBankUseCases, ReassignWorkbookSegmentInput,
-    RecordBulkQuestionAttemptsInput, RenameWorkbookCategoryInput,
+    BulkQuestionAttemptInput, CreateWorkbookCategoryInput, DeleteTrashedWorkbookSegmentInput,
+    ImportQuestionIndexInput, IndexedQuestionDraftInput, IndexedQuestionRegionUpdateInput,
+    InsertIndexedQuestionInput, QuestionBankError, QuestionBankRepository, QuestionBankUseCases,
+    ReassignWorkbookSegmentInput, RecordBulkQuestionAttemptsInput, RenameWorkbookCategoryInput,
     ReplaceIndexedQuestionRegionsInput, RestoreWorkbookSegmentInput,
     SetQuestionGapAcknowledgementInput, TrashWorkbookSegmentInput, UpdateIndexedQuestionInput,
     ValidatedBulkAttempt, ValidatedIndexedQuestion, ValidatedIndexedQuestionUpdate,
@@ -95,6 +97,7 @@ pub(crate) use question_bank::{
 pub(crate) use resource::{
     ImportError, ImportProgress, ImportRequest, MindMapSource, ReadableResource, RecoveryReport,
     ResourceDocument, ResourceReaderDescriptor, ResourceRepository, ResourceUseCases,
+    classify_source,
 };
 pub(crate) use review::{
     GenerateReviewQueueInput, InsertReviewQueueItemInput, PinQuestionReviewInput,

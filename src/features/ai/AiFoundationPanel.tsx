@@ -1,4 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  Baidu,
+  DeepSeek,
+  Doubao,
+  Kimi,
+  Minimax,
+  OpenAI,
+  Qwen,
+  SiliconCloud,
+  Zhipu,
+} from "@lobehub/icons";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import {
   activateAiProvider,
@@ -11,10 +23,12 @@ import {
   normalizeAiError,
   previewAiCall,
   saveAiBudget,
+  saveAiProviderCapabilities,
   saveAiSecret,
   updateAiProvider,
   type AiCallPreview,
   type AiCallResult,
+  type AiCapabilitySelection,
   type AiCommandError,
   type AiLimitMode,
   type AiModelOption,
@@ -24,6 +38,12 @@ import {
   type SaveAiProviderRequest,
 } from "../../shared/tauri/aiClient";
 import { EditorDialog } from "../../shared/components/EditorDialog";
+import {
+  AI_PROVIDER_PRESETS,
+  findAiProviderPreset,
+  findAiProviderPresetById,
+  type AiProviderPreset,
+} from "./aiProviderPresets";
 import "./ai.css";
 
 interface ProviderDraft {
@@ -33,6 +53,12 @@ interface ProviderDraft {
   modelName: string;
   contextLimit: string;
   maxOutputTokens: string;
+}
+
+interface CapabilityDraft {
+  supportsImage: AiCapabilitySelection;
+  supportsFile: AiCapabilitySelection;
+  supportsPdf: AiCapabilitySelection;
 }
 
 interface BudgetDraft {
@@ -46,12 +72,18 @@ type AiDialogMode =
   "providers" | "provider-form" | "budget" | "connection" | "history";
 
 const EMPTY_PROVIDER: ProviderDraft = {
-  providerType: "openai_responses",
-  displayName: "",
-  baseUrl: "https://api.openai.com/v1",
-  modelName: "",
+  providerType: "deepseek_chat",
+  displayName: "DeepSeek",
+  baseUrl: "https://api.deepseek.com",
+  modelName: "deepseek-chat",
   contextLimit: "128000",
-  maxOutputTokens: "800",
+  maxOutputTokens: "131072",
+};
+
+const EMPTY_CAPABILITIES: CapabilityDraft = {
+  supportsImage: "unknown",
+  supportsFile: "unknown",
+  supportsPdf: "unknown",
 };
 
 const PROVIDER_DEFAULTS: Record<
@@ -60,6 +92,10 @@ const PROVIDER_DEFAULTS: Record<
 > = {
   openai_responses: {
     label: "OpenAI Responses API",
+    baseUrl: "https://api.openai.com/v1",
+  },
+  openai_chat: {
+    label: "OpenAI 兼容 Chat Completions",
     baseUrl: "https://api.openai.com/v1",
   },
   zhipu_chat: {
@@ -77,6 +113,14 @@ const PROVIDER_DEFAULTS: Record<
   deepseek_chat: {
     label: "DeepSeek OpenAI 兼容",
     baseUrl: "https://api.deepseek.com",
+  },
+  sensenova_chat: {
+    label: "SenseNova 原生 Chat API",
+    baseUrl: "https://api.sensenova.cn/v1/llm",
+  },
+  litellm_gateway: {
+    label: "LiteLLM AI Gateway",
+    baseUrl: "http://127.0.0.1:4000/v1",
   },
 };
 
@@ -98,18 +142,66 @@ function defaultBaseUrl(providerType: AiProviderType): string {
     : PROVIDER_DEFAULTS[providerType].baseUrl;
 }
 
+function providerMaxOutputTokens(providerType: AiProviderType): number {
+  return providerType === "sensenova_chat" ? 2048 : 131072;
+}
+
+function ProviderPresetIcon({ preset }: { preset: AiProviderPreset }) {
+  if (preset.icon === "deepseek") {
+    return <DeepSeek size={22} aria-hidden="true" />;
+  }
+  if (preset.icon === "openai") {
+    return <OpenAI size={22} aria-hidden="true" />;
+  }
+  if (preset.icon === "qwen") {
+    return <Qwen size={22} aria-hidden="true" />;
+  }
+  if (preset.icon === "zhipu") {
+    return <Zhipu size={22} aria-hidden="true" />;
+  }
+  if (preset.icon === "kimi") {
+    return <Kimi size={22} aria-hidden="true" />;
+  }
+  if (preset.icon === "minimax") {
+    return <Minimax size={22} aria-hidden="true" />;
+  }
+  if (preset.icon === "baidu") {
+    return <Baidu size={22} aria-hidden="true" />;
+  }
+  if (preset.icon === "doubao") {
+    return <Doubao size={22} aria-hidden="true" />;
+  }
+  if (preset.icon === "siliconcloud") {
+    return <SiliconCloud size={22} aria-hidden="true" />;
+  }
+  return (
+    <span className="ai-provider-preset-fallback-icon" aria-hidden="true">
+      {preset.icon === "gateway" ? "↔" : "＋"}
+    </span>
+  );
+}
+
 function modelListHint(providerType: AiProviderType, baseUrl: string): string {
   if (providerType === "zhipu_chat" || providerType === "doubao_responses") {
     return "该 Provider 不保证标准 /models 接口；获取失败时可继续手动填写模型 ID。";
+  }
+  if (providerType === "openai_chat") {
+    return `OpenAI Chat Completions 兼容接口将从 ${baseUrl || "<基础地址>"}/models 获取模型；如果供应商不提供该接口，可直接填写模型 ID。`;
+  }
+  if (providerType === "litellm_gateway") {
+    return "LiteLLM 负责供应商路由、虚拟 Key 与模型别名；基础地址通常填写 http://127.0.0.1:4000/v1。";
+  }
+  if (providerType === "sensenova_chat") {
+    return `SenseNova 原生接口使用 ${baseUrl || "https://api.sensenova.cn/v1/llm"}/models 获取模型；模型输出上限建议不超过 2048。`;
   }
   return `模型列表将从 ${baseUrl || "<基础地址>"}/models 获取。`;
 }
 
 const INITIAL_BUDGET: BudgetDraft = {
-  singleCallLimit: "8000",
-  dailyTokenLimit: "50000",
-  monthlyTokenLimit: "1000000",
-  limitMode: "block",
+  singleCallLimit: "100000",
+  dailyTokenLimit: "500000",
+  monthlyTokenLimit: "10000000",
+  limitMode: "warn",
 };
 
 const WARNING_COPY: Record<AiCallPreview["warnings"][number], string> = {
@@ -126,6 +218,18 @@ function draftFromProvider(provider: AiProviderConfig): ProviderDraft {
     modelName: provider.modelName,
     contextLimit: String(provider.contextLimit),
     maxOutputTokens: String(provider.maxOutputTokens),
+  };
+}
+
+function capabilityDraftFromProvider(
+  provider: AiProviderConfig,
+): CapabilityDraft {
+  const selection = (value: boolean | "unknown"): AiCapabilitySelection =>
+    value === true ? "supported" : value === false ? "unsupported" : "unknown";
+  return {
+    supportsImage: selection(provider.capabilities.supportsImage),
+    supportsFile: selection(provider.capabilities.supportsFile),
+    supportsPdf: selection(provider.capabilities.supportsPdf),
   };
 }
 
@@ -159,7 +263,14 @@ function isUserVisibleProvider(provider: AiProviderConfig): boolean {
   return provider.providerType !== "offline_test";
 }
 
-export function AiFoundationPanel() {
+export interface AiFoundationPanelProps {
+  /** Render the provider cards in the page instead of hiding them behind a dialog. */
+  inlineManagement?: boolean;
+}
+
+export function AiFoundationPanel({
+  inlineManagement = false,
+}: AiFoundationPanelProps) {
   const modeHeadingRef = useRef<HTMLHeadingElement>(null);
   const previousDialogModeRef = useRef<AiDialogMode | undefined>(undefined);
   const [overview, setOverview] = useState<AiOverview>();
@@ -172,13 +283,18 @@ export function AiFoundationPanel() {
     useState<ProviderDraft>(EMPTY_PROVIDER);
   const [initialProviderDraft, setInitialProviderDraft] =
     useState<ProviderDraft>(EMPTY_PROVIDER);
+  const [capabilityDraft, setCapabilityDraft] =
+    useState<CapabilityDraft>(EMPTY_CAPABILITIES);
+  const [initialCapabilityDraft, setInitialCapabilityDraft] =
+    useState<CapabilityDraft>(EMPTY_CAPABILITIES);
+  const [selectedPresetId, setSelectedPresetId] = useState("deepseek");
   const [secret, setSecret] = useState("");
   const [modelOptions, setModelOptions] = useState<AiModelOption[]>([]);
   const [secretDeleteConfirmation, setSecretDeleteConfirmation] =
     useState(false);
   const [deleteConfirmationId, setDeleteConfirmationId] = useState<string>();
   const [prompt, setPrompt] = useState("请用一句话说明你收到的测试内容。");
-  const [outputLimit, setOutputLimit] = useState("300");
+  const [outputLimit, setOutputLimit] = useState("4096");
   const [preview, setPreview] = useState<AiCallPreview>();
   const [result, setResult] = useState<AiCallResult>();
   const [confirmed, setConfirmed] = useState(false);
@@ -270,6 +386,9 @@ export function AiFoundationPanel() {
     const next = { ...EMPTY_PROVIDER };
     setProviderDraft(next);
     setInitialProviderDraft(next);
+    setCapabilityDraft(EMPTY_CAPABILITIES);
+    setInitialCapabilityDraft(EMPTY_CAPABILITIES);
+    setSelectedPresetId("deepseek");
     setSecret("");
     setModelOptions([]);
     setSecretDeleteConfirmation(false);
@@ -282,6 +401,9 @@ export function AiFoundationPanel() {
     const next = draftFromProvider(provider);
     setProviderDraft(next);
     setInitialProviderDraft(next);
+    setCapabilityDraft(capabilityDraftFromProvider(provider));
+    setInitialCapabilityDraft(capabilityDraftFromProvider(provider));
+    setSelectedPresetId(findAiProviderPreset(provider)?.id ?? "custom");
     setSecret("");
     setModelOptions([]);
     setSecretDeleteConfirmation(false);
@@ -305,6 +427,8 @@ export function AiFoundationPanel() {
       setBudget(initialBudget);
     }
     setEditingProviderId(undefined);
+    setSelectedPresetId("deepseek");
+    setCapabilityDraft(EMPTY_CAPABILITIES);
     setSecret("");
     setModelOptions([]);
     setSecretDeleteConfirmation(false);
@@ -314,6 +438,8 @@ export function AiFoundationPanel() {
   const closeProviderForm = () => {
     setDialogMode("providers");
     setEditingProviderId(undefined);
+    setSelectedPresetId("deepseek");
+    setCapabilityDraft(EMPTY_CAPABILITIES);
     setSecret("");
     setModelOptions([]);
     setSecretDeleteConfirmation(false);
@@ -323,6 +449,45 @@ export function AiFoundationPanel() {
   const closeBudgetEditor = () => {
     setBudget(initialBudget);
     setDialogMode("providers");
+  };
+
+  const selectProviderPreset = (preset: AiProviderPreset) => {
+    setSelectedPresetId(preset.id);
+    setSecret("");
+    setSecretDeleteConfirmation(false);
+    setModelOptions([]);
+    if (preset.id === "custom") {
+      setProviderDraft((current) => ({
+        ...current,
+        providerType: "litellm_gateway",
+        displayName: "",
+        baseUrl: "",
+        modelName: "",
+      }));
+      return;
+    }
+    setProviderDraft((current) => ({
+      ...current,
+      providerType: preset.providerType,
+      displayName: preset.displayName,
+      baseUrl: preset.baseUrl,
+      modelName: preset.modelName,
+      maxOutputTokens: String(
+        Math.min(
+          Number(current.maxOutputTokens) || 131072,
+          providerMaxOutputTokens(preset.providerType),
+        ),
+      ),
+    }));
+  };
+
+  const openPresetApiKeyPage = (preset: AiProviderPreset) => {
+    if (preset.apiKeyUrl === undefined) {
+      return;
+    }
+    void openUrl(preset.apiKeyUrl).catch(() => {
+      setNotice("无法打开供应商 API Key 页面，请复制地址到浏览器打开。");
+    });
   };
 
   const handleDialogBack = () => {
@@ -355,21 +520,36 @@ export function AiFoundationPanel() {
       } else {
         return;
       }
+      if (providerId === undefined) {
+        throw new Error("AI_PROVIDER_CREATE_RESULT_INVALID");
+      }
+      next = await saveAiProviderCapabilities(providerId, capabilityDraft);
       if (
         isRemoteProviderType(providerDraft.providerType) &&
         secret.trim() !== ""
       ) {
-        if (providerId === undefined) {
-          throw new Error("AI_PROVIDER_CREATE_RESULT_INVALID");
-        }
         next = await saveAiSecret(providerId, secret);
+      }
+      const activateNewProvider =
+        creating &&
+        isRemoteProviderType(providerDraft.providerType) &&
+        secret.trim() !== "" &&
+        providerId !== undefined;
+      if (activateNewProvider && providerId !== undefined) {
+        next = await activateAiProvider(providerId);
       }
       applyOverview(next);
       closeDialog(false);
       invalidatePreview();
-      setNotice(
-        creating ? "API 配置已新增，可在列表中设为当前。" : "API 配置已更新。",
-      );
+      if (activateNewProvider) {
+        setNotice("API 配置已保存并已设为当前。");
+      }
+      if (!activateNewProvider)
+        setNotice(
+          creating
+            ? "API 配置已新增，可在列表中设为当前。"
+            : "API 配置已更新。",
+        );
     });
   };
 
@@ -489,7 +669,10 @@ export function AiFoundationPanel() {
   const dialogDirty =
     dialogMode === "provider-form"
       ? JSON.stringify(providerDraft) !==
-          JSON.stringify(initialProviderDraft) || secret !== ""
+          JSON.stringify(initialProviderDraft) ||
+        JSON.stringify(capabilityDraft) !==
+          JSON.stringify(initialCapabilityDraft) ||
+        secret !== ""
       : dialogMode === "budget"
         ? JSON.stringify(budget) !== JSON.stringify(initialBudget)
         : false;
@@ -497,12 +680,12 @@ export function AiFoundationPanel() {
     isRemoteProviderType(providerDraft.providerType) &&
     providerDraft.baseUrl.trim() !== "" &&
     (secret.trim() !== "" || editingProvider?.hasSecret === true);
+  const selectedPreset = findAiProviderPresetById(selectedPresetId);
 
   return (
     <section className="ai-card" aria-labelledby="ai-title">
       <div className="ai-heading">
         <div>
-          <p className="section-label">AI 设置</p>
           <h2 id="ai-title">Provider 与调用控制</h2>
         </div>
         <div className="ai-usage" aria-label="Token 用量">
@@ -534,10 +717,10 @@ export function AiFoundationPanel() {
           </div>
           <button
             type="button"
-            onClick={openManagement}
+            onClick={inlineManagement ? openCreate : openManagement}
             disabled={busy !== undefined}
           >
-            管理 AI 配置
+            {inlineManagement ? "新增 API 配置" : "管理 AI 配置"}
           </button>
         </div>
         {overview === undefined ? (
@@ -581,6 +764,80 @@ export function AiFoundationPanel() {
           </small>
         </div>
       </section>
+
+      {inlineManagement ? (
+        <section
+          className="ai-inline-provider-manager"
+          aria-labelledby="ai-inline-provider-title"
+        >
+          <div className="ai-inline-provider-heading">
+            <div>
+              <h3 id="ai-inline-provider-title">API 配置</h3>
+              <span>{visibleProviders.length} / 20 个配置</span>
+            </div>
+          </div>
+          {overview === undefined ? (
+            <p className="ai-provider-summary-empty">正在加载 Provider 配置…</p>
+          ) : visibleProviders.length === 0 ? (
+            <p className="ai-provider-summary-empty">
+              尚未配置远程 Provider，请先新增一个 API 配置。
+            </p>
+          ) : (
+            <ul className="ai-inline-provider-list">
+              {visibleProviders.map((provider) => (
+                <li
+                  key={provider.id}
+                  className={
+                    provider.active ? "ai-inline-provider-active" : undefined
+                  }
+                >
+                  <div className="ai-inline-provider-main">
+                    <div className="ai-inline-provider-title-row">
+                      <strong>{provider.displayName}</strong>
+                      {provider.active ? (
+                        <span className="ai-active-tag">当前使用</span>
+                      ) : null}
+                    </div>
+                    <span>{provider.modelName}</span>
+                    <small>
+                      {providerLabel(provider.providerType)} ·{" "}
+                      {providerDestination(provider)} ·{" "}
+                      {provider.hasSecret ? "密钥已保存" : "未保存密钥"}
+                    </small>
+                  </div>
+                  <div className="ai-inline-provider-actions">
+                    {!provider.active ? (
+                      <button
+                        type="button"
+                        onClick={() => activateProvider(provider.id)}
+                        disabled={busy !== undefined}
+                      >
+                        设为当前
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => openEdit(provider)}
+                      disabled={busy !== undefined}
+                    >
+                      编辑
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => activateProvider(provider.id, true)}
+                      disabled={busy !== undefined}
+                    >
+                      测试连接
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
       {dialogMode !== undefined ? (
         <EditorDialog
@@ -806,6 +1063,50 @@ export function AiFoundationPanel() {
               className="ai-settings ai-dialog-panel"
               onSubmit={submitProvider}
             >
+              <section
+                className="ai-provider-preset-section ai-wide-field"
+                aria-labelledby="ai-provider-preset-title"
+              >
+                <div className="ai-provider-preset-heading">
+                  <div>
+                    <strong id="ai-provider-preset-title">预设供应商</strong>
+                    <span>选择后会自动填充请求地址和默认模型</span>
+                  </div>
+                  <span className="ai-provider-preset-count">
+                    {AI_PROVIDER_PRESETS.length - 1} 个常用预设
+                  </span>
+                </div>
+                <div className="ai-provider-preset-grid">
+                  {AI_PROVIDER_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className={`ai-provider-preset-card${
+                        selectedPresetId === preset.id
+                          ? " ai-provider-preset-selected"
+                          : ""
+                      }`}
+                      aria-pressed={selectedPresetId === preset.id}
+                      onClick={() => selectProviderPreset(preset)}
+                      disabled={busy !== undefined}
+                    >
+                      <span className="ai-provider-preset-icon">
+                        <ProviderPresetIcon preset={preset} />
+                      </span>
+                      <span className="ai-provider-preset-copy">
+                        <strong>{preset.label}</strong>
+                        <small>
+                          {preset.id === "custom"
+                            ? "手动填写"
+                            : preset.id === "openai-compatible"
+                              ? "LiteLLM / New API"
+                              : "官方接口"}
+                        </small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
               <h3 ref={modeHeadingRef} tabIndex={-1}>
                 Provider 基础配置
               </h3>
@@ -818,20 +1119,34 @@ export function AiFoundationPanel() {
                   disabled={busy !== undefined}
                   onChange={(event) => {
                     const providerType = event.target.value as AiProviderType;
+                    setSelectedPresetId("custom");
                     setSecretDeleteConfirmation(false);
                     setModelOptions([]);
                     setProviderDraft((current) => ({
                       ...current,
                       providerType,
                       baseUrl: defaultBaseUrl(providerType),
+                      maxOutputTokens: String(
+                        Math.min(
+                          Number(current.maxOutputTokens) || 131072,
+                          providerMaxOutputTokens(providerType),
+                        ),
+                      ),
                     }));
                   }}
                 >
+                  <option value="litellm_gateway">
+                    LiteLLM AI Gateway（开源）
+                  </option>
                   <option value="openai_responses">OpenAI Responses API</option>
+                  <option value="openai_chat">
+                    OpenAI 兼容 Chat Completions
+                  </option>
                   <option value="zhipu_chat">智谱 Chat Completions</option>
                   <option value="qwen_chat">千问 OpenAI 兼容</option>
                   <option value="doubao_responses">豆包 Responses API</option>
                   <option value="deepseek_chat">DeepSeek OpenAI 兼容</option>
+                  {/* Experimental provider protocols are intentionally hidden until the API gateway is selected. */}
                 </select>
               </label>
               <label>
@@ -947,6 +1262,16 @@ export function AiFoundationPanel() {
                       onChange={(event) => setSecret(event.target.value)}
                     />
                   </label>
+                  {selectedPreset?.apiKeyUrl !== undefined ? (
+                    <button
+                      type="button"
+                      className="ai-provider-key-link"
+                      onClick={() => openPresetApiKeyPage(selectedPreset)}
+                      disabled={busy !== undefined}
+                    >
+                      获取 API Key
+                    </button>
+                  ) : null}
                   <span>
                     {editingProvider?.hasSecret === true
                       ? "密钥已保存在 Windows 凭据管理器"
@@ -995,6 +1320,77 @@ export function AiFoundationPanel() {
                     }
                   }}
                 >
+                  资料能力
+                </summary>
+                <div className="ai-provider-capability-grid">
+                  <label>
+                    图片
+                    <select
+                      name="ai-provider-supports-image"
+                      value={capabilityDraft.supportsImage}
+                      disabled={busy !== undefined}
+                      onChange={(event) =>
+                        setCapabilityDraft((current) => ({
+                          ...current,
+                          supportsImage: event.target
+                            .value as AiCapabilitySelection,
+                        }))
+                      }
+                    >
+                      <option value="unknown">未知</option>
+                      <option value="supported">支持原生传输</option>
+                      <option value="unsupported">不支持原生传输</option>
+                    </select>
+                  </label>
+                  <label>
+                    文件
+                    <select
+                      name="ai-provider-supports-file"
+                      value={capabilityDraft.supportsFile}
+                      disabled={busy !== undefined}
+                      onChange={(event) =>
+                        setCapabilityDraft((current) => ({
+                          ...current,
+                          supportsFile: event.target
+                            .value as AiCapabilitySelection,
+                        }))
+                      }
+                    >
+                      <option value="unknown">未知</option>
+                      <option value="supported">支持原生传输</option>
+                      <option value="unsupported">不支持原生传输</option>
+                    </select>
+                  </label>
+                  <label>
+                    PDF
+                    <select
+                      name="ai-provider-supports-pdf"
+                      value={capabilityDraft.supportsPdf}
+                      disabled={busy !== undefined}
+                      onChange={(event) =>
+                        setCapabilityDraft((current) => ({
+                          ...current,
+                          supportsPdf: event.target
+                            .value as AiCapabilitySelection,
+                        }))
+                      }
+                    >
+                      <option value="unknown">未知</option>
+                      <option value="supported">支持原生传输</option>
+                      <option value="unsupported">不支持原生传输</option>
+                    </select>
+                  </label>
+                </div>
+              </details>
+              <details className="ai-provider-advanced ai-wide-field">
+                <summary
+                  aria-disabled={busy !== undefined}
+                  onClick={(event) => {
+                    if (busy !== undefined) {
+                      event.preventDefault();
+                    }
+                  }}
+                >
                   高级限制
                 </summary>
                 <div>
@@ -1026,7 +1422,7 @@ export function AiFoundationPanel() {
                       inputMode="numeric"
                       autoComplete="off"
                       min={1}
-                      max={131072}
+                      max={providerMaxOutputTokens(providerDraft.providerType)}
                       value={providerDraft.maxOutputTokens}
                       disabled={busy !== undefined}
                       onChange={(event) =>
@@ -1194,7 +1590,7 @@ export function AiFoundationPanel() {
                     inputMode="numeric"
                     autoComplete="off"
                     min={1}
-                    max={activeProvider?.maxOutputTokens ?? 800}
+                    max={activeProvider?.maxOutputTokens ?? 131072}
                     value={outputLimit}
                     disabled={
                       busy !== undefined || activeProvider === undefined

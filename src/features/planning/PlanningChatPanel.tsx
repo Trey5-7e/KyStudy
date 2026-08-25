@@ -1,10 +1,36 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import type { AiCommandError } from "../../shared/tauri/aiClient";
+import {
+  createAiChatConversation,
+  cancelAiChatOperation,
+  deleteAiChatConversation,
+  executeAiChat,
+  executeAiChatStream,
+  listAiChatConversations,
+  normalizeAiChatError,
+  previewAiChat,
+  renameAiChatConversation,
+} from "../../shared/tauri/aiChatClient";
+import {
+  attachResourceToAiConversation,
+  listAiAttachments,
+  removeAiAttachment,
+  retryAiAttachment,
+} from "../../shared/tauri/aiAttachmentClient";
+import type { AiAttachmentRef } from "../../shared/tauri/aiConversationContract";
 import {
   createPlanningConversation,
   deletePlanningConversation,
   executePlanningChat,
+  executePlanningChatStream,
   listPlanningConversations,
   renamePlanningConversation,
   normalizePlanningChatError,
@@ -17,67 +43,83 @@ import {
   type PlanningQuestionContext,
 } from "../../shared/tauri/planningChatClient";
 import {
-  normalizeResourceSearchError,
-  searchResources,
-  type ResourceSearchResult,
-} from "../../shared/tauri/resourceSearchClient";
+  listenToImportEvents,
+  listResources,
+  normalizeResourceCommandError,
+  cancelResourceImport,
+  getResourceReaderDescriptor,
+  startResourceImport,
+  type ImportEvent,
+  type ResourceDocument,
+} from "../../shared/tauri/resourceClient";
+import { normalizeResourceSearchError } from "../../shared/tauri/resourceSearchClient";
+import { createLocalPdfPageRecognizer } from "../library/pdf/pdfOcr";
 import {
   buildPlanningChatRequest,
   confirmedPromptMatches,
   isCurrentPlanningRequest,
   planningPreviewFingerprint,
-  togglePlanningContext,
-  type SelectedPlanningContext,
 } from "./planningChatModel";
-import { Composer } from "./planning-chat/Composer";
-import { ContextPanel } from "./planning-chat/ContextPanel";
+import { AssistantChatComposer } from "./planning-chat/AssistantChatComposer";
+import { AssistantChatRuntime } from "./planning-chat/AssistantChatRuntime";
+import { AssistantChatThread } from "./planning-chat/AssistantChatThread";
 import { ConversationRail } from "./planning-chat/ConversationRail";
 import { DraftAction } from "./planning-chat/DraftAction";
 import { PreviewDialog } from "./planning-chat/PreviewDialog";
-import { Thread } from "./planning-chat/Thread";
+import { ResourceContextDialog } from "./planning-chat/ResourceContextDialog";
+import {
+  getQuestionBank,
+  type IndexedQuestion,
+  type QuestionBankSnapshot,
+} from "../../shared/tauri/questionBankClient";
+import { summarizeQuestionBankForPrompt } from "./planning-chat/aiPaperProposalModel";
+import type { LocalComposerFile } from "./planning-chat/localFileExtract";
 import "./planning-chat.css";
+import "./planning-chat/assistant-chat-ui.css";
 
 interface PlanningChatPanelProps {
   onOpenReference(documentId: string, page: number): void;
   onDraftCreated(planId: string): Promise<void>;
+  onStartPaper?(questions: IndexedQuestion[], title?: string): void;
   standalone?: boolean;
   initialQuestionContext?: PlanningQuestionContext;
+  conversationKind?: "planning" | "chat";
+  headerAction?: ReactNode;
 }
 
 const BUSY_COPY: Record<string, string> = {
   conversations: "正在读取本地规划对话…",
   create: "正在新建对话…",
-  search: "正在搜索资料页…",
   preview: "正在生成完整外发预览…",
   execute: "正在发送并保存 AI 回复…",
   draft: "正在保存规划草案…",
   rename: "正在重命名对话…",
   delete: "正在删除对话…",
+  attachments: "正在读取对话资料…",
+  resources: "正在读取本地资料库…",
+  attachment: "正在更新对话资料…",
+  upload: "正在导入电脑资料…",
+  "attachment-index": "正在建立资料文字索引…",
+  "upload-cancel": "正在取消资料导入…",
 };
 
 export function PlanningChatPanel({
   onOpenReference,
   onDraftCreated,
+  onStartPaper,
   standalone = false,
   initialQuestionContext,
+  conversationKind = "planning",
+  headerAction,
 }: PlanningChatPanelProps) {
   const [conversations, setConversations] = useState<PlanningConversation[]>(
     [],
   );
   const [activeId, setActiveId] = useState<string>();
   const [newTitle, setNewTitle] = useState("我的考研规划讨论");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<ResourceSearchResult[]>(
-    [],
-  );
-  const [selectedContexts, setSelectedContexts] = useState<
-    SelectedPlanningContext[]
-  >([]);
   const [questionContext, setQuestionContext] = useState<
     PlanningQuestionContext | undefined
   >(initialQuestionContext);
-  const [question, setQuestion] = useState("");
-  const [outputLimit, setOutputLimit] = useState("800");
   const [preview, setPreview] = useState<PlanningChatPreview>();
   const [preparedRequest, setPreparedRequest] = useState<PlanningChatRequest>();
   const [previewFingerprint, setPreviewFingerprint] = useState<string>();
@@ -86,21 +128,77 @@ export function PlanningChatPanel({
   const [busy, setBusy] = useState<string | undefined>("conversations");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState<AiCommandError>();
+  const [attachments, setAttachments] = useState<AiAttachmentRef[]>([]);
+  const [resources, setResources] = useState<ResourceDocument[]>([]);
+  const [resourcesLoaded, setResourcesLoaded] = useState(false);
+  const [importEvent, setImportEvent] = useState<ImportEvent>();
+  const [uploadCanceling, setUploadCanceling] = useState(false);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  const [composerImages, setComposerImages] = useState<string[]>([]);
+  const [composerLocalFiles, setComposerLocalFiles] = useState<
+    LocalComposerFile[]
+  >([]);
+  const [questionBankSnapshot, setQuestionBankSnapshot] =
+    useState<QuestionBankSnapshot>();
 
-  const searchRequestIdRef = useRef(0);
+  useEffect(() => {
+    let active = true;
+    void getQuestionBank().then(
+      (snapshot) => {
+        if (active) setQuestionBankSnapshot(snapshot);
+      },
+      () => undefined,
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const previewRequestIdRef = useRef(0);
   const executeRequestIdRef = useRef(0);
+  const activeOperationIdRef = useRef<string | undefined>(undefined);
   const conversationRequestIdRef = useRef(0);
   const draftRequestIdRef = useRef(0);
+  const attachmentRequestIdRef = useRef(0);
+  const resourceRequestIdRef = useRef(0);
+  const importRequestIdRef = useRef(0);
+  const importOperationIdRef = useRef<string | undefined>(undefined);
+  const resourceIndexControllerRef = useRef<AbortController | undefined>(
+    undefined,
+  );
   const activeButtonRef = useRef<HTMLButtonElement>(null);
   const previewHeadingRef = useRef<HTMLHeadingElement>(null);
   const previewTriggerRef = useRef<HTMLButtonElement>(null);
   const mountedRef = useRef(true);
 
+  const chatApi = useMemo(
+    () =>
+      conversationKind === "chat"
+        ? {
+            list: listAiChatConversations,
+            create: createAiChatConversation,
+            rename: renameAiChatConversation,
+            remove: deleteAiChatConversation,
+            preview: previewAiChat,
+            execute: executeAiChat,
+            normalizeError: normalizeAiChatError,
+          }
+        : {
+            list: listPlanningConversations,
+            create: createPlanningConversation,
+            rename: renamePlanningConversation,
+            remove: deletePlanningConversation,
+            preview: previewPlanningChat,
+            execute: executePlanningChat,
+            normalizeError: normalizePlanningChatError,
+          },
+    [conversationKind],
+  );
+
   useEffect(() => {
     mountedRef.current = true;
     let active = true;
-    void listPlanningConversations().then(
+    void chatApi.list().then(
       (loaded) => {
         if (!active) return;
         setConversations(loaded);
@@ -112,7 +210,7 @@ export function PlanningChatPanel({
       },
       (reason: unknown) => {
         if (active) {
-          setError(normalizePlanningChatError(reason));
+          setError(chatApi.normalizeError(reason));
           setBusy(undefined);
         }
       },
@@ -121,12 +219,26 @@ export function PlanningChatPanel({
       active = false;
       mountedRef.current = false;
       conversationRequestIdRef.current += 1;
-      searchRequestIdRef.current += 1;
       previewRequestIdRef.current += 1;
       executeRequestIdRef.current += 1;
       draftRequestIdRef.current += 1;
+      attachmentRequestIdRef.current += 1;
+      resourceRequestIdRef.current += 1;
+      importRequestIdRef.current += 1;
+      const importOperationId = importOperationIdRef.current;
+      if (importOperationId !== undefined) {
+        void cancelResourceImport(importOperationId).catch(() => undefined);
+      }
+      importOperationIdRef.current = undefined;
+      resourceIndexControllerRef.current?.abort();
+      resourceIndexControllerRef.current = undefined;
+      const operationId = activeOperationIdRef.current;
+      if (operationId !== undefined) {
+        void cancelAiChatOperation(operationId).catch(() => undefined);
+      }
+      activeOperationIdRef.current = undefined;
     };
-  }, []);
+  }, [chatApi]);
 
   const activeConversation = conversations.find(
     (conversation) => conversation.id === activeId,
@@ -144,12 +256,7 @@ export function PlanningChatPanel({
   };
 
   const resetTurnState = () => {
-    searchRequestIdRef.current += 1;
     executeRequestIdRef.current += 1;
-    setQuestion("");
-    setSearchQuery("");
-    setSearchResults([]);
-    setSelectedContexts([]);
     invalidatePreview();
     setNotice("");
     setError(undefined);
@@ -164,7 +271,29 @@ export function PlanningChatPanel({
       await operation();
     } catch (reason: unknown) {
       if (mountedRef.current) {
-        setError(normalizePlanningChatError(reason));
+        if (
+          reason instanceof Error &&
+          reason.message === "RESOURCE_INDEX_CANCELED"
+        ) {
+          setNotice("资料索引已取消，尚未绑定到当前对话。");
+          return;
+        }
+        if (
+          reason instanceof Error &&
+          reason.message.startsWith("RESOURCE_INDEX_")
+        ) {
+          setError(normalizeResourceSearchError(reason));
+          return;
+        }
+        const normalized = chatApi.normalizeError(reason);
+        if (
+          normalized.code === "AI_CALL_INTERRUPTED" ||
+          normalized.code === "PLANNING_CHAT_CANCELED"
+        ) {
+          setNotice("AI 对话已取消，未写入本地对话。");
+        } else {
+          setError(normalized);
+        }
       }
     } finally {
       if (mountedRef.current) {
@@ -173,15 +302,63 @@ export function PlanningChatPanel({
     }
   };
 
+  useEffect(() => {
+    const requestId = ++attachmentRequestIdRef.current;
+    if (activeId === undefined) {
+      return;
+    }
+    void listAiAttachments(activeId, conversationKind).then(
+      (loaded) => {
+        if (
+          !isCurrentPlanningRequest(
+            requestId,
+            attachmentRequestIdRef.current,
+            mountedRef.current,
+          )
+        ) {
+          return;
+        }
+        setAttachments(loaded);
+      },
+      (reason: unknown) => {
+        if (
+          isCurrentPlanningRequest(
+            requestId,
+            attachmentRequestIdRef.current,
+            mountedRef.current,
+          )
+        ) {
+          setError(chatApi.normalizeError(reason));
+        }
+      },
+    );
+    return () => {
+      attachmentRequestIdRef.current += 1;
+    };
+  }, [activeId, chatApi, conversationKind]);
+
   const focusActiveConversation = () => {
     requestAnimationFrame(() => activeButtonRef.current?.focus());
+  };
+
+  const invalidateImport = () => {
+    importRequestIdRef.current += 1;
+    const operationId = importOperationIdRef.current;
+    if (operationId !== undefined) {
+      void cancelResourceImport(operationId).catch(() => undefined);
+    }
+    importOperationIdRef.current = undefined;
+    resourceIndexControllerRef.current?.abort();
+    resourceIndexControllerRef.current = undefined;
+    setImportEvent(undefined);
+    setUploadCanceling(false);
   };
 
   const createConversation = (event: FormEvent) => {
     event.preventDefault();
     const requestId = ++conversationRequestIdRef.current;
     void run("create", async () => {
-      const created = await createPlanningConversation(newTitle.trim());
+      const created = await chatApi.create(newTitle.trim());
       if (
         !isCurrentPlanningRequest(
           requestId,
@@ -193,6 +370,9 @@ export function PlanningChatPanel({
       }
       setConversations((current) => [created, ...current]);
       setActiveId(created.id);
+      setAttachments([]);
+      invalidateImport();
+      setAttachmentsOpen(false);
       setDraftTitle(`${created.title} AI 草案`);
       resetTurnState();
       focusActiveConversation();
@@ -201,10 +381,246 @@ export function PlanningChatPanel({
 
   const chooseConversation = (conversation: PlanningConversation) => {
     conversationRequestIdRef.current += 1;
+    invalidateImport();
     setActiveId(conversation.id);
+    setAttachments([]);
+    setAttachmentsOpen(false);
     setDraftTitle(`${conversation.title} AI 草案`);
     resetTurnState();
     focusActiveConversation();
+  };
+
+  const loadResources = () => {
+    if (resourcesLoaded || busy !== undefined) return;
+    const requestId = ++resourceRequestIdRef.current;
+    void run("resources", async () => {
+      const loaded = await listResources();
+      if (
+        !isCurrentPlanningRequest(
+          requestId,
+          resourceRequestIdRef.current,
+          mountedRef.current,
+        )
+      ) {
+        return;
+      }
+      setResources(loaded);
+      setResourcesLoaded(true);
+    });
+  };
+
+  const attachResourceRequest = async (documentId: string) => {
+    if (activeId === undefined) return;
+    const conversationId = activeId;
+    const requestId = ++attachmentRequestIdRef.current;
+    const resource = resources.find((item) => item.id === documentId);
+    if (resource?.kind === "pdf") {
+      await ensureResourceIndexed(documentId);
+    }
+    const attached = await attachResourceToAiConversation(
+      conversationId,
+      documentId,
+      conversationKind,
+    );
+    if (
+      !isCurrentPlanningRequest(
+        requestId,
+        attachmentRequestIdRef.current,
+        mountedRef.current,
+      )
+    ) {
+      return;
+    }
+    setAttachments((current) => [
+      attached,
+      ...current.filter((item) => item.id !== attached.id),
+    ]);
+    invalidatePreview();
+    setNotice(`已将“${attached.fileName}”绑定到当前对话。`);
+  };
+
+  const ensureResourceIndexed = async (documentId: string) => {
+    const descriptor = await getResourceReaderDescriptor(documentId);
+    if (descriptor.kind !== "pdf") return;
+    const controller = new AbortController();
+    resourceIndexControllerRef.current = controller;
+    try {
+      const { indexPdfText } = await import("../library/pdf/pdfTextIndexer");
+      let recognizePage;
+      try {
+        recognizePage = await createLocalPdfPageRecognizer();
+      } catch {
+        recognizePage = undefined;
+      }
+      await indexPdfText(
+        descriptor,
+        false,
+        controller.signal,
+        () => undefined,
+        { recognizePage },
+      );
+    } finally {
+      if (resourceIndexControllerRef.current === controller) {
+        resourceIndexControllerRef.current = undefined;
+      }
+    }
+  };
+
+  const attachResource = (documentId: string) => {
+    void run("attachment-index", () => attachResourceRequest(documentId));
+  };
+
+  const waitForResourceImport = async (): Promise<ImportEvent | undefined> => {
+    let operationId: string | undefined;
+    let dispose: (() => void) | undefined;
+    let settled = false;
+    const observed = new Map<string, ImportEvent>();
+
+    return new Promise<ImportEvent | undefined>((resolve, reject) => {
+      const finish = (event: ImportEvent | undefined) => {
+        if (settled) return;
+        settled = true;
+        dispose?.();
+        resolve(event);
+      };
+
+      void listenToImportEvents((event) => {
+        observed.set(event.operationId, event);
+        setImportEvent(event);
+        if (operationId !== event.operationId || event.state === "running") {
+          return;
+        }
+        finish(event);
+      }).then(
+        (unlisten) => {
+          dispose = unlisten;
+          void startResourceImport().then(
+            (operation) => {
+              if (operation === null) finish(undefined);
+              else {
+                operationId = operation.operationId;
+                importOperationIdRef.current = operation.operationId;
+                const terminal = observed.get(operationId);
+                if (terminal !== undefined && terminal.state !== "running") {
+                  finish(terminal);
+                }
+              }
+            },
+            (reason: unknown) => {
+              dispose?.();
+              reject(reason);
+            },
+          );
+        },
+        (reason: unknown) => reject(reason),
+      );
+    });
+  };
+
+  const uploadComputerResource = () => {
+    if (activeId === undefined) return;
+    const requestId = ++importRequestIdRef.current;
+    setImportEvent(undefined);
+    setUploadCanceling(false);
+    importOperationIdRef.current = undefined;
+    void run("upload", async () => {
+      const event = await waitForResourceImport();
+      if (
+        !isCurrentPlanningRequest(
+          requestId,
+          importRequestIdRef.current,
+          mountedRef.current,
+        ) ||
+        event === undefined
+      ) {
+        return;
+      }
+      if (event.state === "succeeded" && event.resource !== undefined) {
+        if (event.resource.kind === "pdf") {
+          setBusy("attachment-index");
+          await ensureResourceIndexed(event.resource.id);
+        }
+        await attachResourceRequest(event.resource.id);
+        setResources((current) => [
+          event.resource as ResourceDocument,
+          ...current.filter((resource) => resource.id !== event.resource?.id),
+        ]);
+        setResourcesLoaded(true);
+      } else if (event.error !== undefined) {
+        setError(normalizeResourceCommandError(event.error));
+      }
+      importOperationIdRef.current = undefined;
+    });
+  };
+
+  const cancelUpload = () => {
+    const operationId = importOperationIdRef.current;
+    if (operationId === undefined || uploadCanceling) return;
+    setUploadCanceling(true);
+    setError(undefined);
+    void cancelResourceImport(operationId)
+      .then(
+        (canceled) => {
+          if (!canceled) {
+            setNotice("资料导入已经完成或结束。");
+          }
+        },
+        (reason: unknown) => {
+          setError(normalizeResourceCommandError(reason));
+        },
+      )
+      .finally(() => {
+        if (mountedRef.current) {
+          setUploadCanceling(false);
+        }
+      });
+  };
+
+  const removeAttachment = (attachmentId: string) => {
+    const requestId = ++attachmentRequestIdRef.current;
+    void run("attachment", async () => {
+      await removeAiAttachment(attachmentId, conversationKind);
+      if (
+        !isCurrentPlanningRequest(
+          requestId,
+          attachmentRequestIdRef.current,
+          mountedRef.current,
+        )
+      ) {
+        return;
+      }
+      setAttachments((current) =>
+        current.filter((item) => item.id !== attachmentId),
+      );
+      invalidatePreview();
+      setNotice("已从当前对话移除这份资料。");
+    });
+  };
+
+  const retryAttachment = (attachmentId: string) => {
+    const requestId = ++attachmentRequestIdRef.current;
+    void run("attachment", async () => {
+      const retried = await retryAiAttachment(attachmentId, conversationKind);
+      if (retried.source === "resource" && retried.documentId !== undefined) {
+        setBusy("attachment-index");
+        await ensureResourceIndexed(retried.documentId);
+      }
+      if (
+        !isCurrentPlanningRequest(
+          requestId,
+          attachmentRequestIdRef.current,
+          mountedRef.current,
+        )
+      ) {
+        return;
+      }
+      setAttachments((current) => [
+        retried,
+        ...current.filter((item) => item.id !== retried.id),
+      ]);
+      invalidatePreview();
+      setNotice(`已重新校验“${retried.fileName}”，资料恢复为可用状态。`);
+    });
   };
 
   const renameConversation = (conversation: PlanningConversation) => {
@@ -213,7 +629,7 @@ export function PlanningChatPanel({
       return;
     const requestId = ++conversationRequestIdRef.current;
     void run("rename", async () => {
-      const renamed = await renamePlanningConversation(conversation.id, title);
+      const renamed = await chatApi.rename(conversation.id, title);
       if (
         !isCurrentPlanningRequest(
           requestId,
@@ -233,7 +649,7 @@ export function PlanningChatPanel({
     if (!window.confirm(`删除“${conversation.title}”及其本地消息？`)) return;
     const requestId = ++conversationRequestIdRef.current;
     void run("delete", async () => {
-      await deletePlanningConversation(conversation.id);
+      await chatApi.remove(conversation.id);
       if (
         !isCurrentPlanningRequest(
           requestId,
@@ -248,79 +664,177 @@ export function PlanningChatPanel({
       setConversations(remaining);
       if (activeId === conversation.id) {
         const next = remaining[0];
+        invalidateImport();
         setActiveId(next?.id);
+        setAttachments([]);
+        setAttachmentsOpen(false);
         setDraftTitle(next === undefined ? "" : `${next.title} AI 草案`);
         resetTurnState();
       }
     });
   };
 
-  const submitSearch = (event: FormEvent) => {
-    event.preventDefault();
-    const requestId = ++searchRequestIdRef.current;
-    void run("search", async () => {
+  const applyReply = (
+    reply: Awaited<ReturnType<typeof executePlanningChat>>,
+    requestId: number,
+  ) => {
+    if (
+      !isCurrentPlanningRequest(
+        requestId,
+        executeRequestIdRef.current,
+        mountedRef.current,
+      )
+    ) {
+      return;
+    }
+    setConversations((current) => [
+      reply.conversation,
+      ...current.filter(
+        (conversation) => conversation.id !== reply.conversation.id,
+      ),
+    ]);
+    setActiveId(reply.conversation.id);
+    invalidatePreview();
+    setDraftTitle(`${reply.conversation.title} AI 草案`);
+    setNotice(
+      reply.result.cacheHit
+        ? "已从本地缓存读取回复。"
+        : standalone
+          ? "回复已保存到本地对话。"
+          : "回复已保存到本地对话，尚未成为正式计划。",
+    );
+  };
+
+  const executeDirect = (request: PlanningChatRequest) => {
+    const requestId = ++executeRequestIdRef.current;
+    const operationId = crypto.randomUUID();
+    activeOperationIdRef.current = operationId;
+    const userMsgId = `temp-user-${operationId}`;
+    const assistantMsgId = `temp-assistant-${operationId}`;
+    const userContent = request.question;
+    const userMsg: PlanningMessage = {
+      id: userMsgId,
+      role: "user",
+      content: userContent,
+      sources: [],
+      createdAt: Date.now(),
+    };
+    const assistantMsg: PlanningMessage = {
+      id: assistantMsgId,
+      role: "assistant",
+      content: "",
+      sources: [],
+      createdAt: Date.now(),
+    };
+
+    setConversations((current) =>
+      current.map((c) => {
+        if (c.id !== request.conversationId) return c;
+        return {
+          ...c,
+          messages: [...c.messages, userMsg, assistantMsg],
+        };
+      }),
+    );
+
+    void run("execute", async () => {
       try {
-        const results = await searchResources(searchQuery, 30);
-        if (
-          !isCurrentPlanningRequest(
-            requestId,
-            searchRequestIdRef.current,
-            mountedRef.current,
-          )
-        ) {
-          return;
-        }
-        setSearchResults(
-          results.filter(
-            (result) =>
-              result.matchKind === "page_text" &&
-              result.pageNumber !== undefined,
-          ),
+        const reply = await executeAiChatStream(
+          request,
+          (delta) => {
+            if (
+              !isCurrentPlanningRequest(
+                requestId,
+                executeRequestIdRef.current,
+                mountedRef.current,
+              )
+            ) {
+              return;
+            }
+            setConversations((current) =>
+              current.map((c) => {
+                if (c.id !== request.conversationId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === assistantMsgId
+                      ? { ...m, content: m.content + delta }
+                      : m,
+                  ),
+                };
+              }),
+            );
+          },
+          operationId,
         );
-      } catch (reason: unknown) {
-        if (
-          isCurrentPlanningRequest(
-            requestId,
-            searchRequestIdRef.current,
-            mountedRef.current,
-          )
-        ) {
-          setError(normalizeResourceSearchError(reason));
+        applyReply(reply, requestId);
+      } catch (err) {
+        setConversations((current) =>
+          current.map((c) => {
+            if (c.id !== request.conversationId) return c;
+            return {
+              ...c,
+              messages: c.messages.filter(
+                (m) => m.id !== userMsgId && m.id !== assistantMsgId,
+              ),
+            };
+          }),
+        );
+        throw err;
+      } finally {
+        if (activeOperationIdRef.current === operationId) {
+          activeOperationIdRef.current = undefined;
         }
       }
     });
   };
 
-  const toggleContext = (result: ResourceSearchResult) => {
-    if (result.pageNumber === undefined) return;
-    setSelectedContexts((current) =>
-      togglePlanningContext(current, result, searchQuery),
-    );
-    invalidatePreview();
-  };
-
-  const changeQuestion = (value: string) => {
-    setQuestion(value);
-    invalidatePreview();
-  };
-
-  const changeOutputLimit = (value: string) => {
-    setOutputLimit(value);
-    invalidatePreview();
-  };
-
   const prepareQuestion = (nextQuestion: string) => {
+    const localImages = composerLocalFiles.flatMap((f) => f.images ?? []);
+    const images = [...composerImages, ...localImages].slice(0, 16);
+    let effectiveQuestion = nextQuestion;
+
+    if (composerLocalFiles.length > 0) {
+      const localFilesContent = composerLocalFiles
+        .map((f) => `【附加本地文件：${f.name}】\n${f.text}`)
+        .join("\n\n");
+      effectiveQuestion = `${effectiveQuestion}\n\n${localFilesContent}`;
+    }
+
+    const isPaperAssemblyRequest =
+      /组卷|出卷|套卷|试卷|挑.*题|出.*题|模拟卷|练习卷|测试卷|做题本/.test(
+        nextQuestion,
+      );
+    if (
+      isPaperAssemblyRequest &&
+      questionBankSnapshot &&
+      questionBankSnapshot.questions.length > 0
+    ) {
+      const bankSummary = summarizeQuestionBankForPrompt(
+        questionBankSnapshot.questions,
+      );
+      effectiveQuestion = `${effectiveQuestion}\n\n${bankSummary}`;
+    }
+
     const request = buildPlanningChatRequest(
       activeId,
-      nextQuestion,
-      selectedContexts,
-      outputLimit,
+      effectiveQuestion,
+      [],
+      undefined,
       questionContext,
+      attachments.map((attachment) => attachment.id),
+      images,
     );
     if (request === undefined) return;
+    setComposerImages([]);
+    setComposerLocalFiles([]);
+    if (conversationKind === "chat") {
+      executeDirect(request);
+      return;
+    }
     const requestId = ++previewRequestIdRef.current;
     void run("preview", async () => {
-      const nextPreview = await previewPlanningChat(request);
+      const nextPreview = await chatApi.preview(request);
       if (
         !isCurrentPlanningRequest(
           requestId,
@@ -337,11 +851,6 @@ export function PlanningChatPanel({
     });
   };
 
-  const prepare = (event: FormEvent) => {
-    event.preventDefault();
-    prepareQuestion(question);
-  };
-
   const execute = () => {
     if (
       preview === undefined ||
@@ -356,38 +865,89 @@ export function PlanningChatPanel({
       return;
     }
     const requestId = ++executeRequestIdRef.current;
+    const operationId = crypto.randomUUID();
+    activeOperationIdRef.current = operationId;
+    const userMsgId = `temp-user-${operationId}`;
+    const assistantMsgId = `temp-assistant-${operationId}`;
+    const userContent = preparedRequest.question;
+    const userMsg: PlanningMessage = {
+      id: userMsgId,
+      role: "user",
+      content: userContent,
+      sources: [],
+      createdAt: Date.now(),
+    };
+    const assistantMsg: PlanningMessage = {
+      id: assistantMsgId,
+      role: "assistant",
+      content: "",
+      sources: [],
+      createdAt: Date.now(),
+    };
+
+    setConversations((current) =>
+      current.map((c) => {
+        if (c.id !== preparedRequest.conversationId) return c;
+        return {
+          ...c,
+          messages: [...c.messages, userMsg, assistantMsg],
+        };
+      }),
+    );
+
     void run("execute", async () => {
-      const reply = await executePlanningChat({
-        ...preparedRequest,
-        confirmedPrompt,
-        confirmedRequestFingerprint: preview.preview.requestFingerprint,
-      });
-      if (
-        !isCurrentPlanningRequest(
-          requestId,
-          executeRequestIdRef.current,
-          mountedRef.current,
-        )
-      ) {
-        return;
+      try {
+        const reply = await executePlanningChatStream(
+          {
+            ...preparedRequest,
+            confirmedPrompt,
+            confirmedRequestFingerprint: preview.preview.requestFingerprint,
+          },
+          (delta) => {
+            if (
+              !isCurrentPlanningRequest(
+                requestId,
+                executeRequestIdRef.current,
+                mountedRef.current,
+              )
+            ) {
+              return;
+            }
+            setConversations((current) =>
+              current.map((c) => {
+                if (c.id !== preparedRequest.conversationId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === assistantMsgId
+                      ? { ...m, content: m.content + delta }
+                      : m,
+                  ),
+                };
+              }),
+            );
+          },
+          operationId,
+        );
+        applyReply(reply, requestId);
+      } catch (err) {
+        setConversations((current) =>
+          current.map((c) => {
+            if (c.id !== preparedRequest.conversationId) return c;
+            return {
+              ...c,
+              messages: c.messages.filter(
+                (m) => m.id !== userMsgId && m.id !== assistantMsgId,
+              ),
+            };
+          }),
+        );
+        throw err;
+      } finally {
+        if (activeOperationIdRef.current === operationId) {
+          activeOperationIdRef.current = undefined;
+        }
       }
-      setConversations((current) => [
-        reply.conversation,
-        ...current.filter(
-          (conversation) => conversation.id !== reply.conversation.id,
-        ),
-      ]);
-      setActiveId(reply.conversation.id);
-      setQuestion("");
-      setSelectedContexts([]);
-      setSearchResults([]);
-      invalidatePreview();
-      setDraftTitle(`${reply.conversation.title} AI 草案`);
-      setNotice(
-        reply.result.cacheHit
-          ? "已从本地缓存读取回复，没有新增 Token 消耗。"
-          : "回复已保存到本地对话，尚未成为正式计划。",
-      );
     });
   };
 
@@ -421,12 +981,19 @@ export function PlanningChatPanel({
     });
   };
 
-  const copyMessage = (message: PlanningMessage) => {
+  const copyMessage = (
+    message: PlanningMessage,
+    format: "markdown" | "text" = "markdown",
+  ) => {
     if (!navigator.clipboard) {
       setNotice("当前环境不支持自动复制，请手动选择消息文本复制。");
       return;
     }
-    void navigator.clipboard.writeText(message.content).then(
+    const content =
+      format === "text"
+        ? markdownToPlainText(message.content)
+        : message.content;
+    void navigator.clipboard.writeText(content).then(
       () => setNotice("消息 Markdown 已复制。"),
       () => setNotice("复制失败，请手动选择消息文本复制。"),
     );
@@ -445,18 +1012,25 @@ export function PlanningChatPanel({
             .find((item) => item.role === "user")
         : undefined;
     if (previousUserMessage === undefined) return;
-    setQuestion(previousUserMessage.content);
     invalidatePreview();
-    setNotice("正在重新生成这条问题的外发预览，请确认后发送。");
+    if (!standalone) {
+      setNotice("正在重新生成这条问题的外发预览，请确认后发送。");
+    }
     prepareQuestion(previousUserMessage.content);
   };
 
   const cancelCurrentRequest = () => {
-    searchRequestIdRef.current += 1;
     previewRequestIdRef.current += 1;
     executeRequestIdRef.current += 1;
     conversationRequestIdRef.current += 1;
     draftRequestIdRef.current += 1;
+    const operationId = activeOperationIdRef.current;
+    if (operationId !== undefined) {
+      void cancelAiChatOperation(operationId).catch(() => undefined);
+      activeOperationIdRef.current = undefined;
+    }
+    resourceIndexControllerRef.current?.abort();
+    resourceIndexControllerRef.current = undefined;
     setBusy(undefined);
     invalidatePreview();
     setNotice("已取消当前本地操作；如果请求已经发出，回复不会写入当前界面。 ");
@@ -478,7 +1052,7 @@ export function PlanningChatPanel({
           </h2>
           <p>
             {standalone
-              ? "可引用本地资料，也可以从题目解析带入题目上下文；只有明确确认的完整预览会被外发。"
+              ? "可直接发送消息，也可以添加本地资料作为上下文。"
               : "最多选择 6 个已索引页；只有明确确认的完整预览会被外发。"}
           </p>
         </div>
@@ -521,85 +1095,137 @@ export function PlanningChatPanel({
           onDelete={deleteConversation}
         />
         <div className="planning-chat-workspace">
-          <Thread
-            conversation={activeConversation}
-            onOpenReference={onOpenReference}
-            onCopyMessage={copyMessage}
-            onRetryMessage={retryMessage}
-          />
-          {activeConversation === undefined ? null : (
-            <>
-              {questionContext === undefined ? null : (
-                <section
-                  className="planning-question-context"
-                  aria-label="当前题目上下文"
-                >
-                  <div>
-                    <strong>已附加当前题目上下文</strong>
-                    <span>
-                      {questionContext.title} ·{" "}
-                      {questionContext.imageDataUrls.length} 张题图
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="text-button"
-                    disabled={busy !== undefined}
-                    onClick={() => setQuestionContext(undefined)}
-                  >
-                    移除
-                  </button>
-                </section>
-              )}
-              <ContextPanel
-                searchQuery={searchQuery}
-                searchResults={searchResults}
-                selectedContexts={selectedContexts}
-                busy={busy !== undefined}
-                onSearchQueryChange={setSearchQuery}
-                onSearch={submitSearch}
-                onToggle={toggleContext}
-              />
-              <Composer
-                question={question}
-                outputLimit={outputLimit}
-                busy={busy !== undefined}
-                submitButtonRef={previewTriggerRef}
-                onQuestionChange={changeQuestion}
-                onOutputLimitChange={changeOutputLimit}
-                onPrepare={prepare}
-              />
-              <PreviewDialog
-                preview={preview}
-                contextCount={selectedContexts.length}
-                confirmed={
-                  preview !== undefined &&
-                  confirmedPromptMatches(preview, confirmedPrompt ?? "")
-                }
-                busy={busy === "execute"}
-                headingRef={previewHeadingRef}
-                returnFocusRef={previewTriggerRef}
-                onConfirmed={(value) =>
-                  setConfirmedPrompt(
-                    value ? preview?.preview.prompt : undefined,
-                  )
-                }
-                onExecute={execute}
-                onClose={invalidatePreview}
-                onOpenReference={onOpenReference}
-              />
-              {standalone || lastAssistantMessage === undefined ? null : (
-                <DraftAction
-                  title={draftTitle}
-                  busy={busy !== undefined}
-                  onTitleChange={setDraftTitle}
-                  onSave={saveDraft}
-                />
-              )}
-            </>
+          {headerAction === undefined ? null : (
+            <header className="planning-chat-workspace-header">
+              <div className="planning-chat-workspace-header-title">
+                {activeConversation?.title ? (
+                  <span>{activeConversation.title}</span>
+                ) : null}
+              </div>
+              <div className="planning-chat-workspace-header-actions">
+                {headerAction}
+              </div>
+            </header>
           )}
+          <AssistantChatRuntime
+            conversation={activeConversation}
+            busy={busy !== undefined}
+            onPrepare={prepareQuestion}
+            onCancel={cancelCurrentRequest}
+          >
+            <AssistantChatThread
+              conversation={activeConversation}
+              questionBankQuestions={questionBankSnapshot?.questions ?? []}
+              onStartPaper={onStartPaper}
+              onOpenReference={onOpenReference}
+              onCopyMessage={copyMessage}
+              onRetryMessage={retryMessage}
+            />
+            {activeConversation === undefined ? null : (
+              <>
+                {questionContext === undefined ? null : (
+                  <section
+                    className="planning-question-context"
+                    aria-label="当前题目上下文"
+                  >
+                    <div>
+                      <strong>已附加当前题目上下文</strong>
+                      <span>
+                        {questionContext.title} ·{" "}
+                        {questionContext.imageDataUrls.length} 张题图
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-button"
+                      disabled={busy !== undefined}
+                      onClick={() => setQuestionContext(undefined)}
+                    >
+                      移除
+                    </button>
+                  </section>
+                )}
+                <AssistantChatComposer
+                  directMode={standalone}
+                  busy={busy !== undefined}
+                  attachmentCount={attachments.length}
+                  attachmentsOpen={attachmentsOpen}
+                  images={composerImages}
+                  localFiles={composerLocalFiles}
+                  onImagesChange={setComposerImages}
+                  onLocalFilesChange={setComposerLocalFiles}
+                  onToggleAttachments={() =>
+                    setAttachmentsOpen((open) => !open)
+                  }
+                  submitButtonRef={previewTriggerRef}
+                />
+                <ResourceContextDialog
+                  key={activeId}
+                  open={attachmentsOpen}
+                  busy={busy !== undefined}
+                  attachments={attachments}
+                  resources={resources}
+                  resourcesLoaded={resourcesLoaded}
+                  importEvent={importEvent}
+                  uploadCanceling={uploadCanceling}
+                  onClose={() => setAttachmentsOpen(false)}
+                  onOpenResources={loadResources}
+                  onAttach={attachResource}
+                  onRetryAttachment={retryAttachment}
+                  onRemoveAttachment={removeAttachment}
+                  onUploadComputerResource={uploadComputerResource}
+                  onCancelUpload={cancelUpload}
+                  onRetryUpload={uploadComputerResource}
+                />
+                {standalone ? null : (
+                  <PreviewDialog
+                    preview={preview}
+                    contextCount={0}
+                    confirmed={
+                      preview !== undefined &&
+                      confirmedPromptMatches(preview, confirmedPrompt ?? "")
+                    }
+                    busy={busy === "execute"}
+                    headingRef={previewHeadingRef}
+                    returnFocusRef={previewTriggerRef}
+                    onConfirmed={(value) =>
+                      setConfirmedPrompt(
+                        value ? preview?.preview.prompt : undefined,
+                      )
+                    }
+                    onExecute={execute}
+                    onClose={invalidatePreview}
+                    onOpenReference={onOpenReference}
+                  />
+                )}
+                {standalone || lastAssistantMessage === undefined ? null : (
+                  <DraftAction
+                    title={draftTitle}
+                    busy={busy !== undefined}
+                    onTitleChange={setDraftTitle}
+                    onSave={saveDraft}
+                  />
+                )}
+              </>
+            )}
+          </AssistantChatRuntime>
         </div>
       </div>
     </section>
   );
+}
+
+function markdownToPlainText(markdown: string): string {
+  return markdown
+    .replace(/```[\s\S]*?```/g, (block) =>
+      block.replace(/^```[^\n]*\n?/, "").replace(/```$/, ""),
+    )
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+\.\s+/gm, "")
+    .replace(/[*_~`]/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }

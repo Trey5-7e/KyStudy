@@ -15,6 +15,7 @@ import {
 } from "../../shared/tauri/ocrClient";
 import type { QuestionRegion } from "../../shared/tauri/questionClient";
 import type { ResourceCommandError } from "../../shared/tauri/resourceClient";
+import { MarkdownRenderer } from "../../shared/components/MarkdownRenderer";
 
 interface QuestionOcrPanelProps {
   questionId: string;
@@ -330,17 +331,38 @@ function OcrDraftEditor({
   onDiscard,
 }: OcrDraftEditorProps) {
   const [text, setText] = useState(draft.recognizedText);
+  const [editing, setEditing] = useState(false);
   return (
     <div className="question-ocr-draft">
-      <label>
-        待确认草稿 · 平均置信度 {Math.round(draft.meanConfidence * 100)}%
+      <div className="question-ocr-draft-heading">
+        <span>
+          待确认草稿 · 平均置信度 {Math.round(draft.meanConfidence * 100)}%
+        </span>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={busy}
+          onClick={() => setEditing((current) => !current)}
+        >
+          {editing ? "预览公式" : "编辑文本"}
+        </button>
+      </div>
+      {editing ? (
         <textarea
+          aria-label="OCR 草稿文本"
           rows={6}
           maxLength={100_000}
           value={text}
           onChange={(event) => setText(event.target.value)}
         />
-      </label>
+      ) : (
+        <div className="question-ocr-preview" aria-label="OCR 公式预览">
+          <MarkdownRenderer
+            source={ocrTextToPreviewMarkdown(text)}
+            mathOutput="html"
+          />
+        </div>
+      )}
       <div className="question-form-actions">
         <button
           type="button"
@@ -360,6 +382,53 @@ function OcrDraftEditor({
       </div>
     </div>
   );
+}
+
+/**
+ * OCR formula models return LaTeX commands without Markdown math delimiters.
+ * Keep surrounding Chinese text readable and promote each command-containing
+ * segment to an inline formula for the review surface.
+ */
+export function ocrTextToPreviewMarkdown(source: string): string {
+  if (
+    source.trim() === "" ||
+    source.includes("$") ||
+    source.includes("\\[") ||
+    source.includes("\\(")
+  ) {
+    return source;
+  }
+
+  const commandPattern = /\\[a-zA-Z]+/g;
+  const boundaryPattern = /[\u3400-\u9fff，。；！？、]/;
+  let cursor = 0;
+  let output = "";
+  let match: RegExpExecArray | null;
+
+  while ((match = commandPattern.exec(source)) !== null) {
+    const start = match.index;
+    output += source.slice(cursor, start);
+
+    const remainder = source.slice(start);
+    const boundary = boundaryPattern.exec(remainder);
+    const end = boundary === null ? source.length : start + boundary.index;
+    let formula = source.slice(start, end).trim();
+    let trailing = "";
+    const answerBlank = formula.search(/=\s*_{3,}\s*$/);
+    if (answerBlank >= 0) {
+      trailing = "= ______";
+      formula = formula.slice(0, answerBlank).trimEnd();
+    }
+
+    if (formula !== "") {
+      output += `\\(${formula}\\)${trailing}`;
+    }
+    cursor = end;
+    commandPattern.lastIndex = end;
+  }
+
+  output += source.slice(cursor);
+  return output;
 }
 
 function componentStatusLabel(

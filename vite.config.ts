@@ -6,6 +6,11 @@ const tauriDevHost = process.env.TAURI_DEV_HOST;
 export default defineConfig({
   clearScreen: false,
   plugins: [react()],
+  resolve: {
+    // assistant-ui is installed through pnpm's peer graph; dedupe React so
+    // its primitives and KyStudy render against the same hook dispatcher.
+    dedupe: ["react", "react-dom"],
+  },
   server: {
     host: tauriDevHost || false,
     port: 1420,

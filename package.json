@@ -1,7 +1,7 @@
 {
   "name": "kystudy",
   "private": true,
-  "version": "0.1.3",
+  "version": "0.1.4",
   "license": "GPL-3.0-only",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
@@ -18,20 +18,27 @@
     "audit:css": "node scripts/audit-css.mjs",
     "test:css-audit": "node --test scripts/css-audit-core.test.mjs",
     "check:target": "node scripts/check-targets.mjs",
-    "package:windows-portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows-portable.ps1 -ExecutablePath src-tauri/target/release/kystudy.exe -OutputArchive artifacts/kystudy-windows-x64-portable.zip -Version 0.1.3",
+    "package:windows-portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows-portable.ps1 -ExecutablePath src-tauri/target/release/kystudy.exe -OutputArchive artifacts/kystudy-windows-x64-portable.zip -Version 0.1.4",
     "typecheck": "tsc --noEmit",
     "check": "pnpm format && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "tauri": "tauri"
   },
   "dependencies": {
+    "@assistant-ui/react": "0.15.14",
+    "@fontsource-variable/material-symbols-rounded": "5.3.3",
+    "@lobehub/icons": "5.16.0",
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-opener": "2.5.4",
     "@tauri-apps/plugin-updater": "2.10.1",
-    "katex": "0.16.22",
+    "katex": "0.16.47",
     "mind-elixir": "5.13.0",
     "pdfjs-dist": "6.1.200",
-    "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-markdown": "10.1.0",
+    "rehype-katex": "7.0.1",
+    "remark-gfm": "4.0.1",
+    "remark-math": "6.0.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.4",

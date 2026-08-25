@@ -13,10 +13,17 @@ export type QuestionBankTool =
   | "refresh"
   | "ocr";
 
-export interface QuestionBankOpenRequest {
-  kind: "resume-or-create-paper";
-  nonce: number;
-}
+export type QuestionBankOpenRequest =
+  | {
+      kind: "resume-or-create-paper";
+      nonce: number;
+    }
+  | {
+      kind: "start-custom-paper";
+      questionIds: string[];
+      title?: string;
+      nonce: number;
+    };
 
 export type QuestionBankToolsSection =
   "category" | "index" | "practice" | "maintenance";

@@ -147,12 +147,16 @@ describe("OCR client parsers", () => {
     await expect(getOcrDownloadInfo()).resolves.toEqual({
       available: false,
       engine: "local-ocr",
+      defaultVersion: undefined,
+      versions: [],
     });
-    await expect(downloadOcrComponent("operation-id")).resolves.toMatchObject({
+    await expect(
+      downloadOcrComponent("operation-id", "v0.1.0"),
+    ).resolves.toMatchObject({
       state: "available",
     });
     expect(mockedInvoke).toHaveBeenLastCalledWith("download_ocr_component", {
-      request: { operationId: "operation-id" },
+      request: { operationId: "operation-id", version: "v0.1.0" },
     });
   });
 

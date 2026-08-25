@@ -1,12 +1,21 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import {
+  parseAiModelCapabilities,
+  type AiModelCapabilities,
+} from "./aiConversationContract";
+
 export type AiProviderType =
   | "offline_test"
   | "openai_responses"
+  | "openai_chat"
   | "zhipu_chat"
   | "qwen_chat"
   | "doubao_responses"
-  | "deepseek_chat";
+  | "deepseek_chat"
+  | "sensenova_chat"
+  | "litellm_gateway";
+export type AiCapabilitySelection = "supported" | "unsupported" | "unknown";
 export type AiLimitMode = "warn" | "block";
 export type AiCallState = "pending" | "succeeded" | "failed";
 
@@ -18,6 +27,7 @@ export interface AiProviderConfig {
   modelName: string;
   contextLimit: number;
   maxOutputTokens: number;
+  capabilities: AiModelCapabilities;
   hasSecret: boolean;
   active: boolean;
 }
@@ -106,10 +116,13 @@ export interface AiCommandError {
 const PROVIDER_TYPES = new Set<AiProviderType>([
   "offline_test",
   "openai_responses",
+  "openai_chat",
   "zhipu_chat",
   "qwen_chat",
   "doubao_responses",
   "deepseek_chat",
+  "sensenova_chat",
+  "litellm_gateway",
 ]);
 const LIMIT_MODES = new Set<AiLimitMode>(["warn", "block"]);
 const CALL_STATES = new Set<AiCallState>(["pending", "succeeded", "failed"]);
@@ -173,6 +186,10 @@ const ERROR_COPY: Record<string, { message: string; action: string }> = {
     message: "Provider 拒绝了本次请求。",
     action: "检查模型名称和账户权限。",
   },
+  AI_CALL_INTERRUPTED: {
+    message: "本次 AI 对话已取消，回复未写入本地对话。",
+    action: "可以重新生成预览后再发送。",
+  },
   AI_MODEL_LIST_UNSUPPORTED: {
     message: "该 Provider 不提供兼容的模型列表接口。",
     action: "继续手动填写模型 ID，并通过连接测试验证。",
@@ -192,6 +209,194 @@ const ERROR_COPY: Record<string, { message: string; action: string }> = {
   DATABASE_BUSY: {
     message: "本地数据库正在被占用。",
     action: "关闭其他 KyStudy 窗口后重试。",
+  },
+  WORKSPACE_STORAGE_UNAVAILABLE: {
+    message: "无法访问本地工作区存储。",
+    action: "检查磁盘空间和目录权限后重试。",
+  },
+  SCHEMA_VERSION_UNSUPPORTED: {
+    message: "这个工作区由更新版本的 KyStudy 创建。",
+    action: "升级 KyStudy 后再打开该工作区。",
+  },
+  MIGRATION_HISTORY_INCONSISTENT: {
+    message: "工作区数据库升级记录不一致。",
+    action: "不要覆盖工作区文件，请保留数据并查看诊断信息。",
+  },
+  MIGRATION_FAILED: {
+    message: "工作区数据库升级未能安全完成。",
+    action: "不要覆盖工作区文件，请重启应用后重试。",
+  },
+  DATABASE_CONFIGURATION_UNSUPPORTED: {
+    message: "本地工作区配置无法安全使用。",
+    action: "重启应用；如果仍失败，请导出诊断信息。",
+  },
+  DATABASE_ERROR: {
+    message: "本地工作区数据库读取失败。",
+    action: "重启应用；如果仍失败，请导出诊断信息。",
+  },
+  SYSTEM_TIME_INVALID: {
+    message: "系统时间暂时无法用于本地数据操作。",
+    action: "校准系统时间后重试。",
+  },
+  INTERNAL_ERROR: {
+    message: "本地 AI 任务意外中断。",
+    action: "重启应用后重试。",
+  },
+  AI_OVERVIEW_INVALID: {
+    message: "本地 AI 配置数据格式不完整。",
+    action: "刷新 AI 面板；如果仍失败，进入“模型与 API”重新保存当前 Provider。",
+  },
+  AI_PROVIDER_INVALID: {
+    message: "本地 AI Provider 配置格式不完整。",
+    action: "进入“模型与 API”检查并重新保存当前 Provider。",
+  },
+  AI_MODEL_CAPABILITIES_INVALID: {
+    message: "本地 AI 模型能力配置格式不完整。",
+    action: "重新保存当前 Provider 的模型能力设置后重试。",
+  },
+  AI_BUDGET_INVALID: {
+    message: "本地 AI 预算配置格式不完整。",
+    action: "进入“模型与 API”重新保存预算设置后重试。",
+  },
+  AI_USAGE_INVALID: {
+    message: "本地 AI 用量数据格式不完整。",
+    action: "刷新 AI 面板；如果仍失败，请重启应用后重试。",
+  },
+  AI_CALL_INVALID: {
+    message: "本地 AI 调用记录格式不完整。",
+    action: "刷新 AI 面板；如果仍失败，请重启应用后重试。",
+  },
+  AI_PREVIEW_INVALID: {
+    message: "AI 请求预览数据格式不完整。",
+    action: "重新生成预览；如果仍失败，检查 Provider 协议和模型配置。",
+  },
+  AI_RESULT_INVALID: {
+    message: "AI 回复数据格式不完整。",
+    action: "重试当前请求；如果仍失败，检查 Provider 是否返回兼容格式。",
+  },
+  AI_HISTORY_INVALID: {
+    message: "AI 分析历史数据格式不完整。",
+    action: "刷新当前页面后重试；如果仍失败，请重启应用。",
+  },
+  AI_CHAT_REPLY_INVALID: {
+    message: "AI 对话响应数据格式不完整。",
+    action: "重试当前请求；如果仍失败，检查 Provider 是否返回兼容格式。",
+  },
+  AI_CHAT_CONVERSATION_LIST_INVALID: {
+    message: "AI 对话列表数据格式不完整。",
+    action: "刷新 AI 对话页面；如果仍失败，请重启应用。",
+  },
+  AI_CHAT_CONVERSATION_KIND_INVALID: {
+    message: "AI 对话类型数据不匹配。",
+    action: "刷新对话列表后重试；必要时新建一段对话。",
+  },
+  PLANNING_CONVERSATION_LIST_INVALID: {
+    message: "规划对话列表数据格式不完整。",
+    action: "刷新规划对话页面；如果仍失败，请重启应用。",
+  },
+  PLANNING_CONVERSATION_INVALID: {
+    message: "规划对话数据格式不完整。",
+    action: "刷新当前对话；如果仍失败，请新建一段对话。",
+  },
+  PLANNING_CONVERSATION_KIND_INVALID: {
+    message: "规划对话类型数据不匹配。",
+    action: "刷新对话列表后重试；必要时新建一段规划对话。",
+  },
+  PLANNING_CONVERSATION_MODEL_INVALID: {
+    message: "规划对话模型配置格式不完整。",
+    action: "进入“模型与 API”检查当前 Provider 后重试。",
+  },
+  PLANNING_MESSAGE_INVALID: {
+    message: "规划对话消息数据格式不完整。",
+    action: "刷新当前对话；如果仍失败，请新建一段对话。",
+  },
+  PLANNING_SOURCE_INVALID: {
+    message: "规划对话资料引用格式不完整。",
+    action: "刷新资料索引后重试，或移除失效资料。",
+  },
+  PLANNING_CHAT_PREVIEW_INVALID: {
+    message: "规划对话预览数据格式不完整。",
+    action: "重新生成预览；如果仍失败，检查 Provider 协议和资料上下文。",
+  },
+  PLANNING_CHAT_REPLY_INVALID: {
+    message: "规划对话响应数据格式不完整。",
+    action: "重试当前请求；如果仍失败，检查 Provider 是否返回兼容格式。",
+  },
+  PLANNING_DRAFT_RESULT_INVALID: {
+    message: "规划草稿结果数据格式不完整。",
+    action: "刷新规划对话后重新保存草稿。",
+  },
+  PLANNING_ATTACHMENT_PREVIEW_INVALID: {
+    message: "对话资料预览数据格式不完整。",
+    action: "刷新资料列表后重新添加资料。",
+  },
+  AI_ATTACHMENT_INVALID: {
+    message: "AI 对话资料元数据格式不完整。",
+    action: "移除并重新添加这份资料。",
+  },
+  AI_ATTACHMENT_LIST_INVALID: {
+    message: "AI 对话资料列表数据格式不完整。",
+    action: "刷新当前对话后重试。",
+  },
+  AI_CHAT_CANCEL_INVALID: {
+    message: "AI 对话取消结果格式不完整。",
+    action: "刷新当前对话后重试。",
+  },
+  PLANNING_CHAT_INPUT_INVALID: {
+    message: "规划对话输入无效。",
+    action: "检查问题、资料范围和输出上限后重试。",
+  },
+  PLANNING_CONVERSATION_NOT_FOUND: {
+    message: "找不到这段规划对话。",
+    action: "刷新列表或新建对话后重试。",
+  },
+  PLANNING_CONTEXT_NOT_FOUND: {
+    message: "选中的资料页没有可用文字片段。",
+    action: "重新建立资料索引，或选择其他正文搜索结果。",
+  },
+  PLANNING_PREVIEW_STALE: {
+    message: "资料或对话已经变化，本次确认已失效。",
+    action: "重新生成外发预览并核对完整内容。",
+  },
+  PLANNING_REPLY_NOT_FOUND: {
+    message: "找不到可保存的 AI 回复。",
+    action: "刷新对话后重新选择助手回复。",
+  },
+  AI_ATTACHMENT_NOT_FOUND: {
+    message: "找不到这条对话资料。",
+    action: "刷新当前对话后重试。",
+  },
+  AI_ATTACHMENT_LIMIT_REACHED: {
+    message: "当前对话最多绑定 6 份资料。",
+    action: "移除不再需要的资料后再添加。",
+  },
+  AI_ATTACHMENT_RESOURCE_NOT_FOUND: {
+    message: "这份本地资料已不存在或尚未准备好。",
+    action: "刷新资料库并选择可用资料。",
+  },
+  AI_ATTACHMENT_TEMPORARY_FAILED: {
+    message: "临时资料未能安全保存。",
+    action: "检查磁盘空间和资料权限后重新选择。",
+  },
+  AI_ATTACHMENT_TEMPORARY_NOT_FOUND: {
+    message: "临时资料已丢失或被外部修改。",
+    action: "重新选择电脑资料，或从资料库重新添加。",
+  },
+  AI_ATTACHMENT_TOO_LARGE: {
+    message: "临时资料超过 100 MiB 限制。",
+    action: "选择更小的资料，或先导入资料库并建立本地索引。",
+  },
+  AI_ATTACHMENT_NATIVE_TOO_LARGE: {
+    message: "电脑资料超过原生 Provider 的 24 MiB 上传限制。",
+    action: "选择更小的资料，或先导入资料库并建立本地索引。",
+  },
+  AI_ATTACHMENT_NOT_INDEXED: {
+    message: "本地资料尚未建立可用的文本索引。",
+    action: "等待资料索引完成或重新导入后再发送。",
+  },
+  PLANNING_CHAT_CANCELED: {
+    message: "本次 AI 对话已取消，回复未写入本地对话。",
+    action: "重新生成预览后再发送。",
   },
 };
 
@@ -225,6 +430,12 @@ export interface SaveAiProviderRequest {
   maxOutputTokens: number;
 }
 
+export interface SaveAiProviderCapabilitiesRequest {
+  supportsImage: AiCapabilitySelection;
+  supportsFile: AiCapabilitySelection;
+  supportsPdf: AiCapabilitySelection;
+}
+
 export async function createAiProvider(
   request: SaveAiProviderRequest,
 ): Promise<AiOverview> {
@@ -237,6 +448,18 @@ export async function updateAiProvider(
 ): Promise<AiOverview> {
   return parseAiOverview(
     await invoke("update_ai_provider", { providerId, request }),
+  );
+}
+
+export async function saveAiProviderCapabilities(
+  providerId: string,
+  request: SaveAiProviderCapabilitiesRequest,
+): Promise<AiOverview> {
+  return parseAiOverview(
+    await invoke("save_ai_provider_capabilities", {
+      providerId,
+      request,
+    }),
   );
 }
 
@@ -380,7 +603,10 @@ export function parseAiModelOptions(value: unknown): AiModelOption[] {
   if (Array.isArray(value)) {
     entries = value;
   } else if (isRecord(value)) {
-    if (typeof value.object === "string" && value.object !== "list") {
+    if (
+      typeof value.object === "string" &&
+      value.object.toLowerCase() !== "list"
+    ) {
       throw new Error("AI_MODEL_LIST_INVALID");
     }
     if (!Array.isArray(value.data)) {
@@ -515,11 +741,19 @@ export function parseQuestionAiAnalysisHistory(
 }
 
 export function normalizeAiError(error: unknown): AiCommandError {
-  if (error instanceof Error && error.message.startsWith("AI_")) {
+  const errorCode = extractAiErrorCode(error);
+  if (errorCode !== undefined) {
+    const copy = ERROR_COPY[errorCode];
     return {
-      code: error.message,
-      message: "本地核心返回了无法识别的 AI 数据。",
-      action: "重新启动应用后重试。",
+      code: errorCode,
+      ...(copy ?? {
+        message: "本地 AI 返回了无法识别的数据。",
+        action: "刷新当前页面；如果仍失败，请重启应用后重试。",
+      }),
+      operationId:
+        isRecord(error) && typeof error.operationId === "string"
+          ? error.operationId
+          : undefined,
     };
   }
   if (isRecord(error) && typeof error.code === "string") {
@@ -540,6 +774,23 @@ export function normalizeAiError(error: unknown): AiCommandError {
   };
 }
 
+function extractAiErrorCode(error: unknown): string | undefined {
+  const candidate =
+    error instanceof Error
+      ? error.message
+      : isRecord(error) && typeof error.code === "string"
+        ? error.code
+        : undefined;
+  if (
+    candidate === undefined ||
+    (!/^AI_[A-Z0-9_]{2,80}$/.test(candidate) &&
+      !/^PLANNING_[A-Z0-9_]{2,80}$/.test(candidate))
+  ) {
+    return undefined;
+  }
+  return candidate;
+}
+
 function parseProvider(value: unknown): AiProviderConfig {
   if (
     !isRecord(value) ||
@@ -555,6 +806,14 @@ function parseProvider(value: unknown): AiProviderConfig {
   ) {
     throw new Error("AI_PROVIDER_INVALID");
   }
+  const capabilities = parseAiModelCapabilities(
+    value.capabilities ?? {
+      supportsImage: value.supportsImage ?? "unknown",
+      supportsFile: value.supportsFile ?? "unknown",
+      supportsPdf: value.supportsPdf ?? "unknown",
+      capabilitySource: value.capabilitySource ?? "unknown",
+    },
+  );
   return {
     id: value.id,
     providerType: value.providerType,
@@ -563,6 +822,7 @@ function parseProvider(value: unknown): AiProviderConfig {
     modelName: value.modelName,
     contextLimit: value.contextLimit,
     maxOutputTokens: value.maxOutputTokens,
+    capabilities,
     hasSecret: value.hasSecret,
     active: value.active,
   };

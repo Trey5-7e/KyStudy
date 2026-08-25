@@ -162,7 +162,7 @@ export function CyclePlanAiAssistant({
     try {
       const nextPreview = await previewAiCall({
         prompt: nextPrompt,
-        maxOutputTokens: 700,
+        maxOutputTokens: 8192,
       });
       if (
         !isCurrentCyclePlanRequest(
@@ -299,7 +299,7 @@ export function CyclePlanAiAssistant({
     setBusy(true);
     setError("");
     try {
-      const result = await executeAiCall({ prompt, maxOutputTokens: 700 });
+      const result = await executeAiCall({ prompt, maxOutputTokens: 8192 });
       if (
         !isCurrentCyclePlanRequest(
           requestId,

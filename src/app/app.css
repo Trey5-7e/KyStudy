@@ -146,6 +146,8 @@
 }
 
 .editor-dialog-header h2 {
+  display: inline-block;
+  max-width: 100%;
   font-size: 1.2rem;
   text-wrap: balance;
   overflow-wrap: anywhere;
@@ -1772,12 +1774,53 @@ button:disabled {
   gap: 0.65rem;
 }
 
-.question-ocr-draft label {
-  display: grid;
-  gap: 0.4rem;
+.question-ocr-draft-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   color: #52625a;
   font-size: 0.78rem;
   font-weight: 800;
+}
+
+.question-ocr-draft-heading button {
+  flex: 0 0 auto;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.74rem;
+}
+
+.question-ocr-preview {
+  min-height: 5.5rem;
+  overflow-x: auto;
+  border: 1px solid rgb(30 91 66 / 18%);
+  border-radius: 0.45rem;
+  padding: 0.8rem 0.9rem;
+  background: #fff;
+  color: #17231d;
+}
+
+.question-ocr-preview .markdown-renderer {
+  width: max-content;
+  min-width: 100%;
+}
+
+.question-ocr-preview .markdown-renderer p {
+  margin: 0.1rem 0;
+  white-space: nowrap;
+}
+
+.question-ocr-preview .katex {
+  font-size: 1.15em;
+  line-height: 1.2;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.question-ocr-preview .katex-display {
+  display: inline-block;
+  margin: 0;
+  text-align: left;
 }
 
 .question-ocr-draft textarea {
@@ -3557,6 +3600,34 @@ button:disabled {
   font-size: 0.82rem;
 }
 
+.pdf-diagnostics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.pdf-diagnostics > div {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #e0e9e1;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.pdf-diagnostics dt {
+  color: #758078;
+  font-size: 0.74rem;
+}
+
+.pdf-diagnostics dd {
+  margin: 3px 0 0;
+  color: #315945;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
 .pdf-subject-assignment,
 .quick-record-results {
   display: grid;
@@ -4020,17 +4091,14 @@ button:disabled {
   vertical-align: top;
 }
 
-.markdown-math {
-  display: inline-block;
-  padding-inline: 2px;
-  font-family: "Times New Roman", serif;
-  font-style: italic;
-  white-space: pre-wrap;
+.markdown-renderer .katex {
+  max-width: 100%;
 }
 
-.markdown-math-block {
+.markdown-renderer .katex-display {
+  max-width: 100%;
   overflow-x: auto;
-  padding-block: 6px;
+  overflow-y: hidden;
 }
 
 .generated-paper-nav {
@@ -4313,6 +4381,20 @@ button:disabled {
 .question-bank-segment-trash-heading p {
   margin-top: 5px;
   color: #68756d;
+}
+
+.question-bank-segment-trash-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.question-bank-segment-trash-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .question-bank-segment-trash-list {
@@ -5393,6 +5475,7 @@ button:disabled {
   }
   .question-scope-filters,
   .pdf-subject-assignment,
+  .pdf-diagnostics,
   .quick-record-results,
   .paper-scope-group-options {
     grid-template-columns: 1fr;
@@ -5725,6 +5808,39 @@ button:disabled {
   contain-intrinsic-size: 0 15rem;
 }
 
+.question-bank-import-assignment-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.question-bank-import-assignment-heading > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.question-bank-import-assignment-heading > div:first-child span {
+  color: #758078;
+  font-size: 0.82rem;
+}
+
+.question-bank-import-assignment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.question-bank-import-assignment-actions button {
+  white-space: nowrap;
+}
+
 .pdf-detected-subject-list details > summary {
   cursor: pointer;
   font-weight: 800;
@@ -6012,6 +6128,13 @@ button:disabled {
   .question-bank-import-footer > button,
   .question-bank-dialog-footer > button {
     width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .question-bank-import-assignment-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 

@@ -5,6 +5,8 @@ export type AppView =
   | "library"
   | "workbook"
   | "review"
+  | "ai-chat"
+  | "ai-settings"
   | "settings";
 
 export type PrimaryAppView = Exclude<AppView, "schedule" | "settings">;
@@ -37,6 +39,8 @@ const HASH_VIEW_IDS = new Set<AppView>([
   "library",
   "workbook",
   "review",
+  "ai-chat",
+  "ai-settings",
   "settings",
 ]);
 
@@ -44,7 +48,7 @@ const STORED_VIEW_MIGRATIONS: Readonly<Record<string, AppView>> = {
   schedule: "planning",
   mindmap: "library",
   analytics: "today",
-  ai: "settings",
+  ai: "ai-settings",
   data: "settings",
 };
 

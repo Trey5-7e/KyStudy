@@ -14,7 +14,7 @@ use zip::ZipArchive;
 
 use crate::application::{
     OCR_ENGINE_NAME, OcrComponentDownloader, OcrComponentManager, OcrComponentState,
-    OcrComponentStatus, OcrEngine, OcrEngineLine, OcrEngineOutput, OcrError,
+    OcrComponentStatus, OcrEngine, OcrEngineLine, OcrEngineOutput, OcrError, OcrPackageOption,
 };
 
 const POLL_INTERVAL: Duration = Duration::from_millis(25);
@@ -27,8 +27,43 @@ const REQUIRED_COMPONENT_FILES: &[&str] = &[
     "_internal/rapidocr/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx",
     "_internal/onnxruntime/capi/onnxruntime_pybind11_state.pyd",
 ];
-const MAX_DOWNLOAD_BYTES: u64 = 512 * 1024 * 1024;
-const MAX_ARCHIVE_UNCOMPRESSED_BYTES: u64 = 1024 * 1024 * 1024;
+const MAX_DOWNLOAD_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+const MAX_ARCHIVE_UNCOMPRESSED_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+
+#[derive(Debug, Clone, Copy)]
+struct OcrPackageManifest {
+    version_id: &'static str,
+    label: &'static str,
+    description: &'static str,
+    download_size_bytes: u64,
+    installed_size_bytes: u64,
+    is_recommended: bool,
+    url: &'static str,
+    sha256: &'static str,
+}
+
+const OFFICIAL_OCR_PACKAGES: &[OcrPackageManifest] = &[
+    OcrPackageManifest {
+        version_id: "v0.1.4",
+        label: "v0.1.4 增强版",
+        description: "包含图像增强预处理与公式识别支持，识别精度更高",
+        download_size_bytes: 763_654_968,
+        installed_size_bytes: 1_489_569_055,
+        is_recommended: true,
+        url: "https://github.com/Trey5-7e/KyStudy/releases/download/ocr-v0.1.4/kystudy-ocr-worker-v0.1.4.zip",
+        sha256: "3d339393de86f7759dc764fb844d97761e4ddf8354dd2330b71eb1a765c3fe6f",
+    },
+    OcrPackageManifest {
+        version_id: "v0.1.0",
+        label: "v0.1.0 轻量版",
+        description: "仅包含基础文字识别模型，体积小巧，下载更迅速",
+        download_size_bytes: 116_300_551,
+        installed_size_bytes: 270_532_608,
+        is_recommended: false,
+        url: "https://github.com/Trey5-7e/KyStudy/releases/download/ocr-v0.1.0/kystudy-ocr-worker-v0.1.0.zip",
+        sha256: "bb5a3e16a898713adde85717f4debe8cfbdf22cae10eb632752368f200513b01",
+    },
+];
 
 #[derive(Debug, Clone, Copy)]
 struct OcrDownloadManifest {
@@ -36,16 +71,39 @@ struct OcrDownloadManifest {
     sha256: &'static str,
 }
 
-// Filled only when a signed Release asset and its digest are published.
+// Allows overriding via build-time environment variables, or falls back to official release asset.
 const OCR_DOWNLOAD_URL: Option<&str> = option_env!("KYSTUDY_OCR_DOWNLOAD_URL");
 const OCR_DOWNLOAD_SHA256: Option<&str> = option_env!("KYSTUDY_OCR_DOWNLOAD_SHA256");
 
-fn ocr_download_manifest() -> Option<OcrDownloadManifest> {
-    match (OCR_DOWNLOAD_URL, OCR_DOWNLOAD_SHA256) {
-        (Some(url), Some(sha256)) if valid_download_url(url) && valid_sha256(sha256) => {
-            Some(OcrDownloadManifest { url, sha256 })
-        }
-        _ => None,
+fn ocr_download_manifest_for(version: Option<&str>) -> Option<OcrDownloadManifest> {
+    if let (Some(url), Some(sha256)) = (OCR_DOWNLOAD_URL, OCR_DOWNLOAD_SHA256)
+        && valid_download_url(url)
+        && valid_sha256(sha256)
+    {
+        return Some(OcrDownloadManifest { url, sha256 });
+    }
+    let target = version.unwrap_or("v0.1.4").trim();
+    let package = if target.is_empty()
+        || target.eq_ignore_ascii_case("v0.1.4")
+        || target.eq_ignore_ascii_case("ocr-v0.1.4")
+    {
+        OFFICIAL_OCR_PACKAGES
+            .iter()
+            .find(|p| p.version_id == "v0.1.4")
+    } else if target.eq_ignore_ascii_case("v0.1.0") || target.eq_ignore_ascii_case("ocr-v0.1.0") {
+        OFFICIAL_OCR_PACKAGES
+            .iter()
+            .find(|p| p.version_id == "v0.1.0")
+    } else {
+        None
+    }?;
+    if valid_download_url(package.url) && valid_sha256(package.sha256) {
+        Some(OcrDownloadManifest {
+            url: package.url,
+            sha256: package.sha256,
+        })
+    } else {
+        None
     }
 }
 
@@ -244,15 +302,30 @@ impl OcrComponentManager for LocalOcrWorker {
 
 impl OcrComponentDownloader for LocalOcrWorker {
     fn download_available(&self) -> bool {
-        ocr_download_manifest().is_some()
+        ocr_download_manifest_for(None).is_some()
+    }
+
+    fn download_packages(&self) -> Vec<OcrPackageOption> {
+        OFFICIAL_OCR_PACKAGES
+            .iter()
+            .map(|pkg| OcrPackageOption {
+                version_id: pkg.version_id,
+                label: pkg.label,
+                description: pkg.description,
+                download_size_bytes: pkg.download_size_bytes,
+                installed_size_bytes: pkg.installed_size_bytes,
+                is_recommended: pkg.is_recommended,
+            })
+            .collect()
     }
 
     fn download_component(
         &self,
+        version: Option<&str>,
         canceled: &AtomicBool,
         observe: &mut dyn FnMut(u64, u64),
     ) -> Result<OcrComponentStatus, OcrError> {
-        let Some(manifest) = ocr_download_manifest() else {
+        let Some(manifest) = ocr_download_manifest_for(version) else {
             return Err(OcrError::ComponentDownloadUnavailable);
         };
         let cache_directory = self.application_data_directory.join("cache").join("ocr");
@@ -282,10 +355,10 @@ fn download_archive(
         return Err(OcrError::ComponentDownloadUnavailable);
     }
     let client = reqwest::blocking::Client::builder()
+        .user_agent("KyStudy-Desktop/0.1.4")
         .https_only(true)
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(30))
-        .redirect(reqwest::redirect::Policy::limited(3))
+        .connect_timeout(Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::limited(5))
         .build()
         .map_err(|_| OcrError::ComponentDownloadFailed)?;
     let mut response = client
@@ -474,7 +547,17 @@ struct WorkerSuccess {
     width: u32,
     height: u32,
     elapsed_ms: f64,
+    preprocess: Option<WorkerPreprocess>,
     lines: Vec<WorkerLine>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WorkerPreprocess {
+    upscaled: bool,
+    inverted: bool,
+    grayscale: bool,
+    formula_enhanced: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -533,6 +616,14 @@ fn parse_worker_response(value: &str) -> Result<OcrEngineOutput, OcrError> {
             {
                 return Err(OcrError::ResultInvalid);
             }
+            if let Some(preprocess) = success.preprocess {
+                let _ = (
+                    preprocess.upscaled,
+                    preprocess.inverted,
+                    preprocess.grayscale,
+                    preprocess.formula_enhanced,
+                );
+            }
             Ok(OcrEngineOutput {
                 engine: success.engine,
                 lines: success
@@ -589,12 +680,22 @@ mod tests {
     #[test]
     fn parser_accepts_the_stable_worker_schema() {
         let output = parse_worker_response(
-            r#"{"schemaVersion":1,"engine":"rapidocr-3.9.2-ppocrv6-small-onnx-cpu","width":100,"height":200,"elapsedMs":12.5,"lines":[{"text":"数据结构","confidence":0.98,"box":{"x":0.1,"y":0.2,"width":0.5,"height":0.1}}]}"#,
+            r#"{"schemaVersion":1,"engine":"rapidocr-3.9.2-ppocrv6-small-onnx-cpu","width":100,"height":200,"elapsedMs":12.5,"preprocess":{"upscaled":false,"inverted":false,"grayscale":true},"lines":[{"text":"数据结构","confidence":0.98,"box":{"x":0.1,"y":0.2,"width":0.5,"height":0.1}}]}"#,
         )
         .expect("stable worker response should parse");
 
         assert_eq!(output.lines.len(), 1);
         assert_eq!(output.lines[0].text, "数据结构");
+    }
+
+    #[test]
+    fn parser_accepts_optional_formula_enhancement_marker() {
+        let output = parse_worker_response(
+            r#"{"schemaVersion":1,"engine":"rapidocr-3.9.2-ppocrv6-small-onnx-cpu","width":100,"height":200,"elapsedMs":12.5,"preprocess":{"upscaled":true,"inverted":false,"grayscale":true,"formulaEnhanced":true},"lines":[{"text":"lim","confidence":0.9,"box":{"x":0.1,"y":0.2,"width":0.5,"height":0.1}}]}"#,
+        )
+        .expect("formula-enhanced worker response should parse");
+
+        assert_eq!(output.lines[0].text, "lim");
     }
 
     #[test]
@@ -684,9 +785,17 @@ mod tests {
     }
 
     #[test]
-    fn compile_time_download_configuration_requires_both_values() {
-        let configured = option_env!("KYSTUDY_OCR_DOWNLOAD_URL").is_some()
-            && option_env!("KYSTUDY_OCR_DOWNLOAD_SHA256").is_some();
-        assert_eq!(ocr_download_manifest().is_some(), configured);
+    fn compile_time_download_configuration_defaults_to_official_release() {
+        let manifest_default =
+            ocr_download_manifest_for(None).expect("manifest should be available by default");
+        assert!(valid_download_url(manifest_default.url));
+        assert!(valid_sha256(manifest_default.sha256));
+        assert!(manifest_default.url.contains("ocr-v0.1.4"));
+
+        let manifest_v010 =
+            ocr_download_manifest_for(Some("v0.1.0")).expect("v0.1.0 manifest should be available");
+        assert!(valid_download_url(manifest_v010.url));
+        assert!(valid_sha256(manifest_v010.sha256));
+        assert!(manifest_v010.url.contains("ocr-v0.1.0"));
     }
 }

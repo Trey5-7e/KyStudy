@@ -219,6 +219,23 @@ export async function restoreWorkbookSegment(
   );
 }
 
+export async function deleteTrashedWorkbookSegment(
+  segmentId: string,
+  expectedDeletedAt: number,
+): Promise<QuestionBankSnapshot> {
+  return parseQuestionBankSnapshot(
+    await invoke("delete_workbook_segment", {
+      input: { segmentId, expectedDeletedAt },
+    }),
+  );
+}
+
+export async function deleteAllTrashedWorkbookSegments(): Promise<QuestionBankSnapshot> {
+  return parseQuestionBankSnapshot(
+    await invoke("delete_all_trashed_workbook_segments"),
+  );
+}
+
 export async function reassignWorkbookSegment(
   segmentId: string,
   targetWorkbookId: string,

@@ -14,9 +14,20 @@ export interface OcrComponentStatus {
   componentSizeBytes?: number;
 }
 
+export interface OcrPackageOption {
+  versionId: string;
+  label: string;
+  description: string;
+  downloadSizeBytes: number;
+  installedSizeBytes: number;
+  isRecommended: boolean;
+}
+
 export interface OcrComponentDownloadInfo {
   available: boolean;
   engine: string;
+  defaultVersion?: string;
+  versions: OcrPackageOption[];
 }
 
 export interface OcrDownloadEvent {
@@ -179,14 +190,53 @@ export async function getOcrDownloadInfo(): Promise<OcrComponentDownloadInfo> {
   ) {
     throw new Error("OCR_COMPONENT_DOWNLOAD_INFO_INVALID");
   }
-  return { available: value.available, engine: value.engine };
+  const versions: OcrPackageOption[] = [];
+  if (Array.isArray(value.versions)) {
+    for (const item of value.versions) {
+      if (
+        isRecord(item) &&
+        typeof item.versionId === "string" &&
+        typeof item.label === "string" &&
+        typeof item.description === "string" &&
+        typeof item.downloadSizeBytes === "number" &&
+        typeof item.installedSizeBytes === "number" &&
+        typeof item.isRecommended === "boolean"
+      ) {
+        versions.push({
+          versionId: item.versionId,
+          label: item.label,
+          description: item.description,
+          downloadSizeBytes: item.downloadSizeBytes,
+          installedSizeBytes: item.installedSizeBytes,
+          isRecommended: item.isRecommended,
+        });
+      }
+    }
+  }
+  return {
+    available: value.available,
+    engine: value.engine,
+    defaultVersion:
+      typeof value.defaultVersion === "string"
+        ? value.defaultVersion
+        : undefined,
+    versions,
+  };
 }
 
 export async function downloadOcrComponent(
   operationId: string,
+  version?: string,
 ): Promise<OcrComponentStatus> {
   return parseOcrComponentStatus(
-    await invoke("download_ocr_component", { request: { operationId } }),
+    await invoke("download_ocr_component", {
+      request: {
+        operationId,
+        ...(version !== undefined && version.trim() !== ""
+          ? { version: version.trim() }
+          : {}),
+      },
+    }),
   );
 }
 

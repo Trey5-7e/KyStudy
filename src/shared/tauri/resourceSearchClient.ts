@@ -65,7 +65,7 @@ const ERROR_COPY: Record<string, { message: string; action: string }> = {
   },
   RESOURCE_INDEX_UNSUPPORTED: {
     message: "这份资料暂时不能建立文字索引。",
-    action: "当前只支持 PDF 文字层；扫描页需要等待 OCR 版本。",
+    action: "当前支持 PDF 文字层；扫描页请安装并启用本地 OCR 组件后重试。",
   },
   RESOURCE_INDEX_INPUT_INVALID: {
     message: "索引页码、页面文字或搜索条件无效。",

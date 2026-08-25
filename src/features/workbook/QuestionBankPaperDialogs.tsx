@@ -26,6 +26,7 @@ import type {
   QuestionType,
 } from "../../shared/tauri/questionClient";
 import { localDateForTimezone } from "../../shared/tauri/scheduleClient";
+import { QuestionAiAnalysis } from "../review/QuestionAiAnalysis";
 import { PaperQuestionCard } from "./PaperQuestionCard";
 import { PaperExportDialog } from "./PaperExportDialog";
 import {
@@ -450,6 +451,7 @@ export function PaperDialog({
   );
   const [adjustingQuestionId, setAdjustingQuestionId] = useState<string>();
   const [editingQuestionId, setEditingQuestionId] = useState<string>();
+  const [aiAnalysisQuestionId, setAiAnalysisQuestionId] = useState<string>();
   const [exporting, setExporting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -492,6 +494,9 @@ export function PaperDialog({
   );
   const editingQuestion = paperQuestions.find(
     (question) => question.id === editingQuestionId,
+  );
+  const aiAnalysisQuestion = paperQuestions.find(
+    (question) => question.id === aiAnalysisQuestionId,
   );
   const questionTypeCounts = useMemo(() => {
     const counts: Record<PaperQuestionFilter, number> = {
@@ -820,203 +825,224 @@ export function PaperDialog({
     setMessage("已按上次组卷规则刷新题目。");
   };
   return (
-    <EditorDialog
-      title="本次练习卷"
-      description={`${paperQuestions.length} 道题；做题时可以直接校正卡片，保存结果后会更新题库状态和错题队列。`}
-      dirty={draftStatus === "failed"}
-      onRequestClose={onClose}
-      onRequestBack={onRequestBack}
-      backLabel={backLabel}
-      closeDisabled={busy || draftStatus === "saving"}
-      size="review"
-    >
-      <div className="generated-paper">
-        <div className="generated-paper-toolbar">
-          <div>
-            <strong>
-              {draftStatus === "saving"
-                ? "正在自动暂存…"
-                : draftStatus === "failed"
-                  ? "自动暂存失败"
-                  : "本卷已自动暂存"}
-            </strong>
-            <span>
-              已登记 {Object.keys(results).length} / {paperQuestions.length}{" "}
-              道；
-              {draftStatus === "saved" && draftSavedAt !== undefined
-                ? `最近保存于 ${new Date(draftSavedAt).toLocaleTimeString()}`
-                : "请保持窗口打开并在需要时保存记录"}
-            </span>
+    <>
+      <EditorDialog
+        title="本次练习卷"
+        description={`${paperQuestions.length} 道题；做题时可以直接校正卡片，保存结果后会更新题库状态和错题队列。`}
+        dirty={draftStatus === "failed"}
+        onRequestClose={onClose}
+        onRequestBack={onRequestBack}
+        backLabel={backLabel}
+        closeDisabled={busy || draftStatus === "saving"}
+        size="review"
+      >
+        <div className="generated-paper">
+          <div className="generated-paper-toolbar">
+            <div>
+              <strong>
+                {draftStatus === "saving"
+                  ? "正在自动暂存…"
+                  : draftStatus === "failed"
+                    ? "自动暂存失败"
+                    : "本卷已自动暂存"}
+              </strong>
+              <span>
+                已登记 {Object.keys(results).length} / {paperQuestions.length}{" "}
+                道；
+                {draftStatus === "saved" && draftSavedAt !== undefined
+                  ? `最近保存于 ${new Date(draftSavedAt).toLocaleTimeString()}`
+                  : "请保持窗口打开并在需要时保存记录"}
+              </span>
+            </div>
+            <div className="generated-paper-toolbar-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={persistPaperDraft}
+              >
+                暂存本卷
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={recipe === undefined}
+                onClick={refreshGeneratedPaper}
+              >
+                刷新组卷
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={paperQuestions.length === 0 || busy}
+                onClick={() => setExporting(true)}
+              >
+                导出 PDF（{paperQuestions.length} 题）
+              </button>
+            </div>
           </div>
-          <div className="generated-paper-toolbar-actions">
+          <PaperQuestionNavigator
+            mode={mode}
+            selectedQuestionType={selectedQuestionType}
+            counts={questionTypeCounts}
+            filteredIndex={currentPosition?.filteredIndex}
+            filteredTotal={visiblePaperQuestions.length}
+            paperIndex={currentPosition?.paperIndex}
+            canGoPrevious={
+              currentPosition !== undefined && currentPosition.filteredIndex > 0
+            }
+            canGoNext={
+              currentPosition !== undefined &&
+              currentPosition.filteredIndex < currentPosition.filteredTotal - 1
+            }
+            questionOverview={questionOverview}
+            onModeChange={(nextMode) => {
+              markDraftPending();
+              savePaperViewMode(nextMode);
+              setMode(nextMode);
+            }}
+            onFilterChange={(filter) => {
+              markDraftPending();
+              setSelectedQuestionType(filter);
+              setActiveQuestionId(
+                selectPaperQuestionId(
+                  filterPaperQuestions(paperQuestions, filter),
+                  activeQuestionId,
+                  results,
+                ) ?? "",
+              );
+            }}
+            onPrevious={() => {
+              const next = navigatePaperQuestion(
+                visiblePaperQuestions,
+                currentQuestionId,
+                "previous",
+              );
+              if (next !== undefined) {
+                markDraftPending();
+                setActiveQuestionId(next);
+              }
+            }}
+            onNext={() => {
+              const next = navigatePaperQuestion(
+                visiblePaperQuestions,
+                currentQuestionId,
+                "next",
+              );
+              if (next !== undefined) {
+                markDraftPending();
+                setActiveQuestionId(next);
+              }
+            }}
+            onQuestionSelect={selectOverviewQuestion}
+            onNextUnanswered={selectNextUnanswered}
+          />
+          <div
+            id="generated-paper-list"
+            role="tabpanel"
+            aria-label={
+              selectedQuestionType === "all"
+                ? "全部题目"
+                : typeLabel(selectedQuestionType)
+            }
+          >
+            {visiblePaperQuestions.length === 0 ? (
+              <div className="generated-paper-empty">当前题型暂无题目。</div>
+            ) : (
+              <div className="generated-paper-list">
+                {(mode === "single"
+                  ? visiblePaperQuestions.filter(
+                      (question) => question.id === currentQuestionId,
+                    )
+                  : visiblePaperQuestions
+                ).map((question) => {
+                  const paperIndex = paperQuestions.findIndex(
+                    (item) => item.id === question.id,
+                  );
+                  return (
+                    <div key={question.id}>
+                      {mode === "continuous" &&
+                      (paperIndex === 0 ||
+                        paperQuestions[paperIndex - 1]?.questionType !==
+                          question.questionType) ? (
+                        <div className="generated-paper-section-heading">
+                          <h3>{paperSectionHeading(question.questionType)}</h3>
+                        </div>
+                      ) : null}
+                      <PaperQuestionCard
+                        question={question}
+                        index={visiblePaperQuestions.indexOf(question)}
+                        paperIndex={paperIndex}
+                        result={results[question.id]}
+                        deferImages={mode === "continuous"}
+                        questionRef={
+                          question.id === currentQuestionId
+                            ? activeQuestionRef
+                            : undefined
+                        }
+                        onResult={(questionId, result) => {
+                          markDraftPending();
+                          setResults((current) => ({
+                            ...current,
+                            [questionId]: result,
+                          }));
+                        }}
+                        onAdjust={setAdjustingQuestionId}
+                        onEdit={setEditingQuestionId}
+                        onAiAnalysis={setAiAnalysisQuestionId}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {message === "" ? null : (
+            <p
+              className="form-error"
+              role={draftStatus === "failed" ? "alert" : "status"}
+            >
+              {message}
+            </p>
+          )}
+          <EditorDialogFooter className="editor-actions question-bank-dialog-footer">
             <button
               type="button"
               className="secondary-button"
-              onClick={persistPaperDraft}
+              disabled={busy}
+              onClick={() => void saveProgress()}
             >
-              暂存本卷
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={recipe === undefined}
-              onClick={refreshGeneratedPaper}
-            >
-              刷新组卷
+              {busy ? "正在保存…" : "保存记录"}
             </button>
             <button
               type="button"
               className="primary-button"
-              disabled={paperQuestions.length === 0 || busy}
-              onClick={() => setExporting(true)}
+              disabled={busy}
+              onClick={() => void submitPaper()}
             >
-              导出 PDF（{paperQuestions.length} 题）
+              {busy ? "正在提交…" : "提交组卷"}
             </button>
-          </div>
+          </EditorDialogFooter>
         </div>
-        <PaperQuestionNavigator
-          mode={mode}
-          selectedQuestionType={selectedQuestionType}
-          counts={questionTypeCounts}
-          filteredIndex={currentPosition?.filteredIndex}
-          filteredTotal={visiblePaperQuestions.length}
-          paperIndex={currentPosition?.paperIndex}
-          canGoPrevious={
-            currentPosition !== undefined && currentPosition.filteredIndex > 0
-          }
-          canGoNext={
-            currentPosition !== undefined &&
-            currentPosition.filteredIndex < currentPosition.filteredTotal - 1
-          }
-          questionOverview={questionOverview}
-          onModeChange={(nextMode) => {
-            markDraftPending();
-            savePaperViewMode(nextMode);
-            setMode(nextMode);
-          }}
-          onFilterChange={(filter) => {
-            markDraftPending();
-            setSelectedQuestionType(filter);
-            setActiveQuestionId(
-              selectPaperQuestionId(
-                filterPaperQuestions(paperQuestions, filter),
-                activeQuestionId,
-                results,
-              ) ?? "",
-            );
-          }}
-          onPrevious={() => {
-            const next = navigatePaperQuestion(
-              visiblePaperQuestions,
-              currentQuestionId,
-              "previous",
-            );
-            if (next !== undefined) {
-              markDraftPending();
-              setActiveQuestionId(next);
-            }
-          }}
-          onNext={() => {
-            const next = navigatePaperQuestion(
-              visiblePaperQuestions,
-              currentQuestionId,
-              "next",
-            );
-            if (next !== undefined) {
-              markDraftPending();
-              setActiveQuestionId(next);
-            }
-          }}
-          onQuestionSelect={selectOverviewQuestion}
-          onNextUnanswered={selectNextUnanswered}
-        />
-        <div
-          id="generated-paper-list"
-          role="tabpanel"
-          aria-label={
-            selectedQuestionType === "all"
-              ? "全部题目"
-              : typeLabel(selectedQuestionType)
-          }
+      </EditorDialog>
+      {aiAnalysisQuestion === undefined ? null : (
+        <EditorDialog
+          title="AI 解析"
+          description={`${aiAnalysisQuestion.title} · ${aiAnalysisQuestion.subjectName} / ${aiAnalysisQuestion.chapter}`}
+          dirty={false}
+          onRequestClose={() => setAiAnalysisQuestionId(undefined)}
+          onRequestBack={() => setAiAnalysisQuestionId(undefined)}
+          backLabel="返回练习卷"
+          backRequiresConfirmation={false}
+          size="review"
+          className="paper-ai-analysis-dialog"
         >
-          {visiblePaperQuestions.length === 0 ? (
-            <div className="generated-paper-empty">当前题型暂无题目。</div>
-          ) : (
-            <div className="generated-paper-list">
-              {(mode === "single"
-                ? visiblePaperQuestions.filter(
-                    (question) => question.id === currentQuestionId,
-                  )
-                : visiblePaperQuestions
-              ).map((question) => {
-                const paperIndex = paperQuestions.findIndex(
-                  (item) => item.id === question.id,
-                );
-                return (
-                  <div key={question.id}>
-                    {mode === "continuous" &&
-                    (paperIndex === 0 ||
-                      paperQuestions[paperIndex - 1]?.questionType !==
-                        question.questionType) ? (
-                      <div className="generated-paper-section-heading">
-                        <h3>{paperSectionHeading(question.questionType)}</h3>
-                      </div>
-                    ) : null}
-                    <PaperQuestionCard
-                      question={question}
-                      index={visiblePaperQuestions.indexOf(question)}
-                      paperIndex={paperIndex}
-                      result={results[question.id]}
-                      deferImages={mode === "continuous"}
-                      questionRef={
-                        question.id === currentQuestionId
-                          ? activeQuestionRef
-                          : undefined
-                      }
-                      onResult={(questionId, result) => {
-                        markDraftPending();
-                        setResults((current) => ({
-                          ...current,
-                          [questionId]: result,
-                        }));
-                      }}
-                      onAdjust={setAdjustingQuestionId}
-                      onEdit={setEditingQuestionId}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        {message === "" ? null : (
-          <p
-            className="form-error"
-            role={draftStatus === "failed" ? "alert" : "status"}
-          >
-            {message}
-          </p>
-        )}
-        <EditorDialogFooter className="editor-actions question-bank-dialog-footer">
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={busy}
-            onClick={() => void saveProgress()}
-          >
-            {busy ? "正在保存…" : "保存记录"}
-          </button>
-          <button
-            type="button"
-            className="primary-button"
-            disabled={busy}
-            onClick={() => void submitPaper()}
-          >
-            {busy ? "正在提交…" : "提交组卷"}
-          </button>
-        </EditorDialogFooter>
-      </div>
-    </EditorDialog>
+          <QuestionAiAnalysis
+            question={aiAnalysisQuestion}
+            regions={aiAnalysisQuestion.regions}
+          />
+        </EditorDialog>
+      )}
+    </>
   );
 }
 

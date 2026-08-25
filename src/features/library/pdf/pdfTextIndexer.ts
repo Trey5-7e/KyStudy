@@ -8,9 +8,19 @@ import {
   storeResourcePageText,
   type ResourceIndexStatus,
 } from "../../../shared/tauri/resourceSearchClient";
+import {
+  renderPdfPageForOcr,
+  type PdfPageRecognizer,
+  type PdfPageRenderer,
+} from "./pdfOcr";
 import { openPdf } from "./pdfEngine";
 import { HttpRangeSource } from "./rangeSource";
 import { joinPdfTextItems } from "./pdfTextItems";
+import {
+  mergeIndexedText,
+  selectOcrLinesForIndex,
+  shouldRequestPdfOcr,
+} from "./pdfTextIndexerModel";
 
 export class ResourceIndexCanceledError extends Error {
   constructor() {
@@ -26,11 +36,17 @@ class ResourceIndexExtractionError extends Error {
   }
 }
 
+export interface IndexPdfTextOptions {
+  recognizePage?: PdfPageRecognizer;
+  renderPage?: PdfPageRenderer;
+}
+
 export async function indexPdfText(
   descriptor: ResourceReaderDescriptor,
   force: boolean,
   signal: AbortSignal,
   onProgress: (status: ResourceIndexStatus) => void,
+  options: IndexPdfTextOptions = {},
 ): Promise<ResourceIndexStatus> {
   const source = new HttpRangeSource(
     descriptor.title,
@@ -42,15 +58,26 @@ export async function indexPdfText(
     session = await openPdf(source);
     throwIfCanceled(signal);
     const totalPages = session.document.numPages;
-    const started = await beginResourceIndex({
+    const initial = await beginResourceIndex({
       documentId: descriptor.documentId,
       totalPages,
       force,
     });
-    onProgress(started.status);
-    if (!started.needsIndexing) {
-      return started.status;
+    onProgress(initial.status);
+    let started = initial;
+    if (
+      !started.needsIndexing &&
+      options.recognizePage !== undefined &&
+      started.status.textPages < started.status.indexedPages
+    ) {
+      started = await beginResourceIndex({
+        documentId: descriptor.documentId,
+        totalPages,
+        force: true,
+      });
+      onProgress(started.status);
     }
+    if (!started.needsIndexing) return started.status;
     for (
       let pageNumber = started.nextPage;
       pageNumber <= totalPages;
@@ -62,13 +89,22 @@ export async function indexPdfText(
         const content = await page.getTextContent();
         throwIfCanceled(signal);
         const viewport = page.getViewport({ scale: 1 });
+        const textLayer = joinPdfTextItems(content.items);
+        const text = await enrichSparsePageText(
+          page,
+          viewport,
+          pageNumber,
+          textLayer,
+          signal,
+          options,
+        );
         const status = await storeResourcePageText({
           documentId: descriptor.documentId,
           pageNumber,
           totalPages,
           widthPoints: viewport.width,
           heightPoints: viewport.height,
-          text: joinPdfTextItems(content.items),
+          text,
         });
         onProgress(status);
       } finally {
@@ -93,6 +129,40 @@ export async function indexPdfText(
     throw error;
   } finally {
     await session?.destroy();
+  }
+}
+
+async function enrichSparsePageText(
+  page: Parameters<PdfPageRenderer>[0],
+  viewport: Parameters<PdfPageRenderer>[1],
+  pageNumber: number,
+  textLayer: string,
+  signal: AbortSignal,
+  options: IndexPdfTextOptions,
+): Promise<string> {
+  if (options.recognizePage === undefined || !shouldRequestPdfOcr(textLayer)) {
+    return textLayer;
+  }
+  try {
+    const imageBytes = await (options.renderPage ?? renderPdfPageForOcr)(
+      page,
+      viewport,
+      signal,
+    );
+    throwIfCanceled(signal);
+    const recognition = await options.recognizePage(
+      pageNumber,
+      imageBytes,
+      signal,
+    );
+    throwIfCanceled(signal);
+    const ocrText = selectOcrLinesForIndex(recognition.lines)
+      .map((line) => line.text.trim())
+      .join("\n");
+    return mergeIndexedText(textLayer, ocrText);
+  } catch {
+    throwIfCanceled(signal);
+    return textLayer;
   }
 }
 

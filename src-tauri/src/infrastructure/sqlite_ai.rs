@@ -7,7 +7,8 @@ use crate::application::{
     QuestionAiAnalysisHistoryEntry, default_provider,
 };
 use crate::domain::{
-    AiBudget, AiCallSummary, AiModelProfile, AiProviderConfig, AiProviderType, AiUsageSummary,
+    AiBudget, AiCallSummary, AiCapabilitySource, AiCapabilityState, AiModelCapabilities,
+    AiModelProfile, AiProviderConfig, AiProviderType, AiUsageSummary,
 };
 
 use super::sqlite_workspace::{SqliteWorkspaceRepository, database_error, migrate, open_database};
@@ -81,7 +82,7 @@ impl AiRepository for SqliteAiRepository {
                 "INSERT INTO ai_budget(
                     workspace_id, single_call_limit, daily_token_limit,
                     monthly_token_limit, limit_mode, updated_at
-                 ) VALUES (?1, 8000, 50000, 1000000, 'block', ?2)
+                 ) VALUES (?1, 8000, 50000, 1000000, 'warn', ?2)
                  ON CONFLICT(workspace_id) DO NOTHING",
                 params![workspace_id, now],
             )
@@ -133,7 +134,8 @@ impl AiRepository for SqliteAiRepository {
             .prepare(
                 "SELECT p.id, COALESCE(p.provider_protocol, p.provider_type), p.display_name, p.base_url, p.secret_ref,
                         p.enabled, p.updated_at, m.id, m.model_name, m.context_limit,
-                        m.max_output_tokens, m.updated_at
+                        m.max_output_tokens, m.updated_at, m.supports_image,
+                        m.supports_file, m.supports_pdf, m.capability_source
                  FROM ai_provider_config p
                  JOIN ai_model_profile m ON m.provider_config_id = p.id
                  WHERE p.deleted_at IS NULL
@@ -154,7 +156,9 @@ impl AiRepository for SqliteAiRepository {
             .query_row(
                 "SELECT p.id, COALESCE(p.provider_protocol, p.provider_type), p.display_name, p.base_url, p.secret_ref,
                         p.enabled, p.updated_at, m.id, m.model_name, m.context_limit,
-                        m.max_output_tokens, m.updated_at, b.single_call_limit,
+                        m.max_output_tokens, m.updated_at, m.supports_image,
+                        m.supports_file, m.supports_pdf, m.capability_source,
+                        b.single_call_limit,
                         b.daily_token_limit, b.monthly_token_limit, b.limit_mode, b.updated_at
                  FROM ai_provider_config p
                  JOIN ai_model_profile m ON m.provider_config_id = p.id
@@ -181,14 +185,15 @@ impl AiRepository for SqliteAiRepository {
                             model_name: row.get(8)?,
                             context_limit: read_u32(row, 9)?,
                             max_output_tokens: read_u32(row, 10)?,
+                            capabilities: model_capabilities_from_row(row, 12)?,
                             updated_at: row.get(11)?,
                         },
                         AiBudget {
-                            single_call_limit: read_u64(row, 12)?,
-                            daily_token_limit: read_u64(row, 13)?,
-                            monthly_token_limit: read_u64(row, 14)?,
-                            limit_mode: row.get(15)?,
-                            updated_at: row.get(16)?,
+                            single_call_limit: read_u64(row, 16)?,
+                            daily_token_limit: read_u64(row, 17)?,
+                            monthly_token_limit: read_u64(row, 18)?,
+                            limit_mode: row.get(19)?,
+                            updated_at: row.get(20)?,
                         },
                     ))
                 },
@@ -207,7 +212,8 @@ impl AiRepository for SqliteAiRepository {
             .query_row(
                 "SELECT p.id, COALESCE(p.provider_protocol, p.provider_type), p.display_name, p.base_url, p.secret_ref,
                         p.enabled, p.updated_at, m.id, m.model_name, m.context_limit,
-                        m.max_output_tokens, m.updated_at
+                        m.max_output_tokens, m.updated_at, m.supports_image,
+                        m.supports_file, m.supports_pdf, m.capability_source
                  FROM ai_provider_config p
                  JOIN ai_model_profile m ON m.provider_config_id = p.id
                  WHERE p.id = ?1 AND p.deleted_at IS NULL",
@@ -276,13 +282,19 @@ impl AiRepository for SqliteAiRepository {
         transaction
             .execute(
                 "UPDATE ai_model_profile
-                 SET model_name = ?2, context_limit = ?3, max_output_tokens = ?4, updated_at = ?5
-                 WHERE id = ?1 AND provider_config_id = ?6",
+                 SET model_name = ?2, context_limit = ?3, max_output_tokens = ?4,
+                     supports_image = ?5, supports_file = ?6, supports_pdf = ?7,
+                     capability_source = ?8, updated_at = ?9
+                 WHERE id = ?1 AND provider_config_id = ?10",
                 params![
                     model.id,
                     model.model_name,
                     i64::from(model.context_limit),
                     i64::from(model.max_output_tokens),
+                    model.capabilities.supports_image.as_str(),
+                    model.capabilities.supports_file.as_str(),
+                    model.capabilities.supports_pdf.as_str(),
+                    model.capabilities.capability_source.as_str(),
                     model.updated_at,
                     provider.id,
                 ],
@@ -567,6 +579,25 @@ impl AiRepository for SqliteAiRepository {
 
     fn begin_call(&self, call: &BeginAiCall) -> Result<(), AiError> {
         let connection = self.open()?;
+        if let Some(conversation_id) = call.conversation_id.as_deref() {
+            let kind = if call.purpose == crate::application::AiCallPurpose::GeneralChat {
+                "chat"
+            } else {
+                "planning"
+            };
+            if let Ok(workspace_id) = connection.query_row(
+                "SELECT id FROM workspace WHERE singleton_key = 1",
+                [],
+                |row| row.get::<_, String>(0),
+            ) {
+                let _ = connection.execute(
+                    "INSERT INTO ai_conversation(id, workspace_id, title, conversation_kind, created_at, updated_at)
+                     VALUES (?1, ?2, '新对话', ?3, ?4, ?4)
+                     ON CONFLICT(id) DO NOTHING",
+                    params![conversation_id, workspace_id, kind, call.started_at],
+                );
+            }
+        }
         connection
             .execute(
                 "INSERT INTO ai_call(
@@ -697,6 +728,7 @@ fn configuration_from_row(
             model_name: row.get(8)?,
             context_limit: read_u32(row, 9)?,
             max_output_tokens: read_u32(row, 10)?,
+            capabilities: model_capabilities_from_row(row, 12)?,
             updated_at: row.get(11)?,
         },
     ))
@@ -748,20 +780,45 @@ fn insert_model(
         .execute(
             "INSERT INTO ai_model_profile(
                 id, provider_config_id, model_name, context_limit,
-                max_output_tokens, created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                max_output_tokens, supports_image, supports_file, supports_pdf,
+                capability_source, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 model.id,
                 model.provider_config_id,
                 model.model_name,
                 i64::from(model.context_limit),
                 i64::from(model.max_output_tokens),
+                model.capabilities.supports_image.as_str(),
+                model.capabilities.supports_file.as_str(),
+                model.capabilities.supports_pdf.as_str(),
+                model.capabilities.capability_source.as_str(),
                 created_at,
                 model.updated_at,
             ],
         )
         .map_err(database_error)?;
     Ok(())
+}
+
+fn model_capabilities_from_row(
+    row: &rusqlite::Row<'_>,
+    start: usize,
+) -> rusqlite::Result<AiModelCapabilities> {
+    let supports_image = AiCapabilityState::parse(&row.get::<_, String>(start)?)
+        .ok_or_else(|| rusqlite::Error::InvalidQuery)?;
+    let supports_file = AiCapabilityState::parse(&row.get::<_, String>(start + 1)?)
+        .ok_or_else(|| rusqlite::Error::InvalidQuery)?;
+    let supports_pdf = AiCapabilityState::parse(&row.get::<_, String>(start + 2)?)
+        .ok_or_else(|| rusqlite::Error::InvalidQuery)?;
+    let capability_source = AiCapabilitySource::parse(&row.get::<_, String>(start + 3)?)
+        .ok_or_else(|| rusqlite::Error::InvalidQuery)?;
+    Ok(AiModelCapabilities {
+        supports_image,
+        supports_file,
+        supports_pdf,
+        capability_source,
+    })
 }
 
 fn read_u32(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<u32> {
@@ -863,7 +920,7 @@ mod tests {
             .expect("configuration should load");
 
         assert_eq!(provider.secret_ref, None);
-        assert_eq!(budget.limit_mode, "block");
+        assert_eq!(budget.limit_mode, "warn");
     }
 
     #[test]

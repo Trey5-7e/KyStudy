@@ -215,6 +215,24 @@ impl QuestionBankRepository for SqliteQuestionBankRepository {
                 params![archived_name, archived_at, workbook_id, workspace_id],
             )
             .map_err(database_error)?;
+        transaction
+            .execute(
+                "UPDATE workbook_document_segment
+                 SET deleted_at = ?2, updated_at = ?2
+                 WHERE workbook_id = ?1 AND workspace_id = ?3 AND deleted_at IS NULL",
+                params![workbook_id, archived_at, workspace_id],
+            )
+            .map_err(database_error)?;
+        transaction
+            .execute(
+                "UPDATE question
+                 SET deleted_at = ?2, updated_at = ?2
+                 WHERE workspace_id = ?3 AND deleted_at IS NULL AND id IN (
+                     SELECT question_id FROM question_index_metadata WHERE workbook_id = ?1
+                 )",
+                params![workbook_id, archived_at, workspace_id],
+            )
+            .map_err(database_error)?;
         transaction.commit().map_err(database_error)?;
         Ok(WorkbookCategory {
             updated_at: archived_at,
@@ -445,6 +463,56 @@ impl QuestionBankRepository for SqliteQuestionBankRepository {
         load_snapshot(&connection)
     }
 
+    fn delete_trashed_segment(
+        &self,
+        segment_id: &str,
+        expected_deleted_at: i64,
+    ) -> Result<QuestionBankSnapshot, QuestionBankError> {
+        let mut connection = self.open()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(database_error)?;
+        let segment = load_trashed_segment_context(&transaction, segment_id, expected_deleted_at)?;
+        delete_trashed_segment_permanently(&transaction, &segment.id, expected_deleted_at)?;
+        transaction.commit().map_err(database_error)?;
+        load_snapshot(&connection)
+    }
+
+    fn delete_all_trashed_segments(&self) -> Result<QuestionBankSnapshot, QuestionBankError> {
+        if !self.database_path.exists() {
+            return Ok(QuestionBankSnapshot {
+                workbooks: Vec::new(),
+                segments: Vec::new(),
+                questions: Vec::new(),
+            });
+        }
+        let mut connection = self.open()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(database_error)?;
+        let trashed = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT id, deleted_at FROM workbook_document_segment
+                     WHERE deleted_at IS NOT NULL
+                     ORDER BY deleted_at, id",
+                )
+                .map_err(database_error)?;
+            statement
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                })
+                .map_err(database_error)?
+                .map(|row| row.map_err(database_error).map_err(Into::into))
+                .collect::<Result<Vec<_>, QuestionBankError>>()?
+        };
+        for (segment_id, deleted_at) in trashed {
+            delete_trashed_segment_permanently(&transaction, &segment_id, deleted_at)?;
+        }
+        transaction.commit().map_err(database_error)?;
+        load_snapshot(&connection)
+    }
+
     fn reassign_segment(
         &self,
         segment_id: &str,
@@ -530,10 +598,43 @@ impl QuestionBankRepository for SqliteQuestionBankRepository {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(database_error)?;
         let segment = load_segment_context(&transaction, segment_id)?;
+        let mut active_source_keys: std::collections::HashSet<&str> =
+            std::collections::HashSet::with_capacity(questions.len());
         for question in questions {
             validate_index_regions(question, &segment)?;
             upsert_indexed_question(&transaction, &segment, question, updated_at)?;
+            active_source_keys.insert(question.source_key.as_str());
         }
+
+        let mut statement = transaction
+            .prepare(
+                "SELECT m.question_id, m.source_key FROM question_index_metadata m
+                 JOIN question q ON q.id = m.question_id
+                 WHERE m.segment_id = ?1 AND q.deleted_at IS NULL AND m.index_source != 'manual'",
+            )
+            .map_err(database_error)?;
+        let obsolete_question_ids: Vec<String> = statement
+            .query_map(params![segment_id], |row| {
+                let question_id: String = row.get(0)?;
+                let source_key: String = row.get(1)?;
+                Ok((question_id, source_key))
+            })
+            .map_err(database_error)?
+            .filter_map(std::result::Result::ok)
+            .filter(|(_, key)| !active_source_keys.contains(key.as_str()))
+            .map(|(id, _)| id)
+            .collect();
+        drop(statement);
+
+        for question_id in obsolete_question_ids {
+            transaction
+                .execute(
+                    "UPDATE question SET deleted_at = ?2, updated_at = ?2 WHERE id = ?1",
+                    params![question_id, updated_at],
+                )
+                .map_err(database_error)?;
+        }
+
         let (question_count, low_confidence): (i64, i64) = transaction
             .query_row(
                 "SELECT COUNT(*),
@@ -1000,6 +1101,45 @@ fn restore_segment_questions(
     Ok(())
 }
 
+/// Permanently removes one trashed segment with the questions still owned by
+/// its trash records. Question rows cascade to regions, attempts, review
+/// state, AI analyses, and index metadata via foreign keys.
+fn delete_trashed_segment_permanently(
+    transaction: &Transaction<'_>,
+    segment_id: &str,
+    expected_deleted_at: i64,
+) -> Result<(), QuestionBankError> {
+    transaction
+        .execute(
+            "DELETE FROM question
+             WHERE id IN (
+                 SELECT t.question_id
+                 FROM workbook_segment_question_trash t
+                 JOIN question q ON q.id = t.question_id
+                 WHERE t.segment_id = ?1 AND q.deleted_at IS NOT NULL
+             )",
+            params![segment_id],
+        )
+        .map_err(database_error)?;
+    transaction
+        .execute(
+            "DELETE FROM workbook_segment_question_trash WHERE segment_id = ?1",
+            params![segment_id],
+        )
+        .map_err(database_error)?;
+    let changed = transaction
+        .execute(
+            "DELETE FROM workbook_document_segment
+             WHERE id = ?1 AND deleted_at = ?2",
+            params![segment_id, expected_deleted_at],
+        )
+        .map_err(database_error)?;
+    if changed != 1 {
+        return Err(QuestionBankError::SegmentRestoreStale);
+    }
+    Ok(())
+}
+
 fn load_question_region_ids(
     transaction: &Transaction<'_>,
     question_id: &str,
@@ -1405,11 +1545,15 @@ fn find_reassign_segment_conflicts(
 ) -> Result<(), QuestionBankError> {
     let mut statement = transaction
         .prepare(
-            "SELECT id, workbook_id, deleted_at
-             FROM workbook_document_segment
-             WHERE workspace_id = ?1 AND document_id = ?2 AND subject_id = ?3
-               AND page_start = ?4 AND page_end = ?5 AND id <> ?6
-             ORDER BY id",
+            "SELECT s.id, s.workbook_id, s.deleted_at
+             FROM workbook_document_segment s
+             JOIN workbook_category w ON w.id = s.workbook_id
+             JOIN subject sub ON sub.id = s.subject_id
+             WHERE s.workspace_id = ?1 AND s.document_id = ?2 AND s.subject_id = ?3
+               AND s.page_start = ?4 AND s.page_end = ?5 AND s.id <> ?6
+               AND w.archived_at IS NULL
+               AND sub.archived_at IS NULL
+             ORDER BY s.id",
         )
         .map_err(database_error)?;
     let rows = statement
@@ -1618,6 +1762,8 @@ fn write_index_metadata(
                 index_source, index_confidence, sort_order, created_at, updated_at
              ) VALUES (?1, ?2, ?3, ?4, ?5, 'pdf_outline', ?6, ?7, ?8, ?8)
              ON CONFLICT(question_id) DO UPDATE SET
+                workbook_id = excluded.workbook_id,
+                segment_id = excluded.segment_id,
                 source_key = excluded.source_key,
                 section_part = excluded.section_part,
                 index_confidence = CASE
@@ -1694,12 +1840,16 @@ fn find_active_segment_conflicts(
     for segment in segments {
         let mut statement = transaction
             .prepare(
-                "SELECT id, workbook_id
-                 FROM workbook_document_segment
-                 WHERE document_id = ?1 AND subject_id = ?2
-                   AND page_start = ?3 AND page_end = ?4
-                   AND deleted_at IS NULL
-                 ORDER BY id",
+                "SELECT s.id, s.workbook_id
+                 FROM workbook_document_segment s
+                 JOIN workbook_category w ON w.id = s.workbook_id
+                 JOIN subject sub ON sub.id = s.subject_id
+                 WHERE s.document_id = ?1 AND s.subject_id = ?2
+                   AND s.page_start = ?3 AND s.page_end = ?4
+                   AND s.deleted_at IS NULL
+                   AND w.archived_at IS NULL
+                   AND sub.archived_at IS NULL
+                 ORDER BY s.id",
             )
             .map_err(database_error)?;
         let rows = statement
@@ -2171,13 +2321,13 @@ mod tests {
     use super::*;
     use crate::application::{
         BulkQuestionAttemptInput, CreateSubjectInput, CreateWorkbookCategoryInput,
-        ImportQuestionIndexInput, ImportRequest, IndexedQuestionDraftInput,
-        IndexedQuestionRegionUpdateInput, InsertIndexedQuestionInput, QuestionBankUseCases,
-        QuestionRegionInput, ReassignWorkbookSegmentInput, RecordBulkQuestionAttemptsInput,
-        RenameWorkbookCategoryInput, ReplaceIndexedQuestionRegionsInput, ResourceRepository,
-        RestoreWorkbookSegmentInput, ScheduleUseCases, SetQuestionGapAcknowledgementInput,
-        TrashWorkbookSegmentInput, UpdateIndexedQuestionInput, WorkbookSegmentAssignmentInput,
-        WorkspaceRepository,
+        DeleteTrashedWorkbookSegmentInput, ImportQuestionIndexInput, ImportRequest,
+        IndexedQuestionDraftInput, IndexedQuestionRegionUpdateInput, InsertIndexedQuestionInput,
+        QuestionBankUseCases, QuestionRegionInput, ReassignWorkbookSegmentInput,
+        RecordBulkQuestionAttemptsInput, RenameWorkbookCategoryInput,
+        ReplaceIndexedQuestionRegionsInput, ResourceRepository, RestoreWorkbookSegmentInput,
+        ScheduleUseCases, SetQuestionGapAcknowledgementInput, TrashWorkbookSegmentInput,
+        UpdateIndexedQuestionInput, WorkbookSegmentAssignmentInput, WorkspaceRepository,
     };
     use crate::domain::NewWorkspace;
     use crate::infrastructure::{
@@ -2782,7 +2932,7 @@ mod tests {
             .expect("restored segment should be visible");
         assert_eq!(
             (segment.id.as_str(), segment.question_count),
-            (segment_id.as_str(), 2)
+            (segment_id.as_str(), 1)
         );
         assert_eq!(segment.index_state, "needs_review");
         let restored_question = restored
@@ -2921,6 +3071,156 @@ mod tests {
             )
             .expect("segment should remain persisted");
         assert_eq!(persisted_deleted_at, Some(deleted_at));
+    }
+
+    #[test]
+    fn deleted_trashed_segment_permanently_removes_questions_and_rows() {
+        let (directory, bank, segment_id, indexed) = question_bank_fixture(2);
+        let question_ids: Vec<String> = indexed
+            .questions
+            .iter()
+            .map(|question| question.id.clone())
+            .collect();
+        bank.trash_segment(&TrashWorkbookSegmentInput {
+            segment_id: segment_id.clone(),
+        })
+        .expect("segment should move to trash");
+        let deleted_at = bank
+            .list_trashed_workbook_segments()
+            .expect("trash list should load")[0]
+            .deleted_at;
+
+        let after = bank
+            .delete_trashed_workbook_segment(&DeleteTrashedWorkbookSegmentInput {
+                segment_id: segment_id.clone(),
+                expected_deleted_at: deleted_at,
+            })
+            .expect("trashed segment should delete permanently");
+        assert!(after.segments.is_empty());
+        assert!(after.questions.is_empty());
+        assert!(
+            bank.list_trashed_workbook_segments()
+                .expect("trash list should reload")
+                .is_empty()
+        );
+
+        let repository = SqliteQuestionBankRepository::new(directory.path());
+        let connection = repository.open().expect("database should reopen");
+        for question_id in &question_ids {
+            let remaining: i64 = connection
+                .query_row(
+                    "SELECT COUNT(*) FROM question WHERE id = ?1",
+                    params![question_id],
+                    |row| row.get(0),
+                )
+                .expect("question lookup should work");
+            assert_eq!(remaining, 0, "question row should be hard-deleted");
+        }
+        let segment_rows: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM workbook_document_segment WHERE id = ?1",
+                params![segment_id],
+                |row| row.get(0),
+            )
+            .expect("segment lookup should work");
+        assert_eq!(segment_rows, 0, "segment row should be hard-deleted");
+        let trash_rows: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM workbook_segment_question_trash WHERE segment_id = ?1",
+                params![segment_id],
+                |row| row.get(0),
+            )
+            .expect("trash lookup should work");
+        assert_eq!(trash_rows, 0, "trash records should be hard-deleted");
+    }
+
+    #[test]
+    fn delete_trashed_segment_rejects_active_and_stale_preconditions() {
+        let (_directory, bank, segment_id, _indexed) = question_bank_fixture(1);
+        let active_error = bank
+            .delete_trashed_workbook_segment(&DeleteTrashedWorkbookSegmentInput {
+                segment_id: segment_id.clone(),
+                expected_deleted_at: 1,
+            })
+            .expect_err("active segment should refuse deletion");
+        assert!(matches!(active_error, QuestionBankError::SegmentNotTrashed));
+
+        bank.trash_segment(&TrashWorkbookSegmentInput {
+            segment_id: segment_id.clone(),
+        })
+        .expect("segment should move to trash");
+        let deleted_at = bank
+            .list_trashed_workbook_segments()
+            .expect("trash list should load")[0]
+            .deleted_at;
+        let stale_error = bank
+            .delete_trashed_workbook_segment(&DeleteTrashedWorkbookSegmentInput {
+                segment_id: segment_id.clone(),
+                expected_deleted_at: deleted_at + 1,
+            })
+            .expect_err("stale delete precondition should fail");
+        assert!(matches!(
+            stale_error,
+            QuestionBankError::SegmentRestoreStale
+        ));
+        assert_eq!(
+            bank.list_trashed_workbook_segments()
+                .expect("trash list should remain")
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn delete_all_trashed_segments_purges_every_trashed_segment() {
+        let (directory, bank, first_segment_id, snapshot) = question_bank_fixture(1);
+        let document_id = snapshot.segments[0].document_id.clone();
+        let subject_id = snapshot.segments[0].subject_id.clone();
+        let workbook_id = snapshot.segments[0].workbook_id.clone();
+        let saved = bank
+            .save_segments(vec![WorkbookSegmentAssignmentInput {
+                document_id,
+                subject_id,
+                workbook_id: workbook_id.clone(),
+                source_heading: "Fixture 第二段".to_owned(),
+                page_start: 12,
+                page_end: 15,
+            }])
+            .expect("second segment should save");
+        let second_segment_id = saved[0].id.clone();
+        bank.trash_segment(&TrashWorkbookSegmentInput {
+            segment_id: first_segment_id.clone(),
+        })
+        .expect("first segment should move to trash");
+        bank.trash_segment(&TrashWorkbookSegmentInput {
+            segment_id: second_segment_id.clone(),
+        })
+        .expect("second segment should move to trash");
+
+        let purged = bank
+            .delete_all_trashed_workbook_segments()
+            .expect("purge should complete");
+        assert!(purged.segments.is_empty());
+        assert!(purged.questions.is_empty());
+        assert!(
+            bank.list_trashed_workbook_segments()
+                .expect("trash list should reload")
+                .is_empty()
+        );
+        let repository = SqliteQuestionBankRepository::new(directory.path());
+        let connection = repository.open().expect("database should reopen");
+        let remaining_segments: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM workbook_document_segment",
+                [],
+                |row| row.get(0),
+            )
+            .expect("segment count should work");
+        assert_eq!(remaining_segments, 0);
+        let remaining_questions: i64 = connection
+            .query_row("SELECT COUNT(*) FROM question", [], |row| row.get(0))
+            .expect("question count should work");
+        assert_eq!(remaining_questions, 0);
     }
 
     #[test]
@@ -3425,6 +3725,42 @@ mod tests {
     }
 
     #[test]
+    fn archived_workbook_segments_do_not_conflict_with_new_workbook_segments() {
+        let (_directory, bank, segment_id, snapshot) = question_bank_fixture(1);
+        let segment = snapshot
+            .segments
+            .into_iter()
+            .find(|segment| segment.id == segment_id)
+            .expect("fixture segment should be present");
+
+        bank.archive_workbook(&segment.workbook_id)
+            .expect("workbook should archive successfully");
+
+        let new_workbook = bank
+            .create_workbook(&CreateWorkbookCategoryInput {
+                name: "660".to_owned(),
+            })
+            .expect("new workbook should create");
+
+        let saved = bank
+            .save_segments(vec![WorkbookSegmentAssignmentInput {
+                document_id: segment.document_id,
+                subject_id: segment.subject_id,
+                workbook_id: new_workbook.id.clone(),
+                source_heading: "660 高数篇".to_owned(),
+                page_start: segment.page_start,
+                page_end: segment.page_end,
+            }])
+            .expect(
+                "saving segments under new workbook should not conflict with archived workbook",
+            );
+
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].workbook_id, new_workbook.id);
+        assert_eq!(saved[0].source_heading, "660 高数篇");
+    }
+
+    #[test]
     fn active_segment_assignment_same_workbook_is_idempotent() {
         let (_directory, bank, segment_id, snapshot) = question_bank_fixture(1);
         let segment = snapshot
@@ -3845,6 +4181,39 @@ mod tests {
             (trashed.questions.len(), trashed.segments[0].question_count),
             (0, 0)
         );
+    }
+
+    #[test]
+    fn reimporting_segment_index_cleans_up_obsolete_questions() {
+        let (_directory, bank, segment_id, initial) = question_bank_fixture(3);
+        assert_eq!(initial.questions.len(), 3);
+
+        // Re-import index with only 1 question
+        let reimported = bank
+            .import_index(ImportQuestionIndexInput {
+                segment_id: segment_id.clone(),
+                questions: vec![IndexedQuestionDraftInput {
+                    source_key: "fixture-question-0".to_owned(),
+                    title: "Fixture question 0".to_owned(),
+                    chapter: "Fixture chapter".to_owned(),
+                    section_part: "basic".to_owned(),
+                    question_type: "blank".to_owned(),
+                    question_number: "1".to_owned(),
+                    index_confidence: 0.96,
+                    regions: vec![QuestionRegionInput {
+                        page_number: 2,
+                        x: 0.1,
+                        y: 0.1,
+                        width: 0.4,
+                        height: 0.2,
+                    }],
+                }],
+            })
+            .expect("reimport should succeed");
+
+        assert_eq!(reimported.questions.len(), 1);
+        assert_eq!(reimported.questions[0].title, "Fixture question 0");
+        assert_eq!(reimported.segments[0].question_count, 1);
     }
 
     fn question_bank_fixture(

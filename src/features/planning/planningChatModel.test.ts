@@ -38,7 +38,30 @@ describe("planning chat model", () => {
       conversationId: "conversation",
       question: "q",
       maxOutputTokens: 800,
+      attachmentIds: [],
     });
+  });
+
+  it("includes selected attachment IDs and caps them before preview", () => {
+    const request = buildPlanningChatRequest(
+      "conversation",
+      "question",
+      [],
+      "800",
+      undefined,
+      ["attachment-1"],
+    );
+    expect(request?.attachmentIds).toEqual(["attachment-1"]);
+    expect(
+      buildPlanningChatRequest(
+        "conversation",
+        "question",
+        [],
+        "800",
+        undefined,
+        Array.from({ length: 7 }, (_, index) => `attachment-${index}`),
+      ),
+    ).toBeUndefined();
   });
 
   it("rejects empty questions and invalid token limits before invoking AI", () => {
@@ -49,12 +72,15 @@ describe("planning chat model", () => {
       buildPlanningChatRequest("conversation", "question", [], "0"),
     ).toBeUndefined();
     expect(
-      buildPlanningChatRequest("conversation", "question", [], "1801"),
+      buildPlanningChatRequest("conversation", "question", [], "-1"),
     ).toBeUndefined();
     expect(
-      buildPlanningChatRequest("conversation", "  question  ", [], "800")
-        ?.question,
+      buildPlanningChatRequest("conversation", "  question  ", [])?.question,
     ).toBe("question");
+    expect(
+      buildPlanningChatRequest("conversation", "  question  ", [])
+        ?.maxOutputTokens,
+    ).toBe(131_072);
   });
 
   it("keeps question context bounded and part of the request", () => {
@@ -81,6 +107,46 @@ describe("planning chat model", () => {
         ),
       }),
     ).toBeUndefined();
+  });
+
+  it("accepts pasted images with prompt or as standalone prompt fallback", () => {
+    const withImages = buildPlanningChatRequest(
+      "conversation",
+      "请解析此图",
+      [],
+      "800",
+      undefined,
+      [],
+      ["data:image/png;base64,AAA", "data:image/png;base64,BBB"],
+    );
+    expect(withImages?.imageDataUrls).toEqual([
+      "data:image/png;base64,AAA",
+      "data:image/png;base64,BBB",
+    ]);
+    expect(withImages?.question).toBe("请解析此图");
+
+    const emptyTextWithImage = buildPlanningChatRequest(
+      "conversation",
+      "   ",
+      [],
+      "800",
+      undefined,
+      [],
+      ["data:image/png;base64,AAA"],
+    );
+    expect(emptyTextWithImage?.question).toBe("请结合图片进行分析");
+    expect(emptyTextWithImage?.imageDataUrls).toHaveLength(1);
+
+    const tooManyImages = buildPlanningChatRequest(
+      "conversation",
+      "question",
+      [],
+      "800",
+      undefined,
+      [],
+      Array.from({ length: 7 }, () => "data:image/png;base64,AAA"),
+    );
+    expect(tooManyImages).toBeUndefined();
   });
 
   it("fingerprints the displayed preview and requires its exact prompt", () => {

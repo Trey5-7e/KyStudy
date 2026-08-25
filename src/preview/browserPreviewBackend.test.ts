@@ -23,6 +23,43 @@ describe("browser preview backend", () => {
     expect(maps).toHaveLength(1);
   });
 
+  it("provides read-only AI fixtures while keeping writes fail-closed", async () => {
+    const overview = (await invokeBrowserPreview("get_ai_overview")) as {
+      providers: unknown[];
+      activeProviderId: string;
+    };
+    const conversations = (await invokeBrowserPreview(
+      "list_ai_chat_conversations",
+    )) as Array<{ kind: string; messages: unknown[] }>;
+    const attachments = (await invokeBrowserPreview(
+      "list_ai_chat_attachments",
+    )) as unknown[];
+
+    expect(overview.providers).toHaveLength(1);
+    expect(overview.activeProviderId).toBe("preview-provider-local");
+    expect(conversations[0]).toMatchObject({
+      kind: "chat",
+      messages: expect.arrayContaining([
+        expect.objectContaining({ role: "assistant" }),
+      ]),
+    });
+    expect(attachments).toHaveLength(1);
+    await expect(invokeBrowserPreview("execute_ai_chat")).rejects.toThrow(
+      "BROWSER_PREVIEW_UNSUPPORTED:execute_ai_chat",
+    );
+  });
+
+  it("provides question AI history fixtures for renderer review", async () => {
+    const history = (await invokeBrowserPreview(
+      "list_question_ai_analysis_history",
+    )) as Array<{ result: { responseText: string } }>;
+
+    expect(history).toHaveLength(3);
+    expect(history[0]?.result.responseText).toContain("\\vec");
+    expect(history[1]?.result.responseText).toContain("\\begin{aligned}");
+    expect(history[2]?.result.responseText).toContain("\\boxed");
+  });
+
   it("fails closed for commands that are not safe preview operations", async () => {
     await expect(
       invokeBrowserPreview("delete_workspace" as string),

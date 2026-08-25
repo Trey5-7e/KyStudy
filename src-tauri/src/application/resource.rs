@@ -120,6 +120,9 @@ pub(crate) enum ImportError {
     /// A structured source exceeds the parser's fixed byte limit.
     #[error("mind-map source is too large")]
     MindMapSourceTooLarge,
+    /// A temporary attachment exceeds the AI upload limit.
+    #[error("temporary attachment is too large")]
+    AttachmentTooLarge,
     /// A managed filesystem operation failed.
     #[error("managed file operation failed")]
     File {
@@ -148,6 +151,7 @@ impl ImportError {
             Self::UnsupportedReaderKind => "RESOURCE_READER_UNSUPPORTED",
             Self::InvalidMetadata => "RESOURCE_METADATA_INVALID",
             Self::MindMapSourceTooLarge => "MINDMAP_SOURCE_TOO_LARGE",
+            Self::AttachmentTooLarge => "AI_ATTACHMENT_TOO_LARGE",
             Self::File { .. } => "FILE_OPERATION_FAILED",
             Self::Persistence(error) => error.code(),
         }
@@ -303,7 +307,7 @@ impl<R: ResourceRepository> ResourceUseCases<R> {
     }
 }
 
-fn classify_source(path: &Path) -> Result<(String, String, String), ImportError> {
+pub(crate) fn classify_source(path: &Path) -> Result<(String, String, String), ImportError> {
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())

@@ -45,6 +45,12 @@ pub(crate) struct RestoreWorkbookSegmentInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DeleteTrashedWorkbookSegmentInput {
+    pub(crate) segment_id: String,
+    pub(crate) expected_deleted_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ReassignWorkbookSegmentInput {
     pub(crate) segment_id: String,
     pub(crate) target_workbook_id: String,
@@ -296,6 +302,12 @@ pub(crate) trait QuestionBankRepository: Clone + Send + Sync + 'static {
         expected_deleted_at: i64,
         restored_at: i64,
     ) -> Result<QuestionBankSnapshot, QuestionBankError>;
+    fn delete_trashed_segment(
+        &self,
+        segment_id: &str,
+        expected_deleted_at: i64,
+    ) -> Result<QuestionBankSnapshot, QuestionBankError>;
+    fn delete_all_trashed_segments(&self) -> Result<QuestionBankSnapshot, QuestionBankError>;
     fn reassign_segment(
         &self,
         segment_id: &str,
@@ -484,6 +496,24 @@ impl<R: QuestionBankRepository> QuestionBankUseCases<R> {
             input.expected_deleted_at,
             current_utc_millis()?,
         )
+    }
+
+    pub(crate) fn delete_trashed_workbook_segment(
+        &self,
+        input: &DeleteTrashedWorkbookSegmentInput,
+    ) -> Result<QuestionBankSnapshot, QuestionBankError> {
+        validate_id(&input.segment_id)?;
+        if input.expected_deleted_at <= 0 {
+            return Err(QuestionBankError::InvalidInput);
+        }
+        self.repository
+            .delete_trashed_segment(&input.segment_id, input.expected_deleted_at)
+    }
+
+    pub(crate) fn delete_all_trashed_workbook_segments(
+        &self,
+    ) -> Result<QuestionBankSnapshot, QuestionBankError> {
+        self.repository.delete_all_trashed_segments()
     }
 
     pub(crate) fn reassign_workbook_segment(

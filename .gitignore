@@ -2,6 +2,7 @@
 .agents/
 .codex/
 .tmp-*/
+tmp/
 AGENTS.md
 KyStudy-frontend-source.zip
 

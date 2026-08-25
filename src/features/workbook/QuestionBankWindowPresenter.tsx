@@ -79,6 +79,11 @@ export interface QuestionBankWindowPresenterProps {
     segment: TrashedWorkbookDocumentSegment,
     trigger: HTMLButtonElement,
   ) => void;
+  onDeleteSegment: (
+    segment: TrashedWorkbookDocumentSegment,
+    trigger: HTMLButtonElement,
+  ) => void;
+  onDeleteAllSegments: (trigger: HTMLButtonElement) => void;
   onSegmentChanged: (next: QuestionBankSnapshot, notice?: string) => void;
   onSegmentRefresh: () => Promise<QuestionBankSnapshot | undefined>;
   onBrowseSegment: () => void;
@@ -126,6 +131,8 @@ export function QuestionBankWindowPresenter({
   onRefreshTools,
   onRefreshSegmentTrash,
   onRestoreSegment,
+  onDeleteSegment,
+  onDeleteAllSegments,
   onSegmentChanged,
   onSegmentRefresh,
   onBrowseSegment,
@@ -223,6 +230,8 @@ export function QuestionBankWindowPresenter({
           onClose={onCloseSegmentTrash}
           onRefresh={onRefreshSegmentTrash}
           onRestore={(segment, trigger) => onRestoreSegment(segment, trigger)}
+          onDelete={(segment, trigger) => onDeleteSegment(segment, trigger)}
+          onDeleteAll={(trigger) => onDeleteAllSegments(trigger)}
         />
       ) : null}
 

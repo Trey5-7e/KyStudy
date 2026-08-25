@@ -33,6 +33,11 @@ const SUBJECT_ID = "preview-subject-math";
 const MINDMAP_RESOURCE_ID = "preview-mindmap-cache";
 const MINDMAP_MAP_ID = "preview-map-cache";
 const MINDMAP_ROOT_ID = "preview-map-cache-root";
+const AI_CHAT_CONVERSATION_ID = "preview-ai-chat-1";
+const OCR_PREVIEW_QUESTION_ID = "preview-question-2";
+const OCR_PREVIEW_REGION_ID = "preview-question-2-region-1";
+const OCR_PREVIEW_RECOGNITION_ID = "preview-ocr-recognition-2";
+const PREVIEW_CODE_TICK = String.fromCharCode(96);
 
 function previewResource(
   id: string,
@@ -73,6 +78,309 @@ const PREVIEW_RESOURCES = [
     8_400_000,
   ),
 ];
+
+const PREVIEW_AI_OVERVIEW = {
+  providers: [
+    {
+      id: "preview-provider-local",
+      providerType: "offline_test",
+      displayName: "KyStudy 本地演示模型",
+      baseUrl: "http://browser-preview.invalid",
+      modelName: "kystudy-preview-1.4",
+      contextLimit: 32_000,
+      maxOutputTokens: 131_072,
+      capabilities: {
+        supportsImage: true,
+        supportsFile: true,
+        supportsPdf: true,
+        capabilitySource: "tested",
+      },
+      hasSecret: false,
+      active: true,
+    },
+  ],
+  activeProviderId: "preview-provider-local",
+  budget: {
+    singleCallLimit: 100_000,
+    dailyTokenLimit: 20_000,
+    monthlyTokenLimit: 300_000,
+    limitMode: "warn",
+  },
+  usage: { todayTokens: 1_240, monthTokens: 8_420 },
+  calls: [
+    {
+      id: "preview-ai-call-1",
+      providerName: "KyStudy 本地演示模型",
+      modelName: "kystudy-preview-1.4",
+      state: "succeeded",
+      cacheHit: true,
+      inputTokens: 420,
+      outputTokens: 760,
+      startedAt: PREVIEW_TIME - 10 * 60_000,
+      finishedAt: PREVIEW_TIME - 9 * 60_000,
+    },
+  ],
+};
+
+const PREVIEW_QUESTION_AI_HISTORY = [
+  {
+    sourceFingerprint: "preview-question-ai-source-1",
+    result: {
+      callId: "preview-question-ai-call-1",
+      responseText: [
+        "法向量为：",
+        "\\vec n_1=(1,-1,0),\\quad \\vec n_2=(0,2,1)",
+        "",
+        "3.交线方向向量为",
+        "\\vec v_2=\\vec n_1\\times\\vec n_2=(1,1,-2)",
+        "",
+        "所以",
+        "\\theta=\\frac{\\pi}{3}",
+      ].join("\n"),
+      inputTokens: 420,
+      outputTokens: 760,
+      cachedInputTokens: 0,
+      reasoningTokens: 0,
+      usageSource: "estimated",
+      cacheHit: false,
+      finishedAt: PREVIEW_TIME - 9 * 60_000,
+    },
+  },
+  {
+    sourceFingerprint: "preview-question-ai-source-2",
+    result: {
+      callId: "preview-question-ai-call-2",
+      responseText:
+        "\\[\\begin{aligned}\n f(x)&=\\frac{1}{x}\\\\\n g(x)&=\\sqrt{x}\n\\end{aligned}\\]",
+      inputTokens: 380,
+      outputTokens: 510,
+      cachedInputTokens: 0,
+      reasoningTokens: 0,
+      usageSource: "provider",
+      cacheHit: false,
+      finishedAt: PREVIEW_TIME - 2 * 24 * 60 * 60_000,
+    },
+  },
+  {
+    sourceFingerprint: "preview-question-ai-source-3",
+    result: {
+      callId: "preview-question-ai-call-3",
+      responseText: String.raw`答案：C
+
+解题思路：利用偶函数在对称区间上的积分性质，把从 -∞ 到 0 的积分看成总积分的一半。
+
+关键步骤：
+
+1. 因为 ${PREVIEW_CODE_TICK}f(x)${PREVIEW_CODE_TICK} 为偶函数，且  
+   \[
+   \int_{-\infty}^{+\infty} f(x)\,dx=a
+   \]
+   所以
+   \[
+   \int_{-\infty}^{0} f(x)\,dx=\frac a2
+   \]
+
+2. 由定义
+   \[
+   F(-x_0)=\int_{-\infty}^{-x_0} f(t)\,dt
+   \]
+
+3. 拆分为
+   \[
+   F(-x_0)=\int_{-\infty}^{0}f(t)\,dt+\int_{0}^{-x_0}f(t)\,dt
+   \]
+
+4. 第一项为 ${PREVIEW_CODE_TICK}a/2${PREVIEW_CODE_TICK}；第二项利用偶函数性质：
+   \[
+   \int_{0}^{-x_0}f(t)\,dt=-\int_{0}^{x_0}f(t)\,dt
+   \]
+
+所以
+\[
+F(-x_0)=\frac a2-\int_0^{x_0}f(x)\,dx
+\]
+
+最终结论：
+
+\[
+\boxed{F(-x_0)=\frac a2-\int_0^{x_0}f(x)\,dx}
+\]
+
+选 C。
+
+易错点：不要误以为偶函数直接推出 ${PREVIEW_CODE_TICK}F(-x_0)=F(x_0)${PREVIEW_CODE_TICK}。这里 ${PREVIEW_CODE_TICK}F(x)${PREVIEW_CODE_TICK} 是从 ${PREVIEW_CODE_TICK}-∞${PREVIEW_CODE_TICK} 到 ${PREVIEW_CODE_TICK}x${PREVIEW_CODE_TICK} 的变上限积分，它本身一般不是偶函数。`,
+      inputTokens: 610,
+      outputTokens: 920,
+      cachedInputTokens: 0,
+      reasoningTokens: 0,
+      usageSource: "provider",
+      cacheHit: false,
+      finishedAt: PREVIEW_TIME - 3 * 24 * 60 * 60_000,
+    },
+  },
+];
+
+const PREVIEW_AI_CHAT_CONVERSATIONS = [
+  {
+    id: AI_CHAT_CONVERSATION_ID,
+    title: "考研数学强化计划：函数与极限",
+    kind: "chat",
+    modelProfileId: "preview-provider-local",
+    messages: [
+      {
+        id: "preview-ai-message-user-1",
+        role: "user",
+        content:
+          "请结合已导入的 A4 基础强化合集，帮我梳理函数与极限的复习重点。",
+        sources: [],
+        createdAt: PREVIEW_TIME - 7 * 60_000,
+      },
+      {
+        id: "preview-ai-message-assistant-1",
+        role: "assistant",
+        content:
+          "可以。建议先按 **定义—判定—计算—综合题** 四层复习：\n\n1. 先用第 12 页的例题复习极限的 ε-N 语言；\n2. 再做第 18 页的等价无穷小与夹逼准则；\n3. 最后用错题回放检查连续性与可导性的边界。\n\n如果你愿意，我可以继续把这套顺序拆成每天 30 分钟的任务。",
+        sources: [
+          {
+            documentId: WORKBOOK_DOCUMENT_ID,
+            documentTitle: "A4 基础强化合集·数学试卷",
+            pageNumber: 12,
+            citationLabel: "资料 1",
+          },
+          {
+            documentId: WORKBOOK_DOCUMENT_ID,
+            documentTitle: "A4 基础强化合集·数学试卷",
+            pageNumber: 18,
+            citationLabel: "资料 2",
+          },
+        ],
+        createdAt: PREVIEW_TIME - 6 * 60_000,
+      },
+      {
+        id: "preview-ai-message-assistant-formula",
+        role: "assistant",
+        content:
+          "Formula rendering regression fixture:\n\n**Final conclusion:** $\\theta=\\frac{\\pi}{3}$\n\n$$\\vec v_1=(1,-2,1)$$",
+        sources: [],
+        createdAt: PREVIEW_TIME - 5 * 60_000,
+      },
+      {
+        id: "preview-ai-message-assistant-integral",
+        role: "assistant",
+        content: String.raw`答案：C
+
+解题思路：利用偶函数在对称区间上的积分性质，把从 -∞ 到 0 的积分看成总积分的一半。
+
+关键步骤：
+
+1. 因为 ${PREVIEW_CODE_TICK}f(x)${PREVIEW_CODE_TICK} 为偶函数，且  
+   \[
+   \int_{-\infty}^{+\infty} f(x)\,dx=a
+   \]
+   所以
+   \[
+   \int_{-\infty}^{0} f(x)\,dx=\frac{a}{2}
+   \]
+
+2. 由定义
+   \[
+   F(-x_0)=\int_{-\infty}^{-x_0} f(t)\,dt
+   \]
+
+3. 拆分为
+   \[
+   F(-x_0)=\int_{-\infty}^{0}f(t)\,dt+\int_{0}^{-x_0}f(t)\,dt
+   \]
+
+4. 第一项为 ${PREVIEW_CODE_TICK}a/2${PREVIEW_CODE_TICK}；第二项利用偶函数性质：
+   \[
+   \int_{0}^{-x_0}f(t)\,dt=-\int_{0}^{x_0}f(t)\,dt
+   \]
+
+所以
+\[
+F(-x_0)=\frac{a}{2}-\int_{0}^{x_0}f(x)\,dx
+\]
+
+最终结论：
+
+\[
+\boxed{F(-x_0)=\frac{a}{2}-\int_{0}^{x_0}f(x)\,dx}
+\]
+
+选 C。易错点：不要误以为偶函数直接推出 ${PREVIEW_CODE_TICK}F(-x_0)=F(x_0)${PREVIEW_CODE_TICK}。`,
+        sources: [],
+        createdAt: PREVIEW_TIME - 4 * 60_000,
+      },
+    ],
+    createdAt: PREVIEW_TIME - 7 * 60_000,
+    updatedAt: PREVIEW_TIME - 6 * 60_000,
+  },
+  {
+    id: "preview-ai-chat-2",
+    title:
+      "一条用于检查窄屏布局的超长对话标题：PDF 资料、图片题目与模型能力说明",
+    kind: "chat",
+    modelProfileId: "preview-provider-local",
+    messages: [],
+    createdAt: PREVIEW_TIME - 2 * 24 * 60 * 60_000,
+    updatedAt: PREVIEW_TIME - 2 * 24 * 60 * 60_000,
+  },
+];
+
+const PREVIEW_AI_ATTACHMENTS = [
+  {
+    id: "preview-ai-attachment-1",
+    conversationId: AI_CHAT_CONVERSATION_ID,
+    source: "resource",
+    documentId: WORKBOOK_DOCUMENT_ID,
+    fileName: "A4 基础强化合集·数学试卷.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: 38_400_000,
+    sha256: PREVIEW_SHA256,
+    status: "ready",
+    createdAt: PREVIEW_TIME - 6 * 60_000,
+    updatedAt: PREVIEW_TIME - 6 * 60_000,
+  },
+];
+
+function previewAiChatPreview() {
+  return {
+    preview: {
+      providerName: "KyStudy 本地演示模型",
+      providerType: "offline_test",
+      modelName: "kystudy-preview-1.4",
+      destination: "本地预览（不会访问外部 Provider）",
+      prompt:
+        "请结合已绑定的 PDF 资料，给出函数与极限的复习重点，并把建议拆成可执行的学习步骤。",
+      inputTokenEstimate: 620,
+      outputTokenLimit: 800,
+      projectedTokens: 1_420,
+      todayTokens: 1_240,
+      monthTokens: 8_420,
+      allowed: true,
+      warnings: [],
+      requestFingerprint: "preview-ai-chat-request-fingerprint",
+    },
+    sources: [
+      {
+        documentId: WORKBOOK_DOCUMENT_ID,
+        documentTitle: "A4 基础强化合集·数学试卷",
+        pageNumber: 12,
+        citationLabel: "资料 1",
+      },
+    ],
+    transport: "local_text",
+    attachments: [
+      {
+        id: "preview-ai-attachment-1",
+        fileName: "A4 基础强化合集·数学试卷.pdf",
+        transport: "local_text",
+        indexedPages: 296,
+      },
+    ],
+  };
+}
 
 const PREVIEW_SUBJECTS = [
   {
@@ -200,9 +508,52 @@ const PREVIEW_QUESTIONS = Array.from({ length: QUESTION_COUNT }, (_, index) => {
     attemptCount: index % 29 === 0 ? 2 : 0,
     incorrectCount: index % 29 === 0 ? 1 : 0,
     partialCount: 0,
-    regions: [],
+    regions:
+      number === 2
+        ? [
+            {
+              id: OCR_PREVIEW_REGION_ID,
+              questionId: OCR_PREVIEW_QUESTION_ID,
+              documentId: WORKBOOK_DOCUMENT_ID,
+              pageNumber: 4,
+              x: 0.08,
+              y: 0.2,
+              width: 0.84,
+              height: 0.3,
+              coordinateVersion: 1,
+              sortOrder: 0,
+              createdAt: PREVIEW_TIME,
+            },
+          ]
+        : [],
   };
 });
+
+const PREVIEW_OCR_RECOGNITION = {
+  id: OCR_PREVIEW_RECOGNITION_ID,
+  questionId: OCR_PREVIEW_QUESTION_ID,
+  regionId: OCR_PREVIEW_REGION_ID,
+  pageNumber: 4,
+  engine: "rapidocr-3.9.2-ppocrv6-small-onnx-cpu",
+  recognizedText: String.raw`2 设 \lim_{x\to0}\left(1+x+\frac{f(x)}{x}\right)^{\frac{1}{x}}=\mathrm{e}^3，则\lim_{x\to0}\left(1+\frac{f(x)}{x}\right)^{\frac{1}{x}}=_____`,
+  meanConfidence: 0.9,
+  state: "draft",
+  lines: [
+    {
+      id: "preview-ocr-line-2",
+      recognitionId: OCR_PREVIEW_RECOGNITION_ID,
+      text: "2 设 高数公式 OCR 草稿",
+      confidence: 0.9,
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 0.2,
+      sortOrder: 0,
+    },
+  ],
+  createdAt: PREVIEW_TIME,
+  updatedAt: PREVIEW_TIME,
+};
 
 const PREVIEW_QUESTION_BANK = {
   workbooks: PREVIEW_WORKBOOKS,
@@ -379,6 +730,21 @@ export async function invokeBrowserPreview(
   args: Record<string, unknown> = {},
 ): Promise<unknown> {
   switch (command) {
+    case "get_ai_overview":
+      return PREVIEW_AI_OVERVIEW;
+    case "list_ai_chat_conversations":
+      return PREVIEW_AI_CHAT_CONVERSATIONS;
+    case "list_planning_conversations":
+      return [];
+    case "list_ai_chat_attachments":
+      return PREVIEW_AI_ATTACHMENTS;
+    case "list_ai_attachments":
+      return [];
+    case "list_question_ai_analysis_history":
+      return PREVIEW_QUESTION_AI_HISTORY;
+    case "preview_ai_chat":
+    case "preview_planning_chat":
+      return previewAiChatPreview();
     case "get_question_bank":
       return PREVIEW_QUESTION_BANK;
     case "list_trashed_workbook_segments":
@@ -401,6 +767,17 @@ export async function invokeBrowserPreview(
         createdAt: PREVIEW_TIME,
         schemaVersion: 1,
       };
+    case "get_ocr_status":
+      return {
+        state: "available",
+        engine: "rapidocr-3.9.2-ppocrv6-small-onnx-cpu",
+        modelsBundled: true,
+        componentSizeBytes: 1_490_000_000,
+      };
+    case "list_question_ocr":
+      return String(args.questionId ?? "") === OCR_PREVIEW_QUESTION_ID
+        ? [PREVIEW_OCR_RECOGNITION]
+        : [];
     case "get_cycle_plan_dashboard":
       return PREVIEW_CYCLE_PLAN;
     case "get_review_scheme_dashboard":

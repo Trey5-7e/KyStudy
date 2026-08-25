@@ -20,6 +20,7 @@ import { SectionHeader } from "../../shared/ui/SectionHeader";
 import { StatusBanner } from "../../shared/ui/StatusBanner";
 import { ResourceIndexManager } from "./ResourceIndexManager";
 import { ResourceSearchResults } from "./ResourceSearchResults";
+import { createLocalPdfPageRecognizer } from "./pdf/pdfOcr";
 import {
   isCanceledResourceIndexError,
   replaceResourceIndexStatus,
@@ -93,6 +94,12 @@ export function ResourceSearchPanel({
         getResourceReaderDescriptor(resource.id),
         import("./pdf/pdfTextIndexer"),
       ]);
+      let recognizePage;
+      try {
+        recognizePage = await createLocalPdfPageRecognizer();
+      } catch {
+        recognizePage = undefined;
+      }
       await indexer.indexPdfText(
         descriptor,
         force,
@@ -109,6 +116,7 @@ export function ResourceSearchPanel({
               : current,
           );
         },
+        { recognizePage },
       );
     } catch (indexError: unknown) {
       if (

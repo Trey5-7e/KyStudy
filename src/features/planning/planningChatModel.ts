@@ -6,6 +6,7 @@ import type {
 import type { ResourceSearchResult } from "../../shared/tauri/resourceSearchClient";
 
 export const MAX_PLANNING_CONTEXTS = 6;
+export const MAX_PLANNING_ATTACHMENTS = 6;
 export const MAX_PLANNING_QUESTION_IMAGES = 6;
 export const MAX_PLANNING_QUESTION_CONTEXT_CHARS = 12_000;
 
@@ -48,31 +49,44 @@ export function togglePlanningContext(
   ];
 }
 
+export const DEFAULT_CHAT_MAX_OUTPUT_TOKENS = 131_072;
+export const MAX_PLANNING_IMAGES = 6;
+
 export function buildPlanningChatRequest(
   conversationId: string | undefined,
   question: string,
   contexts: SelectedPlanningContext[],
-  outputLimit: string,
+  outputLimit?: string,
   questionContext?: PlanningQuestionContext,
+  attachmentIds: string[] = [],
+  imageDataUrls: string[] = [],
 ): PlanningChatRequest | undefined {
   const normalizedQuestion = question.trim();
-  const maxOutputTokens = Number(outputLimit);
+  const maxOutputTokens =
+    outputLimit === undefined || outputLimit === ""
+      ? DEFAULT_CHAT_MAX_OUTPUT_TOKENS
+      : Number(outputLimit);
+  const totalImageCount =
+    imageDataUrls.length + (questionContext?.imageDataUrls.length ?? 0);
   if (
     conversationId === undefined ||
-    normalizedQuestion === "" ||
+    (normalizedQuestion === "" && imageDataUrls.length === 0) ||
     contexts.length > MAX_PLANNING_CONTEXTS ||
+    attachmentIds.length > MAX_PLANNING_ATTACHMENTS ||
+    totalImageCount > MAX_PLANNING_IMAGES ||
     !Number.isInteger(maxOutputTokens) ||
     maxOutputTokens < 1 ||
-    maxOutputTokens > 1800 ||
     !isValidQuestionContext(questionContext)
   ) {
     return undefined;
   }
   return {
     conversationId,
-    question: normalizedQuestion,
+    question: normalizedQuestion || "请结合图片进行分析",
     contexts: contexts.map((context) => context.selection),
     questionContext,
+    attachmentIds,
+    imageDataUrls,
     maxOutputTokens,
   };
 }
@@ -90,6 +104,8 @@ export function planningPreviewFingerprint(
     modelName: preview.preview.modelName,
     projectedTokens: preview.preview.projectedTokens,
     sources: preview.sources,
+    transport: preview.transport,
+    attachments: preview.attachments,
   });
 }
 

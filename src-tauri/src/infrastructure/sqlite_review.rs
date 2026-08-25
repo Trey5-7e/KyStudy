@@ -1507,6 +1507,7 @@ mod tests {
                  DROP TABLE cycle_plan_shift_undo;
                  DROP TABLE cycle_plan_item;
                  DROP TABLE cycle_plan;
+                 DROP TABLE ai_attachment_ref;
                  DROP TABLE ai_context_ref;
                  DROP TABLE review_scheme_queue_item;
                  DROP TABLE review_scheme_queue;
@@ -1547,7 +1548,7 @@ mod tests {
                  ALTER TABLE question DROP COLUMN classification_source;
                  ALTER TABLE question DROP COLUMN question_type;
                  ALTER TABLE question DROP COLUMN subject_id;
-                 DELETE FROM schema_migration WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26);
+                 DELETE FROM schema_migration WHERE version >= 8;
                  PRAGMA user_version = 7;",
             )
             .expect("fixture should become schema v7");

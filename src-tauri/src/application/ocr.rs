@@ -208,10 +208,22 @@ pub(crate) trait OcrComponentManager {
     fn remove_component(&self) -> Result<OcrComponentStatus, OcrError>;
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct OcrPackageOption {
+    pub(crate) version_id: &'static str,
+    pub(crate) label: &'static str,
+    pub(crate) description: &'static str,
+    pub(crate) download_size_bytes: u64,
+    pub(crate) installed_size_bytes: u64,
+    pub(crate) is_recommended: bool,
+}
+
 pub(crate) trait OcrComponentDownloader {
     fn download_available(&self) -> bool;
+    fn download_packages(&self) -> Vec<OcrPackageOption>;
     fn download_component(
         &self,
+        version: Option<&str>,
         canceled: &AtomicBool,
         observe: &mut dyn FnMut(u64, u64),
     ) -> Result<OcrComponentStatus, OcrError>;
@@ -384,12 +396,17 @@ impl<R: OcrRepository, E: OcrEngine + OcrComponentDownloader> OcrUseCases<R, E> 
         self.engine.download_available()
     }
 
+    pub(crate) fn download_packages(&self) -> Vec<OcrPackageOption> {
+        self.engine.download_packages()
+    }
+
     pub(crate) fn download_component(
         &self,
+        version: Option<&str>,
         canceled: &AtomicBool,
         observe: &mut dyn FnMut(u64, u64),
     ) -> Result<OcrComponentStatus, OcrError> {
-        self.engine.download_component(canceled, observe)
+        self.engine.download_component(version, canceled, observe)
     }
 }
 

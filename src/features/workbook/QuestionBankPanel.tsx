@@ -1,4 +1,4 @@
-﻿import {
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -15,6 +15,8 @@ import {
 } from "../../shared/components/PagePrimitives";
 import {
   archiveWorkbookCategory,
+  deleteAllTrashedWorkbookSegments,
+  deleteTrashedWorkbookSegment,
   getQuestionBank,
   listTrashedWorkbookSegments,
   normalizeQuestionBankError,
@@ -58,6 +60,10 @@ import {
 import { QuestionBankTree } from "./QuestionBankTree";
 import { QuestionBankCategoryOverview } from "./QuestionBankCategoryOverview";
 import { QuestionBankWindowPresenter } from "./QuestionBankWindowPresenter";
+import {
+  SEGMENT_TRASH_PURGE_BUSY_ID,
+  segmentTrashDeleteBusyId,
+} from "./QuestionBankSetupDialogs";
 import { ManualIndexDialog } from "./ManualIndexDialog";
 import { findSegmentRestoreConflicts } from "./questionBankModel";
 import { loadPaperDraft, type PaperDraftRecipe } from "./paperSetupPreferences";
@@ -111,6 +117,7 @@ export function QuestionBankPanel({
   const segmentTrashHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const segmentRestoreButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const segmentRestoreFocusIdRef = useRef<string | undefined>(undefined);
+  const segmentPurgeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const snapshotRequestIdRef = useRef(0);
   const auxiliaryRequestIdRef = useRef(0);
   const auxiliaryRefreshSucceededRef = useRef(true);
@@ -404,7 +411,6 @@ export function QuestionBankPanel({
   useEffect(() => {
     if (
       openRequest === undefined ||
-      openRequest.kind !== "resume-or-create-paper" ||
       loading ||
       handledOpenRequestRef.current === openRequest.nonce
     ) {
@@ -412,48 +418,74 @@ export function QuestionBankPanel({
     }
     handledOpenRequestRef.current = openRequest.nonce;
     let active = true;
-    const draft = loadPaperDraft();
-    const questionsById = new Map(
-      snapshot.questions.map((question) => [question.id, question]),
-    );
-    const rememberedQuestions =
-      draft?.questionIds.flatMap((questionId) => {
-        const question = questionsById.get(questionId);
+
+    if (openRequest.kind === "start-custom-paper") {
+      const questionsById = new Map(
+        snapshot.questions.map((question) => [question.id, question]),
+      );
+      const selectedQuestions = openRequest.questionIds.flatMap((id) => {
+        const question = questionsById.get(id);
         return question === undefined ? [] : [question];
-      }) ?? [];
-    const nextWindow =
-      rememberedQuestions.length > 0 && draft !== undefined
-        ? paperWindow(
-            rememberedQuestions,
-            ROOT_WINDOW_ORIGIN,
-            draft.recipe,
-            draft.results === undefined
-              ? undefined
-              : Object.fromEntries(
-                  [...Object.entries(draft.results)].filter(([id]) =>
-                    rememberedQuestions.some((question) => question.id === id),
+      });
+      if (selectedQuestions.length > 0) {
+        const nextWindow = paperWindow(selectedQuestions, ROOT_WINDOW_ORIGIN);
+        void Promise.resolve().then(() => {
+          if (active) setActiveWindow(nextWindow);
+        });
+      }
+      return () => {
+        active = false;
+      };
+    }
+
+    if (openRequest.kind === "resume-or-create-paper") {
+      const draft = loadPaperDraft();
+      const questionsById = new Map(
+        snapshot.questions.map((question) => [question.id, question]),
+      );
+      const rememberedQuestions =
+        draft?.questionIds.flatMap((questionId) => {
+          const question = questionsById.get(questionId);
+          return question === undefined ? [] : [question];
+        }) ?? [];
+      const nextWindow =
+        rememberedQuestions.length > 0 && draft !== undefined
+          ? paperWindow(
+              rememberedQuestions,
+              ROOT_WINDOW_ORIGIN,
+              draft.recipe,
+              draft.results === undefined
+                ? undefined
+                : Object.fromEntries(
+                    [...Object.entries(draft.results)].filter(([id]) =>
+                      rememberedQuestions.some(
+                        (question) => question.id === id,
+                      ),
+                    ),
                   ),
-                ),
-            draft.recordedResults === undefined
-              ? undefined
-              : Object.fromEntries(
-                  [...Object.entries(draft.recordedResults)].filter(([id]) =>
-                    rememberedQuestions.some((question) => question.id === id),
+              draft.recordedResults === undefined
+                ? undefined
+                : Object.fromEntries(
+                    [...Object.entries(draft.recordedResults)].filter(([id]) =>
+                      rememberedQuestions.some(
+                        (question) => question.id === id,
+                      ),
+                    ),
                   ),
-                ),
-            draft.view,
-          )
-        : {
-            kind: "dialog" as const,
-            dialog: "paper" as const,
-            origin: ROOT_WINDOW_ORIGIN,
-          };
-    void Promise.resolve().then(() => {
-      if (active) setActiveWindow(nextWindow);
-    });
-    return () => {
-      active = false;
-    };
+              draft.view,
+            )
+          : {
+              kind: "dialog" as const,
+              dialog: "paper" as const,
+              origin: ROOT_WINDOW_ORIGIN,
+            };
+      void Promise.resolve().then(() => {
+        if (active) setActiveWindow(nextWindow);
+      });
+      return () => {
+        active = false;
+      };
+    }
   }, [loading, openRequest, snapshot.questions]);
 
   const attemptedCount = useMemo(
@@ -703,6 +735,70 @@ export function QuestionBankPanel({
     } catch (restoreError: unknown) {
       if (!mountedRef.current) return;
       const normalized = normalizeQuestionBankError(restoreError);
+      setSegmentRestoreError(normalized);
+      if (normalized.code === "QUESTION_BANK_SEGMENT_RESTORE_STALE") {
+        await refreshSegmentTrash();
+      }
+    } finally {
+      if (mountedRef.current) {
+        setSegmentRestoreBusyId(undefined);
+        restoreSegmentTrashFocus();
+      }
+    }
+  };
+
+  const deleteTrashedSegment = async (
+    segment: TrashedWorkbookDocumentSegment,
+    trigger: HTMLButtonElement,
+  ) => {
+    if (!mountedRef.current || segmentRestoreBusyId !== undefined) return;
+    segmentRestoreFocusIdRef.current = segment.id;
+    segmentRestoreButtonRefs.current.set(segment.id, trigger);
+    setSegmentRestoreBusyId(segmentTrashDeleteBusyId(segment.id));
+    setSegmentRestoreError(undefined);
+    const snapshotRequestId = ++snapshotRequestIdRef.current;
+    try {
+      const next = await deleteTrashedWorkbookSegment(
+        segment.id,
+        segment.deletedAt,
+      );
+      if (!applySnapshot(next, snapshotRequestId)) return;
+      setTrashedSegments((current) =>
+        current.filter((item) => item.id !== segment.id),
+      );
+      setSegmentRestoreError(undefined);
+      void refreshSegmentTrash({ restoreCompleted: true });
+    } catch (deleteError: unknown) {
+      if (!mountedRef.current) return;
+      const normalized = normalizeQuestionBankError(deleteError);
+      setSegmentRestoreError(normalized);
+      if (normalized.code === "QUESTION_BANK_SEGMENT_RESTORE_STALE") {
+        await refreshSegmentTrash();
+      }
+    } finally {
+      if (mountedRef.current) {
+        setSegmentRestoreBusyId(undefined);
+        restoreSegmentTrashFocus();
+      }
+    }
+  };
+
+  const purgeTrashedSegments = async (trigger: HTMLButtonElement) => {
+    if (!mountedRef.current || segmentRestoreBusyId !== undefined) return;
+    segmentRestoreFocusIdRef.current = undefined;
+    segmentPurgeTriggerRef.current = trigger;
+    setSegmentRestoreBusyId(SEGMENT_TRASH_PURGE_BUSY_ID);
+    setSegmentRestoreError(undefined);
+    const snapshotRequestId = ++snapshotRequestIdRef.current;
+    try {
+      const next = await deleteAllTrashedWorkbookSegments();
+      if (!applySnapshot(next, snapshotRequestId)) return;
+      setTrashedSegments([]);
+      setSegmentRestoreError(undefined);
+      void refreshSegmentTrash({ restoreCompleted: true });
+    } catch (purgeError: unknown) {
+      if (!mountedRef.current) return;
+      const normalized = normalizeQuestionBankError(purgeError);
       setSegmentRestoreError(normalized);
       if (normalized.code === "QUESTION_BANK_SEGMENT_RESTORE_STALE") {
         await refreshSegmentTrash();
@@ -1010,6 +1106,10 @@ export function QuestionBankPanel({
         onRestoreSegment={(segment, trigger) =>
           void restoreSegment(segment, trigger)
         }
+        onDeleteSegment={(segment, trigger) =>
+          void deleteTrashedSegment(segment, trigger)
+        }
+        onDeleteAllSegments={(trigger) => void purgeTrashedSegments(trigger)}
         onSegmentChanged={(next, notice) => {
           if (!applySnapshot(next)) return;
           setSegmentManagerNotice(notice ?? "");

@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 
+import type { IndexedQuestion } from "../shared/tauri/questionBankClient";
 import type { QuestionBankOpenRequest } from "../features/workbook/questionBankWindowModel";
+import type { ResourceOpenRequest } from "../features/library/ResourcePanel";
 import { shouldInterceptNavigationClick, type AppView } from "./navigation";
 import { AppNavigation } from "./AppNavigation";
 import { AppPageContent } from "./AppPageContent";
@@ -9,10 +11,13 @@ export interface AppShellProps {
   activeView: AppView;
   reviewOpenRequest?: number;
   workbookOpenRequest?: QuestionBankOpenRequest;
+  resourceOpenRequest?: ResourceOpenRequest;
   onOpenReviewWindow: () => void;
   onOpenPaperShortcut: () => void;
   onOpenSettings: () => void;
   onBackToPlanning: () => void;
+  onOpenReference: (documentId: string, page: number) => void;
+  onStartPaper?: (questions: IndexedQuestion[], title?: string) => void;
   onNavigate: (view: AppView) => void;
 }
 
@@ -41,14 +46,20 @@ export function AppShell({
   activeView,
   reviewOpenRequest,
   workbookOpenRequest,
+  resourceOpenRequest,
   onOpenReviewWindow,
   onOpenPaperShortcut,
   onOpenSettings,
   onBackToPlanning,
+  onOpenReference,
+  onStartPaper,
   onNavigate,
 }: AppShellProps) {
   const isWideContentView =
-    activeView === "workbook" || activeView === "review";
+    activeView === "workbook" ||
+    activeView === "review" ||
+    activeView === "ai-chat" ||
+    activeView === "ai-settings";
   const backAction: ReactNode =
     activeView === "schedule" ? (
       <BackToPlanningAction onNavigate={onNavigate} />
@@ -71,11 +82,14 @@ export function AppShell({
           activeView={activeView}
           reviewOpenRequest={reviewOpenRequest}
           workbookOpenRequest={workbookOpenRequest}
+          resourceOpenRequest={resourceOpenRequest}
           backAction={backAction}
           onOpenReviewWindow={onOpenReviewWindow}
           onOpenPaperShortcut={onOpenPaperShortcut}
           onOpenSettings={onOpenSettings}
           onBackToPlanning={onBackToPlanning}
+          onOpenReference={onOpenReference}
+          onStartPaper={onStartPaper}
           onNavigate={onNavigate}
         />
       </main>

@@ -18,7 +18,7 @@ describe("resolveStoredView", () => {
     ["schedule", "planning"],
     ["mindmap", "library"],
     ["analytics", "today"],
-    ["ai", "settings"],
+    ["ai", "ai-settings"],
     ["data", "settings"],
   ])("migrates the retired stored view %s to %s", (stored, expected) => {
     expect(resolveStoredView(stored)).toBe(expected);
@@ -41,7 +41,7 @@ describe("resolveHashView", () => {
 
   it("migrates retired hashes and rejects unknown hashes", () => {
     expect(resolveHashView("#mindmap")).toBe("library");
-    expect(resolveHashView("#ai")).toBe("settings");
+    expect(resolveHashView("#ai")).toBe("ai-settings");
     expect(resolveHashView("#unknown")).toBeUndefined();
   });
 });
@@ -54,6 +54,11 @@ describe("navigation sections", () => {
 
   it("does not highlight a primary item while settings is open", () => {
     expect(primaryViewFor("settings")).toBeUndefined();
+  });
+
+  it("keeps the AI workspaces as primary navigation views", () => {
+    expect(primaryViewFor("ai-chat")).toBe("ai-chat");
+    expect(primaryViewFor("ai-settings")).toBe("ai-settings");
   });
 });
 

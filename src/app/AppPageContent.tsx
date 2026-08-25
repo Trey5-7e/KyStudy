@@ -1,8 +1,10 @@
 import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
 
+import type { IndexedQuestion } from "../shared/tauri/questionBankClient";
 import { PageHeader, PageStatus } from "../shared/components/PagePrimitives";
 import type { AppView } from "./navigation";
 import type { QuestionBankOpenRequest } from "../features/workbook/questionBankWindowModel";
+import type { ResourceOpenRequest } from "../features/library/ResourcePanel";
 
 const TodayOverviewPanel = lazy(() =>
   import("../features/today/TodayOverviewPanel").then((module) => ({
@@ -47,6 +49,27 @@ const ReviewPanel = lazy<ComponentType<ReviewPanelProps>>(() =>
     default: module.ReviewPanel as ComponentType<ReviewPanelProps>,
   })),
 );
+interface AiChatWorkspaceProps {
+  onOpenReference(documentId: string, page: number): void;
+  onOpenSettings(): void;
+  onStartPaper?: (questions: IndexedQuestion[], title?: string) => void;
+}
+
+const AiChatWorkspace = lazy<ComponentType<AiChatWorkspaceProps>>(() =>
+  import("../features/ai-chat/AiChatWorkspace").then((module) => ({
+    default: module.AiChatWorkspace as ComponentType<AiChatWorkspaceProps>,
+  })),
+);
+interface AiSettingsWorkspaceProps {
+  onOpenChat(): void;
+}
+
+const AiSettingsWorkspace = lazy<ComponentType<AiSettingsWorkspaceProps>>(() =>
+  import("../features/ai/AiSettingsWorkspace").then((module) => ({
+    default:
+      module.AiSettingsWorkspace as ComponentType<AiSettingsWorkspaceProps>,
+  })),
+);
 const SettingsPanel = lazy(() =>
   import("../features/settings/SettingsPanel").then((module) => ({
     default: module.SettingsPanel,
@@ -65,6 +88,8 @@ export const PAGE_META: Readonly<Record<AppView, AppPageMeta>> = {
   workbook: { label: "习题册", caption: "从 PDF 保存题目并记录作答" },
   review: { label: "错题", caption: "让系统挑选今天应该复习的题" },
   library: { label: "资料", caption: "管理本地 PDF、图片和导图" },
+  "ai-chat": { label: "AI 学习助手", caption: "对话、资料与题目讨论" },
+  "ai-settings": { label: "模型与 API", caption: "Provider、模型与预算" },
   settings: { label: "设置", caption: "学习偏好、AI 与本地数据" },
 };
 
@@ -72,11 +97,14 @@ export interface AppPageContentProps {
   activeView: AppView;
   reviewOpenRequest?: number;
   workbookOpenRequest?: QuestionBankOpenRequest;
+  resourceOpenRequest?: ResourceOpenRequest;
   backAction?: ReactNode;
   onOpenReviewWindow: () => void;
   onOpenPaperShortcut: () => void;
   onOpenSettings: () => void;
   onBackToPlanning: () => void;
+  onOpenReference: (documentId: string, page: number) => void;
+  onStartPaper?: (questions: IndexedQuestion[], title?: string) => void;
   onNavigate: (view: AppView) => void;
 }
 
@@ -84,10 +112,13 @@ function PageContent({
   activeView,
   reviewOpenRequest,
   workbookOpenRequest,
+  resourceOpenRequest,
   onOpenReviewWindow,
   onOpenPaperShortcut,
   onOpenSettings,
   onBackToPlanning,
+  onOpenReference,
+  onStartPaper,
   onNavigate,
 }: AppPageContentProps) {
   switch (activeView) {
@@ -109,7 +140,7 @@ function PageContent({
     case "schedule":
       return <ScheduleOverviewPanel onBackToPlanning={onBackToPlanning} />;
     case "library":
-      return <ResourcePanel />;
+      return <ResourcePanel openRequest={resourceOpenRequest} />;
     case "workbook":
       return <WorkbookPanel openRequest={workbookOpenRequest} />;
     case "review":
@@ -119,6 +150,16 @@ function PageContent({
           onOpenSettings={onOpenSettings}
         />
       );
+    case "ai-chat":
+      return (
+        <AiChatWorkspace
+          onOpenReference={onOpenReference}
+          onOpenSettings={() => onNavigate("ai-settings")}
+          onStartPaper={onStartPaper}
+        />
+      );
+    case "ai-settings":
+      return <AiSettingsWorkspace onOpenChat={() => onNavigate("ai-chat")} />;
     case "settings":
       return <SettingsPanel />;
   }
@@ -128,11 +169,14 @@ export function AppPageContent({
   activeView,
   reviewOpenRequest,
   workbookOpenRequest,
+  resourceOpenRequest,
   backAction,
   onOpenReviewWindow,
   onOpenPaperShortcut,
   onOpenSettings,
   onBackToPlanning,
+  onOpenReference,
+  onStartPaper,
   onNavigate,
 }: AppPageContentProps) {
   const currentPage = PAGE_META[activeView];
@@ -149,10 +193,13 @@ export function AppPageContent({
         activeView={activeView}
         reviewOpenRequest={reviewOpenRequest}
         workbookOpenRequest={workbookOpenRequest}
+        resourceOpenRequest={resourceOpenRequest}
         onOpenReviewWindow={onOpenReviewWindow}
         onOpenPaperShortcut={onOpenPaperShortcut}
         onOpenSettings={onOpenSettings}
         onBackToPlanning={onBackToPlanning}
+        onOpenReference={onOpenReference}
+        onStartPaper={onStartPaper}
         onNavigate={onNavigate}
       />
     </Suspense>

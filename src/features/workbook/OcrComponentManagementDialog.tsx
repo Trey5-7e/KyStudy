@@ -26,6 +26,7 @@ export function OcrComponentManagementDialog({
 }) {
   const [component, setComponent] = useState<OcrComponentStatus>();
   const [downloadInfo, setDownloadInfo] = useState<OcrComponentDownloadInfo>();
+  const [selectedVersion, setSelectedVersion] = useState<string>("v0.1.4");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"install" | "remove" | "download">();
   const [downloadProgress, setDownloadProgress] = useState<{
@@ -45,6 +46,7 @@ export function OcrComponentManagementDialog({
       ]);
       setComponent(status);
       setDownloadInfo(info);
+      if (info.defaultVersion) setSelectedVersion(info.defaultVersion);
     } catch (loadError: unknown) {
       setError(normalizeOcrError(loadError));
     } finally {
@@ -59,6 +61,7 @@ export function OcrComponentManagementDialog({
         if (active) {
           setComponent(status);
           setDownloadInfo(info);
+          if (info.defaultVersion) setSelectedVersion(info.defaultVersion);
           setLoading(false);
         }
       },
@@ -116,7 +119,7 @@ export function OcrComponentManagementDialog({
         });
         if (event.error !== undefined) setError(event.error);
       });
-      setComponent(await downloadOcrComponent(operationId));
+      setComponent(await downloadOcrComponent(operationId, selectedVersion));
     } catch (downloadError: unknown) {
       setError(normalizeOcrError(downloadError));
     } finally {
@@ -156,6 +159,119 @@ export function OcrComponentManagementDialog({
             <span>{error.action}</span>
           </div>
         )}
+        {downloadInfo?.available === true &&
+        downloadInfo.versions &&
+        downloadInfo.versions.length > 0 ? (
+          <div
+            style={{
+              marginTop: "16px",
+              marginBottom: "12px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+            }}
+          >
+            <label
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "var(--color-text-primary, #17231d)",
+              }}
+            >
+              选择在线下载版本：
+            </label>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "10px",
+              }}
+            >
+              {downloadInfo.versions.map((pkg) => {
+                const isSelected = selectedVersion === pkg.versionId;
+                return (
+                  <button
+                    type="button"
+                    key={pkg.versionId}
+                    onClick={() => {
+                      if (busy === undefined) setSelectedVersion(pkg.versionId);
+                    }}
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      borderRadius: "var(--radius-sm, 8px)",
+                      border: `1.5px solid ${
+                        isSelected
+                          ? "var(--color-primary, #1e5b42)"
+                          : "var(--color-border-default, #d1d5db)"
+                      }`,
+                      background: isSelected
+                        ? "var(--color-bg-subtle, #edf3ed)"
+                        : "var(--color-bg-surface, #ffffff)",
+                      cursor: busy === undefined ? "pointer" : "default",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        width: "100%",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontWeight: 600,
+                          fontSize: "13px",
+                          color: "var(--color-text-primary, #17231d)",
+                        }}
+                      >
+                        {pkg.versionId} {pkg.label}
+                      </span>
+                      {pkg.isRecommended ? (
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            padding: "1px 6px",
+                            borderRadius: "4px",
+                            background: "var(--color-primary-soft, #dce9df)",
+                            color: "var(--color-primary, #1e5b42)",
+                          }}
+                        >
+                          推荐
+                        </span>
+                      ) : null}
+                    </div>
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        color: "var(--color-text-secondary, #52625a)",
+                        lineHeight: "1.4",
+                      }}
+                    >
+                      {pkg.description}
+                    </span>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "var(--color-text-muted, #657269)",
+                        marginTop: "2px",
+                      }}
+                    >
+                      下载 {formatBytes(pkg.downloadSizeBytes)} · 解压{" "}
+                      {formatBytes(pkg.installedSizeBytes)}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
         <div className="question-form-actions">
           <button
             type="button"
@@ -180,7 +296,9 @@ export function OcrComponentManagementDialog({
             }
             onClick={() => void download()}
           >
-            {busy === "download" ? "正在下载" : "在线下载 OCR 组件"}
+            {busy === "download"
+              ? `正在下载 (${selectedVersion})`
+              : `在线下载 OCR 组件 (${selectedVersion})`}
           </button>
           {busy === "download" ? (
             <button

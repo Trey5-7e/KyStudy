@@ -1,28 +1,34 @@
 //! Thin Tauri command adapters.
 
-use std::{fs, path::Path};
+use std::{
+    fs,
+    io::{Read, Seek, SeekFrom},
+    path::{Path, PathBuf},
+};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 use uuid::Uuid;
 
 use crate::application::{
     AddNodeResourceInput, AddPlanReferenceInput, AddQuestionAttemptInput, AddQuestionRegionInput,
-    AiCallPreview, AiCallResult, AiError, AiImagePreviewInput, AiModelOption, AiOverview,
-    AiPreviewInput, AnalyticsBacklog, AnalyticsError, AnalyticsInput, AnalyticsOverview,
-    AnalyticsPeriodSummary, BackupError, BackupReport, BatchClassifyQuestionsInput,
-    BeginResourceIndexInput, BulkQuestionAttemptInput, ConfirmPlanningChatInput,
-    ConfirmQuestionRegionOcrInput, ConfirmShiftCyclePlanInput, CreateKnowledgeMapInput,
-    CreateQuestionInput, CreateStudySessionInput, CreateSubjectInput, CreateTaskInput,
-    CreateWorkbookCategoryInput, CyclePlanError, DailyAnalyticsPoint, GenerateReviewQueueInput,
-    GenerateReviewSchemeQueueInput, ImportError, ImportProgress, ImportQuestionIndexInput,
-    IndexedQuestionDraftInput, IndexedQuestionRegionUpdateInput, InsertIndexedQuestionInput,
-    InsertReviewQueueItemInput, KnowledgeAnalytics, KnowledgeError, ListAiModelsInput,
-    MoveKnowledgeNodeInput, OcrComponentStatus, OcrError, OcrPageLine, OcrPageRecognition,
-    PinQuestionReviewInput, PlanExecutionProgress, PlanProgressError, PlanProgressInput,
-    PlanProgressSummary, PlanScheduleError, PlanStageProgress, PlanTaskCreation, PlanTaskPreview,
-    PlanTaskPreviewItem, PlanTaskScheduleInput, PlanningChatError, PlanningChatInput,
+    AiAttachmentRef, AiCallPreview, AiCallResult, AiError, AiImagePreviewInput, AiModelOption,
+    AiOverview, AiPreviewInput, AnalyticsBacklog, AnalyticsError, AnalyticsInput,
+    AnalyticsOverview, AnalyticsPeriodSummary, BackupError, BackupReport,
+    BatchClassifyQuestionsInput, BeginResourceIndexInput, BulkQuestionAttemptInput,
+    ConfirmPlanningChatInput, ConfirmQuestionRegionOcrInput, ConfirmShiftCyclePlanInput,
+    CreateKnowledgeMapInput, CreateQuestionInput, CreateStudySessionInput, CreateSubjectInput,
+    CreateTaskInput, CreateWorkbookCategoryInput, CyclePlanError, DailyAnalyticsPoint,
+    DeleteTrashedWorkbookSegmentInput, GenerateReviewQueueInput, GenerateReviewSchemeQueueInput,
+    ImportError, ImportProgress, ImportQuestionIndexInput, IndexedQuestionDraftInput,
+    IndexedQuestionRegionUpdateInput, InsertIndexedQuestionInput, InsertReviewQueueItemInput,
+    KnowledgeAnalytics, KnowledgeError, ListAiModelsInput, MoveKnowledgeNodeInput,
+    OcrComponentStatus, OcrError, OcrPageLine, OcrPageRecognition, PinQuestionReviewInput,
+    PlanExecutionProgress, PlanProgressError, PlanProgressInput, PlanProgressSummary,
+    PlanScheduleError, PlanStageProgress, PlanTaskCreation, PlanTaskPreview, PlanTaskPreviewItem,
+    PlanTaskScheduleInput, PlanningAttachmentPreview, PlanningChatError, PlanningChatInput,
     PlanningChatPreview, PlanningChatReply, PlanningContextSelection, PlanningConversation,
     PlanningError, PlanningMessage, PlanningQuestionContext, PlanningSource,
     QuestionAiAnalysisHistoryEntry, QuestionBankError, QuestionError, QuestionRegionInput,
@@ -31,30 +37,31 @@ use crate::application::{
     RepeatedMistakeAnalytics, ReplaceIndexedQuestionRegionsInput, RescheduleTaskInput,
     ResourceDocument, ResourceReaderDescriptor, RestoreCyclePlanItemStateInput, RestoreReport,
     RestoreWorkbookSegmentInput, ReviewError, ReviewSchemeError, ReviewSchemeTypeQuotaInput,
-    RuntimeStatus, SaveAiBudgetInput, SaveAiProviderInput, SaveCyclePlanInput, SavePlanInput,
-    SavePlanStageInput, SaveReviewSchemeInput, ScheduleError, SearchError, SearchResourcesInput,
-    SetCyclePlanItemStateInput, SetCyclePlanItemStateResult, SetQuestionGapAcknowledgementInput,
-    SetQuestionReviewInput, SetWorkbookSubjectInput, ShiftCyclePlanInput, ShiftCyclePlanPreview,
-    ShiftCyclePlanResult, ShiftCyclePlanUndo, SplitChildInput, SplitTaskInput,
-    StoreResourcePageTextInput, SubjectAnalytics, SubmitReviewInput, SubmitReviewSchemeResultInput,
+    RuntimeStatus, SaveAiBudgetInput, SaveAiProviderCapabilitiesInput, SaveAiProviderInput,
+    SaveCyclePlanInput, SavePlanInput, SavePlanStageInput, SaveReviewSchemeInput, ScheduleError,
+    SearchError, SearchResourcesInput, SetCyclePlanItemStateInput, SetCyclePlanItemStateResult,
+    SetQuestionGapAcknowledgementInput, SetQuestionReviewInput, SetWorkbookSubjectInput,
+    ShiftCyclePlanInput, ShiftCyclePlanPreview, ShiftCyclePlanResult, ShiftCyclePlanUndo,
+    SplitChildInput, SplitTaskInput, StoreResourcePageTextInput, SubjectAnalytics,
+    SubmitReviewInput, SubmitReviewSchemeResultInput, TemporaryAttachmentInput,
     TrashWorkbookSegmentInput, UndoReviewSchemeResultInput, UndoShiftCyclePlanInput,
     UpdateIndexedQuestionInput, UpdateKnowledgeMapInput, UpdateKnowledgeNodeInput,
     UpdateQuestionInput, UpdateQuestionRegionInput, UpdateReviewPreferencesInput,
-    UpdateTaskDetailsInput, WorkbookSegmentAssignmentInput,
+    UpdateTaskDetailsInput, WorkbookSegmentAssignmentInput, classify_source,
     get_runtime_status as load_runtime_status,
 };
 use crate::bootstrap::AppState;
 use crate::domain::{
-    CyclePlan, CyclePlanDashboard, CyclePlanItem, CyclePlanOverview, DailyReviewItem,
-    DailyReviewQueue, IndexedQuestion, KnowledgeMap, KnowledgeMapBundle, KnowledgeNode,
-    KnowledgeNodeResource, MindMapDraftNode, MindMapImportDraft, MistakeProfile, OcrRecognition,
-    OcrTextLine, PlanReference, PlanStage, Question, QuestionAttempt, QuestionBankSnapshot,
-    QuestionBundle, QuestionKnowledgeLink, QuestionRegion, QuestionType, ResourceIndexSession,
-    ResourceIndexStatus, ResourceSearchResult, ReviewBacklog, ReviewDashboard, ReviewEvent,
-    ReviewPreferences, ReviewQuestion, ReviewReason, ReviewScheme, ReviewSchemeDashboard,
-    ReviewSchemeQueue, ReviewSchemeQueueItem, ReviewSchemeToday, ReviewSchemeTypeQuota,
-    ReviewState, StudyPlan, StudyPlanBundle, StudySession, StudyStatistics, Subject,
-    SubjectStatistics, Task, TaskChange, TaskChangeSnapshot, TaskSplit, TaskTransition,
+    AiCapabilityState, CyclePlan, CyclePlanDashboard, CyclePlanItem, CyclePlanOverview,
+    DailyReviewItem, DailyReviewQueue, IndexedQuestion, KnowledgeMap, KnowledgeMapBundle,
+    KnowledgeNode, KnowledgeNodeResource, MindMapDraftNode, MindMapImportDraft, MistakeProfile,
+    OcrRecognition, OcrTextLine, PlanReference, PlanStage, Question, QuestionAttempt,
+    QuestionBankSnapshot, QuestionBundle, QuestionKnowledgeLink, QuestionRegion, QuestionType,
+    ResourceIndexSession, ResourceIndexStatus, ResourceSearchResult, ReviewBacklog,
+    ReviewDashboard, ReviewEvent, ReviewPreferences, ReviewQuestion, ReviewReason, ReviewScheme,
+    ReviewSchemeDashboard, ReviewSchemeQueue, ReviewSchemeQueueItem, ReviewSchemeToday,
+    ReviewSchemeTypeQuota, ReviewState, StudyPlan, StudyPlanBundle, StudySession, StudyStatistics,
+    Subject, SubjectStatistics, Task, TaskChange, TaskChangeSnapshot, TaskSplit, TaskTransition,
     TrashedTask, TrashedWorkbookDocumentSegment, WorkbookCategory, WorkbookDocumentSegment,
     WorkbookProfile, Workspace,
 };
@@ -214,6 +221,25 @@ pub(crate) async fn update_ai_provider(
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)
         .map_err(|error| AppErrorDto::from_ai(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn save_ai_provider_capabilities(
+    provider_id: String,
+    request: SaveAiProviderCapabilitiesRequestDto,
+    state: State<'_, AppState>,
+) -> Result<AiOverviewDto, AppErrorDto> {
+    let use_cases = state.ai.clone();
+    let input = request
+        .try_into()
+        .map_err(|error| AppErrorDto::from_ai(&error))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.save_provider_capabilities(&provider_id, &input)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(Into::into)
+    .map_err(|error| AppErrorDto::from_ai(&error))
 }
 
 #[tauri::command]
@@ -423,6 +449,83 @@ pub(crate) async fn delete_planning_conversation(
 }
 
 #[tauri::command]
+pub(crate) async fn list_ai_attachments(
+    conversation_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AiAttachmentRefDto>, AppErrorDto> {
+    let use_cases = state.planning_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_attachments(&conversation_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|items| items.into_iter().map(Into::into).collect())
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn attach_resource_to_ai_conversation(
+    request: AttachAiResourceRequestDto,
+    state: State<'_, AppState>,
+) -> Result<AiAttachmentRefDto, AppErrorDto> {
+    let use_cases = state.planning_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.attach_resource(&request.conversation_id, &request.document_id)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(Into::into)
+    .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn attach_temporary_ai_attachment(
+    app: AppHandle,
+    conversation_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<AiAttachmentRefDto>, AppErrorDto> {
+    let Some(source) = pick_temporary_attachment_source(&app).await? else {
+        return Ok(None);
+    };
+    let data_directory = state.data_directory().to_owned();
+    let use_cases = state.planning_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let input = prepare_temporary_attachment(&source, &data_directory, conversation_id)
+            .map_err(|error| AppErrorDto::from_import(&error))?;
+        use_cases
+            .attach_temporary(input)
+            .map(AiAttachmentRefDto::from)
+            .map(Some)
+            .map_err(|error| AppErrorDto::from_planning_chat(&error))
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+}
+
+#[tauri::command]
+pub(crate) async fn remove_ai_attachment(
+    attachment_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppErrorDto> {
+    let use_cases = state.planning_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.remove_attachment(&attachment_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn retry_ai_attachment(
+    attachment_id: String,
+    state: State<'_, AppState>,
+) -> Result<AiAttachmentRefDto, AppErrorDto> {
+    let use_cases = state.planning_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.retry_attachment(&attachment_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn preview_planning_chat(
     request: PlanningChatRequestDto,
     state: State<'_, AppState>,
@@ -439,12 +542,55 @@ pub(crate) async fn preview_planning_chat(
 #[tauri::command]
 pub(crate) async fn execute_planning_chat(
     request: ConfirmPlanningChatRequestDto,
+    operation_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<PlanningChatReplyDto, AppErrorDto> {
     let use_cases = state.planning_chat.clone();
     let input = request.into();
-    tauri::async_runtime::spawn_blocking(move || use_cases.execute(&input))
-        .await
+    let operation_id = operation_id.unwrap_or_else(|| Uuid::now_v7().to_string());
+    let canceled = state
+        .ai_chat_jobs
+        .register(operation_id.clone())
+        .ok_or_else(AppErrorDto::ai_chat_operation_conflict)?;
+    let coordinator = state.ai_chat_jobs.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        use_cases.execute_with_cancel(&input, &canceled)
+    })
+    .await;
+    coordinator.finish(&operation_id);
+    result
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn execute_planning_chat_stream(
+    request: ConfirmPlanningChatRequestDto,
+    operation_id: Option<String>,
+    on_event: tauri::ipc::Channel<AiChatStreamChunkDto>,
+    state: State<'_, AppState>,
+) -> Result<PlanningChatReplyDto, AppErrorDto> {
+    let use_cases = state.planning_chat.clone();
+    let input = request.into();
+    let operation_id = operation_id.unwrap_or_else(|| Uuid::now_v7().to_string());
+    let canceled = state
+        .ai_chat_jobs
+        .register(operation_id.clone())
+        .ok_or_else(AppErrorDto::ai_chat_operation_conflict)?;
+    let coordinator = state.ai_chat_jobs.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        use_cases.execute_with_cancel_stream(&input, &canceled, &mut |delta| {
+            on_event
+                .send(AiChatStreamChunkDto {
+                    delta: delta.to_owned(),
+                })
+                .map_err(|_| crate::application::AiError::Canceled)
+        })
+    })
+    .await;
+    coordinator.finish(&operation_id);
+    result
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)
         .map_err(|error| AppErrorDto::from_planning_chat(&error))
@@ -463,6 +609,215 @@ pub(crate) async fn save_planning_reply_as_draft(
     .map_err(|_| AppErrorDto::task_failed())?
     .map(|plan_id| SavedPlanningDraftDto { plan_id })
     .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_ai_chat_conversations(
+    state: State<'_, AppState>,
+) -> Result<Vec<PlanningConversationDto>, AppErrorDto> {
+    let use_cases = state.ai_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|items| items.into_iter().map(Into::into).collect())
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn create_ai_chat_conversation(
+    request: CreatePlanningConversationRequestDto,
+    state: State<'_, AppState>,
+) -> Result<PlanningConversationDto, AppErrorDto> {
+    let use_cases = state.ai_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.create(&request.title))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn rename_ai_chat_conversation(
+    request: RenamePlanningConversationRequestDto,
+    state: State<'_, AppState>,
+) -> Result<PlanningConversationDto, AppErrorDto> {
+    let use_cases = state.ai_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.rename(&request.conversation_id, &request.title)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(Into::into)
+    .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn delete_ai_chat_conversation(
+    request: PlanningConversationIdRequestDto,
+    state: State<'_, AppState>,
+) -> Result<(), AppErrorDto> {
+    let use_cases = state.ai_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.delete(&request.conversation_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn list_ai_chat_attachments(
+    conversation_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AiAttachmentRefDto>, AppErrorDto> {
+    let use_cases = state.ai_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.list_attachments(&conversation_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(|items| items.into_iter().map(Into::into).collect())
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn attach_resource_to_ai_chat(
+    request: AttachAiResourceRequestDto,
+    state: State<'_, AppState>,
+) -> Result<AiAttachmentRefDto, AppErrorDto> {
+    let use_cases = state.ai_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.attach_resource(&request.conversation_id, &request.document_id)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(Into::into)
+    .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn attach_temporary_ai_chat_attachment(
+    app: AppHandle,
+    conversation_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<AiAttachmentRefDto>, AppErrorDto> {
+    let Some(source) = pick_temporary_attachment_source(&app).await? else {
+        return Ok(None);
+    };
+    let data_directory = state.data_directory().to_owned();
+    let use_cases = state.ai_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let input = prepare_temporary_attachment(&source, &data_directory, conversation_id)
+            .map_err(|error| AppErrorDto::from_import(&error))?;
+        use_cases
+            .attach_temporary(input)
+            .map(AiAttachmentRefDto::from)
+            .map(Some)
+            .map_err(|error| AppErrorDto::from_planning_chat(&error))
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+}
+
+#[tauri::command]
+pub(crate) async fn remove_ai_chat_attachment(
+    attachment_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppErrorDto> {
+    let use_cases = state.ai_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.remove_attachment(&attachment_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn retry_ai_chat_attachment(
+    attachment_id: String,
+    state: State<'_, AppState>,
+) -> Result<AiAttachmentRefDto, AppErrorDto> {
+    let use_cases = state.ai_chat.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.retry_attachment(&attachment_id))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn preview_ai_chat(
+    request: PlanningChatRequestDto,
+    state: State<'_, AppState>,
+) -> Result<PlanningChatPreviewDto, AppErrorDto> {
+    let use_cases = state.ai_chat.clone();
+    let input = request.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.preview(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn execute_ai_chat(
+    request: PlanningChatRequestDto,
+    operation_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<PlanningChatReplyDto, AppErrorDto> {
+    let use_cases = state.ai_chat.clone();
+    let input = request.into();
+    let operation_id = operation_id.unwrap_or_else(|| Uuid::now_v7().to_string());
+    let canceled = state
+        .ai_chat_jobs
+        .register(operation_id.clone())
+        .ok_or_else(AppErrorDto::ai_chat_operation_conflict)?;
+    let coordinator = state.ai_chat_jobs.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        use_cases.execute_direct_with_cancel(&input, &canceled)
+    })
+    .await;
+    coordinator.finish(&operation_id);
+    result
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn execute_ai_chat_stream(
+    request: PlanningChatRequestDto,
+    operation_id: Option<String>,
+    on_event: tauri::ipc::Channel<AiChatStreamChunkDto>,
+    state: State<'_, AppState>,
+) -> Result<PlanningChatReplyDto, AppErrorDto> {
+    let use_cases = state.ai_chat.clone();
+    let input = request.into();
+    let operation_id = operation_id.unwrap_or_else(|| Uuid::now_v7().to_string());
+    let canceled = state
+        .ai_chat_jobs
+        .register(operation_id.clone())
+        .ok_or_else(AppErrorDto::ai_chat_operation_conflict)?;
+    let coordinator = state.ai_chat_jobs.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        use_cases.execute_direct_with_cancel_stream(&input, &canceled, &mut |delta| {
+            on_event
+                .send(AiChatStreamChunkDto {
+                    delta: delta.to_owned(),
+                })
+                .map_err(|_| crate::application::AiError::Canceled)
+        })
+    })
+    .await;
+    coordinator.finish(&operation_id);
+    result
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri command handlers receive owned arguments and managed State"
+)]
+pub(crate) fn cancel_ai_chat(operation_id: String, state: State<'_, AppState>) -> bool {
+    Uuid::parse_str(&operation_id).is_ok() && state.ai_chat_jobs.cancel(&operation_id)
 }
 
 /// Workspace metadata returned without a database path or row representation.
@@ -2172,6 +2527,22 @@ impl From<RestoreWorkbookSegmentRequestDto> for RestoreWorkbookSegmentInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct DeleteTrashedWorkbookSegmentRequestDto {
+    segment_id: String,
+    expected_deleted_at: i64,
+}
+
+impl From<DeleteTrashedWorkbookSegmentRequestDto> for DeleteTrashedWorkbookSegmentInput {
+    fn from(value: DeleteTrashedWorkbookSegmentRequestDto) -> Self {
+        Self {
+            segment_id: value.segment_id,
+            expected_deleted_at: value.expected_deleted_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ReassignWorkbookSegmentRequestDto {
     segment_id: String,
     target_workbook_id: String,
@@ -2584,6 +2955,8 @@ pub(crate) struct RecognizePdfPageRequestDto {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct DownloadOcrComponentRequestDto {
     operation_id: String,
+    #[serde(default)]
+    version: Option<String>,
 }
 
 impl From<RecognizePdfPageRequestDto> for RecognizePdfPageInput {
@@ -2622,9 +2995,35 @@ pub(crate) struct OcrComponentStatusDto {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct OcrPackageOptionDto {
+    version_id: &'static str,
+    label: &'static str,
+    description: &'static str,
+    download_size_bytes: u64,
+    installed_size_bytes: u64,
+    is_recommended: bool,
+}
+
+impl From<crate::application::OcrPackageOption> for OcrPackageOptionDto {
+    fn from(option: crate::application::OcrPackageOption) -> Self {
+        Self {
+            version_id: option.version_id,
+            label: option.label,
+            description: option.description,
+            download_size_bytes: option.download_size_bytes,
+            installed_size_bytes: option.installed_size_bytes,
+            is_recommended: option.is_recommended,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct OcrComponentDownloadInfoDto {
     available: bool,
     engine: &'static str,
+    default_version: &'static str,
+    versions: Vec<OcrPackageOptionDto>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -3960,6 +4359,35 @@ pub(crate) struct SaveAiProviderRequestDto {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[allow(
+    clippy::struct_field_names,
+    reason = "Fields mirror the public capability request contract"
+)]
+pub(crate) struct SaveAiProviderCapabilitiesRequestDto {
+    supports_image: String,
+    supports_file: String,
+    supports_pdf: String,
+}
+
+impl TryFrom<SaveAiProviderCapabilitiesRequestDto> for SaveAiProviderCapabilitiesInput {
+    type Error = AiError;
+
+    fn try_from(request: SaveAiProviderCapabilitiesRequestDto) -> Result<Self, Self::Error> {
+        let parse =
+            |value: String| AiCapabilityState::parse(value.trim()).ok_or(AiError::InvalidInput);
+        Ok(Self {
+            capabilities: crate::domain::AiModelCapabilities {
+                supports_image: parse(request.supports_image)?,
+                supports_file: parse(request.supports_file)?,
+                supports_pdf: parse(request.supports_pdf)?,
+                capability_source: crate::domain::AiCapabilitySource::Manual,
+            },
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct SavePaperPdfRequestDto {
     file_name: String,
     bytes: Vec<u8>,
@@ -4112,8 +4540,35 @@ pub(crate) struct AiProviderDto {
     model_name: String,
     context_limit: u32,
     max_output_tokens: u32,
+    capabilities: AiModelCapabilitiesDto,
     has_secret: bool,
     active: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+enum AiCapabilityValueDto {
+    Boolean(bool),
+    Unknown(&'static str),
+}
+
+impl From<AiCapabilityState> for AiCapabilityValueDto {
+    fn from(value: AiCapabilityState) -> Self {
+        match value {
+            AiCapabilityState::Supported => Self::Boolean(true),
+            AiCapabilityState::Unsupported => Self::Boolean(false),
+            AiCapabilityState::Unknown => Self::Unknown("unknown"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AiModelCapabilitiesDto {
+    supports_image: AiCapabilityValueDto,
+    supports_file: AiCapabilityValueDto,
+    supports_pdf: AiCapabilityValueDto,
+    capability_source: &'static str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -4189,6 +4644,12 @@ impl From<AiOverview> for AiOverviewDto {
                     model_name: entry.model.model_name,
                     context_limit: entry.model.context_limit,
                     max_output_tokens: entry.model.max_output_tokens,
+                    capabilities: AiModelCapabilitiesDto {
+                        supports_image: entry.model.capabilities.supports_image.into(),
+                        supports_file: entry.model.capabilities.supports_file.into(),
+                        supports_pdf: entry.model.capabilities.supports_pdf.into(),
+                        capability_source: entry.model.capabilities.capability_source.as_str(),
+                    },
                     has_secret: entry.has_secret,
                     active: entry.provider.enabled,
                 })
@@ -4352,7 +4813,18 @@ pub(crate) struct PlanningChatRequestDto {
     question: String,
     contexts: Vec<PlanningContextSelectionDto>,
     question_context: Option<PlanningQuestionContextDto>,
+    #[serde(default)]
+    attachment_ids: Vec<String>,
+    #[serde(default)]
+    image_data_urls: Vec<String>,
     max_output_tokens: u32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct AttachAiResourceRequestDto {
+    conversation_id: String,
+    document_id: String,
 }
 
 impl From<PlanningChatRequestDto> for PlanningChatInput {
@@ -4362,6 +4834,8 @@ impl From<PlanningChatRequestDto> for PlanningChatInput {
             question: value.question,
             contexts: value.contexts.into_iter().map(Into::into).collect(),
             question_context: value.question_context.map(Into::into),
+            attachment_ids: value.attachment_ids,
+            image_data_urls: value.image_data_urls,
             max_output_tokens: value.max_output_tokens,
         }
     }
@@ -4374,6 +4848,10 @@ pub(crate) struct ConfirmPlanningChatRequestDto {
     question: String,
     contexts: Vec<PlanningContextSelectionDto>,
     question_context: Option<PlanningQuestionContextDto>,
+    #[serde(default)]
+    attachment_ids: Vec<String>,
+    #[serde(default)]
+    image_data_urls: Vec<String>,
     max_output_tokens: u32,
     confirmed_prompt: String,
     confirmed_request_fingerprint: String,
@@ -4387,6 +4865,8 @@ impl From<ConfirmPlanningChatRequestDto> for ConfirmPlanningChatInput {
                 question: value.question,
                 contexts: value.contexts.into_iter().map(Into::into).collect(),
                 question_context: value.question_context.map(Into::into),
+                attachment_ids: value.attachment_ids,
+                image_data_urls: value.image_data_urls,
                 max_output_tokens: value.max_output_tokens,
             },
             confirmed_prompt: value.confirmed_prompt,
@@ -4426,6 +4906,12 @@ pub(crate) struct SavePlanningReplyRequestDto {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SavedPlanningDraftDto {
     plan_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiChatStreamChunkDto {
+    pub(crate) delta: String,
 }
 
 #[derive(Serialize)]
@@ -4475,9 +4961,47 @@ impl From<PlanningMessage> for PlanningMessageDto {
 pub(crate) struct PlanningConversationDto {
     id: String,
     title: String,
+    kind: &'static str,
+    model_profile_id: Option<String>,
     messages: Vec<PlanningMessageDto>,
     created_at: i64,
     updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiAttachmentRefDto {
+    id: String,
+    conversation_id: String,
+    source: String,
+    document_id: Option<String>,
+    file_name: String,
+    mime_type: String,
+    size_bytes: u64,
+    sha256: Option<String>,
+    status: String,
+    error_code: Option<String>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<AiAttachmentRef> for AiAttachmentRefDto {
+    fn from(value: AiAttachmentRef) -> Self {
+        Self {
+            id: value.id,
+            conversation_id: value.conversation_id,
+            source: value.source,
+            document_id: value.document_id,
+            file_name: value.file_name,
+            mime_type: value.mime_type,
+            size_bytes: value.size_bytes,
+            sha256: value.sha256,
+            status: value.status,
+            error_code: value.error_code,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        }
+    }
 }
 
 impl From<PlanningConversation> for PlanningConversationDto {
@@ -4485,6 +5009,8 @@ impl From<PlanningConversation> for PlanningConversationDto {
         Self {
             id: value.id,
             title: value.title,
+            kind: value.kind.as_str(),
+            model_profile_id: value.model_profile_id,
             messages: value.messages.into_iter().map(Into::into).collect(),
             created_at: value.created_at,
             updated_at: value.updated_at,
@@ -4497,6 +5023,30 @@ impl From<PlanningConversation> for PlanningConversationDto {
 pub(crate) struct PlanningChatPreviewDto {
     preview: AiCallPreviewDto,
     sources: Vec<PlanningSourceDto>,
+    transport: String,
+    attachments: Vec<PlanningAttachmentPreviewDto>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlanningAttachmentPreviewDto {
+    id: String,
+    file_name: String,
+    transport: String,
+    indexed_pages: Option<u32>,
+    warning: Option<String>,
+}
+
+impl From<PlanningAttachmentPreview> for PlanningAttachmentPreviewDto {
+    fn from(value: PlanningAttachmentPreview) -> Self {
+        Self {
+            id: value.id,
+            file_name: value.file_name,
+            transport: value.transport,
+            indexed_pages: value.indexed_pages,
+            warning: value.warning,
+        }
+    }
 }
 
 impl From<PlanningChatPreview> for PlanningChatPreviewDto {
@@ -4504,6 +5054,8 @@ impl From<PlanningChatPreview> for PlanningChatPreviewDto {
         Self {
             preview: value.preview.into(),
             sources: value.sources.into_iter().map(Into::into).collect(),
+            transport: value.transport,
+            attachments: value.attachments.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -4538,6 +5090,15 @@ pub(crate) struct AppErrorDto {
 }
 
 impl AppErrorDto {
+    fn ai_chat_operation_conflict() -> Self {
+        Self {
+            code: "AI_CHAT_OPERATION_CONFLICT",
+            message: "当前已有一条 AI 对话正在执行。",
+            action: "先取消当前操作或等待完成后再试。",
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
+
     fn from_persistence(error: &crate::application::PersistenceError) -> Self {
         let (message, action) = match error {
             crate::application::PersistenceError::Busy { .. } => (
@@ -4686,6 +5247,10 @@ impl AppErrorDto {
                 "思维导图源文件超过当前安全上限。",
                 "请把源文件精简到 100 MiB 以内，或拆分为多张导图后重试。",
             ),
+            ImportError::AttachmentTooLarge => (
+                "临时资料超过 100 MiB 限制。",
+                "选择更小的资料，或先导入资料库并建立本地索引。",
+            ),
             ImportError::File { .. } => (
                 "无法读取来源文件或写入本地资料库。",
                 "检查文件占用、磁盘空间和目录权限后重试。",
@@ -4748,6 +5313,10 @@ impl AppErrorDto {
                 "AI Provider 拒绝了本次请求。",
                 "检查模型名称和 Provider 账户权限后重试。",
             ),
+            AiError::Canceled => (
+                "本次 AI 对话已取消，回复未写入本地对话。",
+                "可以重新生成预览后再发送。",
+            ),
             AiError::ModelListUnsupported => (
                 "该 Provider 不提供兼容的模型列表接口。",
                 "继续手动填写模型 ID，并通过连接测试验证。",
@@ -4763,6 +5332,14 @@ impl AppErrorDto {
             AiError::ModelListTooLarge => (
                 "Provider 返回的模型列表过大。",
                 "缩小账户模型范围后重试，或手动填写模型 ID。",
+            ),
+            AiError::AttachmentIntegrityFailed => (
+                "原生附件完整性校验未通过。",
+                "重新选择电脑资料；文件不会在校验失败时发送给 Provider。",
+            ),
+            AiError::NativeAttachmentTooLarge => (
+                "原生附件超过当前 Provider 的安全上传上限。",
+                "选择不超过 24 MiB 的电脑资料，或先导入资料库建立本地索引。",
             ),
             AiError::Persistence(error) => return Self::from_persistence(error),
         };
@@ -4798,6 +5375,36 @@ impl AppErrorDto {
                 "找不到可保存的 AI 回复。",
                 "刷新对话后选择一条完整的助手回复。",
             ),
+            PlanningChatError::AttachmentNotFound => {
+                ("找不到这条对话附件。", "刷新当前对话后重新选择资料。")
+            }
+            PlanningChatError::AttachmentLimitReached => (
+                "当前对话最多保留 6 个附件。",
+                "移除不再需要的资料后再添加。",
+            ),
+            PlanningChatError::AttachmentResourceNotFound => (
+                "这份资料已不存在或尚未完成导入。",
+                "刷新资料库后选择一份状态正常的资料。",
+            ),
+            PlanningChatError::AttachmentInvalid => (
+                "这份资料的附件元数据不符合安全限制。",
+                "选择 100 MiB 以内且文件信息完整的资料。",
+            ),
+            PlanningChatError::AttachmentTemporaryFailed => (
+                "临时资料未能安全保存。",
+                "检查磁盘空间和资料权限后重新选择。",
+            ),
+            PlanningChatError::AttachmentTemporaryNotFound => {
+                ("电脑资料已丢失或发生变化。", "重新选择电脑资料后再发送。")
+            }
+            PlanningChatError::AttachmentNotIndexed => (
+                "本地资料尚未建立可用的文本索引。",
+                "等待资料索引完成或重新导入后再发送。",
+            ),
+            PlanningChatError::Canceled => (
+                "本次 AI 对话已取消，回复未写入本地对话。",
+                "可以重新生成预览后再发送。",
+            ),
             PlanningChatError::Ai(error) => return Self::from_ai(error),
             PlanningChatError::Persistence(error) => return Self::from_persistence(error),
         };
@@ -4819,7 +5426,7 @@ impl AppErrorDto {
             }
             SearchError::UnsupportedDocument => (
                 "这份资料暂时不能建立文字索引。",
-                "当前只支持带文字层的 PDF；扫描页需要等待 OCR 版本。",
+                "当前支持 PDF 文字层；扫描页请安装并启用本地 OCR 组件后重试。",
             ),
             SearchError::InvalidInput => (
                 "索引页码、页面文字或搜索条件无效。",
@@ -6398,6 +7005,32 @@ pub(crate) async fn restore_workbook_segment(
 }
 
 #[tauri::command]
+pub(crate) async fn delete_workbook_segment(
+    input: DeleteTrashedWorkbookSegmentRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    let input = input.into();
+    tauri::async_runtime::spawn_blocking(move || use_cases.delete_trashed_workbook_segment(&input))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn delete_all_trashed_workbook_segments(
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.delete_all_trashed_workbook_segments())
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
 pub(crate) async fn reassign_workbook_segment(
     input: ReassignWorkbookSegmentRequestDto,
     state: State<'_, AppState>,
@@ -6599,6 +7232,12 @@ pub(crate) async fn get_ocr_download_info(
     tauri::async_runtime::spawn_blocking(move || OcrComponentDownloadInfoDto {
         available: use_cases.download_available(),
         engine: crate::application::OCR_ENGINE_NAME,
+        default_version: "v0.1.4",
+        versions: use_cases
+            .download_packages()
+            .into_iter()
+            .map(OcrPackageOptionDto::from)
+            .collect(),
     })
     .await
     .map_err(|_| AppErrorDto::task_failed())
@@ -6611,6 +7250,7 @@ pub(crate) async fn download_ocr_component(
     state: State<'_, AppState>,
 ) -> Result<OcrComponentStatusDto, AppErrorDto> {
     let operation_id = request.operation_id;
+    let version = request.version;
     if Uuid::parse_str(&operation_id).is_err() {
         return Err(AppErrorDto::from_ocr(&OcrError::InvalidInput));
     }
@@ -6637,7 +7277,7 @@ pub(crate) async fn download_ocr_component(
                     },
                 );
             };
-            use_cases.download_component(&canceled, &mut observe)
+            use_cases.download_component(version.as_deref(), &canceled, &mut observe)
         };
         (result, last_progress)
     })
@@ -7139,6 +7779,80 @@ pub(crate) async fn refresh_cycle_plan_schedules(
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)
         .map_err(|error| AppErrorDto::from_cycle_plan(&error))
+}
+
+const MAXIMUM_TEMPORARY_ATTACHMENT_BYTES: u64 = 104_857_600;
+
+async fn pick_temporary_attachment_source(app: &AppHandle) -> Result<Option<PathBuf>, AppErrorDto> {
+    let dialog_app = app.clone();
+    let selected = tauri::async_runtime::spawn_blocking(move || {
+        dialog_app
+            .dialog()
+            .file()
+            .add_filter(
+                "学习资料",
+                &[
+                    "pdf", "png", "jpg", "jpeg", "webp", "xmind", "opml", "mm", "md", "txt",
+                ],
+            )
+            .blocking_pick_file()
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?;
+    match selected {
+        None => Ok(None),
+        Some(FilePath::Path(path)) => Ok(Some(path)),
+        Some(FilePath::Url(_)) => Err(AppErrorDto::from_import(&ImportError::SourceNotFile)),
+    }
+}
+
+fn prepare_temporary_attachment(
+    path: &Path,
+    data_directory: &Path,
+    conversation_id: String,
+) -> Result<TemporaryAttachmentInput, ImportError> {
+    let source = path.canonicalize()?;
+    let managed_root = data_directory
+        .canonicalize()
+        .unwrap_or_else(|_| data_directory.to_owned());
+    if source.starts_with(&managed_root) {
+        return Err(ImportError::SourceInsideWorkspace);
+    }
+    let metadata = fs::metadata(&source)?;
+    if !metadata.is_file() {
+        return Err(ImportError::SourceNotFile);
+    }
+    let size_bytes = metadata.len();
+    if size_bytes > MAXIMUM_TEMPORARY_ATTACHMENT_BYTES {
+        return Err(ImportError::AttachmentTooLarge);
+    }
+    let (.., mime_type) = classify_source(&source)?;
+    let file_name = source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.trim().is_empty())
+        .ok_or(ImportError::InvalidFileName)?
+        .to_owned();
+    let mut file = fs::File::open(&source)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0_u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    file.seek(SeekFrom::Start(0))?;
+    Ok(TemporaryAttachmentInput {
+        conversation_id,
+        attachment_id: Uuid::now_v7().to_string(),
+        file_name,
+        mime_type,
+        size_bytes,
+        sha256: format!("{:X}", hasher.finalize()),
+        file,
+    })
 }
 
 #[tauri::command]

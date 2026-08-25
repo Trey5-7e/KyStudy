@@ -2,21 +2,23 @@ import type { FormEvent, RefObject } from "react";
 
 interface ComposerProps {
   question: string;
-  outputLimit: string;
   busy: boolean;
+  attachmentCount?: number;
+  attachmentsOpen?: boolean;
+  onToggleAttachments?(): void;
   submitButtonRef?: RefObject<HTMLButtonElement | null>;
   onQuestionChange(value: string): void;
-  onOutputLimitChange(value: string): void;
   onPrepare(event: FormEvent): void;
 }
 
 export function Composer({
   question,
-  outputLimit,
   busy,
+  attachmentCount = 0,
+  attachmentsOpen = false,
+  onToggleAttachments,
   submitButtonRef,
   onQuestionChange,
-  onOutputLimitChange,
   onPrepare,
 }: ComposerProps) {
   return (
@@ -28,21 +30,33 @@ export function Composer({
           maxLength={4000}
           value={question}
           onChange={(event) => onQuestionChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing
+            ) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
           placeholder="描述你想完善的下一步规划。"
           required
         />
       </label>
-      <label>
-        输出 Token 上限
-        <input
-          type="number"
-          min={1}
-          max={1800}
-          value={outputLimit}
-          onChange={(event) => onOutputLimitChange(event.target.value)}
-          required
-        />
-      </label>
+      {onToggleAttachments === undefined ? null : (
+        <button
+          type="button"
+          className="planning-chat-attachment-trigger"
+          aria-expanded={attachmentsOpen}
+          aria-controls="planning-chat-attachments"
+          onClick={onToggleAttachments}
+          disabled={busy}
+        >
+          <span aria-hidden="true">＋</span>
+          <span>资料 {attachmentCount > 0 ? `(${attachmentCount})` : ""}</span>
+        </button>
+      )}
       <button ref={submitButtonRef} type="submit" disabled={busy}>
         生成外发预览
       </button>

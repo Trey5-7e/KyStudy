@@ -11,6 +11,8 @@ describe("app shell contracts", () => {
       "workbook",
       "review",
       "library",
+      "ai-chat",
+      "ai-settings",
     ]);
     expect(new Set(PRIMARY_NAVIGATION.map((item) => item.id)).size).toBe(
       PRIMARY_NAVIGATION.length,
@@ -19,6 +21,8 @@ describe("app shell contracts", () => {
 
   it("provides metadata for every route, including secondary views", () => {
     expect(Object.keys(PAGE_META).sort()).toEqual([
+      "ai-chat",
+      "ai-settings",
       "library",
       "planning",
       "review",

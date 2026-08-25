@@ -157,6 +157,160 @@
   min-width: 0;
 }
 
+.ai-provider-preset-section {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 13%, transparent);
+  border-radius: var(--radius-md);
+  padding: 0.9rem;
+  background: color-mix(in srgb, var(--color-bg-subtle) 72%, transparent);
+}
+
+.ai-provider-preset-heading,
+.ai-provider-preset-heading > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.ai-provider-preset-heading > div {
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.ai-provider-preset-heading strong {
+  color: var(--color-text-primary);
+  font-size: 0.84rem;
+}
+
+.ai-provider-preset-heading span,
+.ai-provider-preset-count {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.ai-provider-preset-count {
+  white-space: nowrap;
+}
+
+.ai-provider-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.ai-provider-preset-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.62rem 0.68rem;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-surface);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.ai-provider-preset-card:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-primary) 28%, transparent);
+  transform: translateY(-1px);
+}
+
+.ai-provider-preset-card:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.ai-provider-preset-selected {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: color-mix(
+    in srgb,
+    var(--color-success-soft) 64%,
+    var(--color-bg-surface)
+  );
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--color-primary) 13%, transparent);
+}
+
+.ai-provider-preset-icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
+  place-items: center;
+  border-radius: 0.65rem;
+  color: var(--color-primary);
+  background: color-mix(
+    in srgb,
+    var(--color-primary) 9%,
+    var(--color-bg-surface)
+  );
+}
+
+.ai-provider-preset-selected .ai-provider-preset-icon {
+  background: var(--color-bg-surface);
+}
+
+.ai-provider-preset-fallback-icon {
+  font-size: 1.2rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.ai-provider-preset-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+.ai-provider-preset-copy strong,
+.ai-provider-preset-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-provider-preset-copy strong {
+  font-size: 0.76rem;
+}
+
+.ai-provider-preset-copy small {
+  color: var(--color-text-muted);
+  font-size: 0.66rem;
+  font-weight: 650;
+}
+
+.ai-provider-preset-selected .ai-provider-preset-copy small {
+  color: color-mix(in srgb, var(--color-primary) 76%, var(--color-text-muted));
+}
+
+.ai-provider-key-link {
+  justify-self: start;
+  border: 0;
+  padding: 0;
+  color: var(--color-primary);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.ai-provider-key-link:hover {
+  text-decoration: underline;
+}
+
 .ai-settings {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -264,6 +418,13 @@
   width: 100%;
   min-width: 0;
 }
+.ai-provider-capability-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+.ai-provider-capability-grid select {
+  width: 100%;
+  min-width: 0;
+}
 
 .ai-dialog-tabs {
   display: flex;
@@ -347,6 +508,10 @@
 
   .ai-secret-delete-confirmation button {
     width: 100%;
+  }
+
+  .ai-provider-capability-grid {
+    grid-template-columns: 1fr !important;
   }
 }
 
@@ -460,6 +625,16 @@
 @media (max-width: 720px) {
   .ai-settings,
   .ai-provider-advanced > div {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-provider-preset-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 430px) {
+  .ai-provider-preset-grid {
     grid-template-columns: 1fr;
   }
 }

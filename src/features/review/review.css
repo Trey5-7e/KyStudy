@@ -471,11 +471,13 @@
 
 .question-ai-history-list {
   display: grid;
+  min-width: 0;
   gap: var(--space-2);
 }
 
 .question-ai-history-item {
   display: grid;
+  min-width: 0;
   gap: var(--space-2);
   padding: var(--space-3);
   border: 1px solid var(--color-border-subtle);
@@ -484,11 +486,38 @@
 }
 
 .question-ai-history-text {
+  min-width: 0;
+  max-width: 100%;
   max-height: min(24rem, 45vh);
   overflow: auto;
-  white-space: pre-wrap;
+  /* Keep the same normal-flow text mode as AI chat messages. Markdown
+     paragraphs/lists already preserve the response structure; pre-wrap here
+     makes KaTeX's HTML and MathML layers inherit a desktop-incompatible
+     whitespace mode. */
+  white-space: normal;
   overflow-wrap: anywhere;
   line-height: 1.7;
+}
+
+.question-ai-history-text > p {
+  margin-block: 0.45rem;
+}
+
+.question-ai-history-text .katex {
+  max-width: 100%;
+}
+
+.question-ai-history-text .katex-display {
+  margin-block: 0.45rem;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.question-ai-history-text table,
+.question-ai-history-text pre {
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .question-ai-confirm,

@@ -18,6 +18,8 @@ export const PRIMARY_NAVIGATION: ReadonlyArray<{
   { id: "workbook", label: "习题册", caption: "PDF 题目与作答" },
   { id: "review", label: "错题", caption: "每日复习队列" },
   { id: "library", label: "资料", caption: "PDF、图片与导图" },
+  { id: "ai-chat", label: "AI 学习助手", caption: "对话、资料与题目讨论" },
+  { id: "ai-settings", label: "模型与 API", caption: "Provider、模型与预算" },
 ];
 
 export interface AppNavigationProps {
@@ -70,7 +72,7 @@ function SettingsLink({ activeView, onNavigate }: AppNavigationProps) {
       <span aria-hidden="true">⚙</span>
       <span>
         <strong>设置</strong>
-        <small>学习偏好、AI 与数据</small>
+        <small>学习偏好、隐私与数据</small>
       </span>
     </a>
   );

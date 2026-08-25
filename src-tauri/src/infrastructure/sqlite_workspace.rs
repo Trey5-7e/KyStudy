@@ -166,6 +166,26 @@ const MIGRATION_026: Migration = Migration {
     name: "ai_provider_protocols",
     sql: include_str!("../../migrations/0026_ai_provider_protocols.sql"),
 };
+const MIGRATION_027: Migration = Migration {
+    version: 27,
+    name: "ai_conversation_contract",
+    sql: include_str!("../../migrations/0027_ai_conversation_contract.sql"),
+};
+const MIGRATION_028: Migration = Migration {
+    version: 28,
+    name: "ai_capabilities_and_attachments",
+    sql: include_str!("../../migrations/0028_ai_capabilities_and_attachments.sql"),
+};
+const MIGRATION_029: Migration = Migration {
+    version: 29,
+    name: "ai_budget_warn_default",
+    sql: include_str!("../../migrations/0029_ai_budget_warn_default.sql"),
+};
+const MIGRATION_030: Migration = Migration {
+    version: 30,
+    name: "ai_output_token_limits",
+    sql: include_str!("../../migrations/0030_ai_output_token_limits.sql"),
+};
 const MIGRATIONS: &[Migration] = &[
     MIGRATION_001,
     MIGRATION_002,
@@ -193,6 +213,10 @@ const MIGRATIONS: &[Migration] = &[
     MIGRATION_024,
     MIGRATION_025,
     MIGRATION_026,
+    MIGRATION_027,
+    MIGRATION_028,
+    MIGRATION_029,
+    MIGRATION_030,
 ];
 
 /// `rusqlite` adapter for the single local workspace used in M1.
@@ -396,11 +420,56 @@ fn apply_migrations(
     if migrations.is_empty() {
         return Ok(());
     }
+    // v27 rebuilds ai_call to extend its CHECK constraint. SQLite rewrites
+    // foreign-key targets when a table is renamed, so the migration needs a
+    // short foreign-key-off window while the replacement table is installed.
+    // Preserve and restore both connection pragmas around the transaction.
+    let rebuilds_ai_call = migrations.iter().any(|migration| migration.version == 27);
+    let (previous_foreign_keys, previous_legacy_alter_table) = if rebuilds_ai_call {
+        let foreign_keys = connection
+            .pragma_query_value(None, "foreign_keys", |row| row.get::<_, bool>(0))
+            .map_err(database_error)?;
+        let legacy_alter_table = connection
+            .pragma_query_value(None, "legacy_alter_table", |row| row.get::<_, bool>(0))
+            .map_err(database_error)?;
+        connection
+            .pragma_update(None, "foreign_keys", false)
+            .map_err(database_error)?;
+        (Some(foreign_keys), Some(legacy_alter_table))
+    } else {
+        (None, None)
+    };
+
+    let result = apply_migrations_in_transaction(connection, migrations);
+
+    if let (Some(previous_foreign_keys), Some(previous_legacy_alter_table)) =
+        (previous_foreign_keys, previous_legacy_alter_table)
+    {
+        connection
+            .pragma_update(None, "legacy_alter_table", previous_legacy_alter_table)
+            .map_err(database_error)?;
+        connection
+            .pragma_update(None, "foreign_keys", previous_foreign_keys)
+            .map_err(database_error)?;
+    }
+
+    result
+}
+
+fn apply_migrations_in_transaction(
+    connection: &mut Connection,
+    migrations: &[Migration],
+) -> Result<(), PersistenceError> {
     let transaction = connection
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(database_error)?;
 
     for migration in migrations {
+        if migration.version == 27 {
+            transaction
+                .pragma_update(None, "legacy_alter_table", true)
+                .map_err(database_error)?;
+        }
         transaction.execute_batch(migration.sql).map_err(|source| {
             PersistenceError::MigrationFailed {
                 source: Box::new(source),
@@ -600,9 +669,9 @@ mod tests {
         MIGRATION_013_LEGACY_CHECKSUMS, MIGRATION_014, MIGRATION_015,
         MIGRATION_015_LEGACY_CHECKSUMS, MIGRATION_016, MIGRATION_017,
         MIGRATION_017_LEGACY_CHECKSUMS, MIGRATION_019, MIGRATION_020, MIGRATION_021, MIGRATION_022,
-        MIGRATION_023, MIGRATION_024, MIGRATION_025, MIGRATION_026, MIGRATIONS, Migration,
-        SqliteWorkspaceRepository, apply_migrations, configure_connection, migrate,
-        migration_checksum,
+        MIGRATION_023, MIGRATION_024, MIGRATION_025, MIGRATION_026, MIGRATION_027, MIGRATION_028,
+        MIGRATION_029, MIGRATION_030, MIGRATIONS, Migration, SqliteWorkspaceRepository,
+        apply_migrations, configure_connection, migrate, migration_checksum,
     };
     use crate::application::{PersistenceError, WorkspaceRepository};
     use crate::domain::{LATEST_SCHEMA_VERSION, NewWorkspace};
@@ -1176,6 +1245,138 @@ mod tests {
                 .contains("CREATE TABLE question_ai_analysis_history")
         );
         assert!(MIGRATION_026.sql.contains("provider_protocol"));
+        assert!(MIGRATION_027.sql.contains("conversation_kind"));
+        assert!(MIGRATION_027.sql.contains("general_chat"));
+        assert!(MIGRATION_028.sql.contains("model_profile_id"));
+        assert!(MIGRATION_028.sql.contains("ai_attachment_ref"));
+        assert!(MIGRATION_029.sql.contains("limit_mode = 'warn'"));
+        assert!(MIGRATION_030.sql.contains("max_output_tokens = 131072"));
+    }
+
+    #[test]
+    fn migration_v30_relaxes_default_output_token_limits() {
+        let directory = tempdir().expect("temporary directory should exist");
+        let repository = SqliteWorkspaceRepository::new(directory.path());
+        std::fs::create_dir_all(repository.workspace_directory())
+            .expect("workspace directory should exist");
+        let mut connection =
+            Connection::open(repository.database_path()).expect("workspace database should open");
+        configure_connection(&connection).expect("connection should configure");
+        apply_migrations(&mut connection, &MIGRATIONS[..29]).expect("v29 schema should create");
+        connection
+            .execute(
+                "INSERT INTO workspace(
+                    singleton_key, id, name, timezone, daily_review_quota,
+                    early_fill_enabled, created_at, updated_at, revision
+                 ) VALUES (1, '019f7328-4b66-7613-9729-e3570fc41525', 'test',
+                           'Asia/Shanghai', 5, 0, 1, 1, 1)",
+                [],
+            )
+            .expect("workspace fixture should insert");
+        connection
+            .execute(
+                "INSERT INTO ai_provider_config(
+                    id, workspace_id, provider_type, display_name, base_url,
+                    secret_ref, enabled, created_at, updated_at, provider_protocol
+                 ) VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41526',
+                    '019f7328-4b66-7613-9729-e3570fc41525',
+                    'openai_responses', 'DeepSeek', 'https://api.deepseek.com',
+                    'secret-1', 1, 1, 1, 'openai_chat'
+                 )",
+                [],
+            )
+            .expect("provider fixture should insert");
+        connection
+            .execute(
+                "INSERT INTO ai_model_profile(
+                    id, provider_config_id, model_name, context_limit,
+                    max_output_tokens, created_at, updated_at
+                 ) VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41527',
+                    '019f7328-4b66-7613-9729-e3570fc41526',
+                    'deepseek-chat', 64000, 800, 1, 1
+                 )",
+                [],
+            )
+            .expect("model fixture should insert");
+        connection
+            .execute(
+                "INSERT INTO ai_budget(
+                    workspace_id, single_call_limit, daily_token_limit,
+                    monthly_token_limit, limit_mode, updated_at
+                 ) VALUES ('019f7328-4b66-7613-9729-e3570fc41525', 8000, 50000,
+                           1000000, 'warn', 1)",
+                [],
+            )
+            .expect("budget fixture should insert");
+
+        apply_migrations(&mut connection, &[MIGRATION_030]).expect("v30 should migrate");
+        let (tokens, single_limit): (u32, i64) = connection
+            .query_row(
+                "SELECT m.max_output_tokens, b.single_call_limit
+                 FROM ai_model_profile m
+                 JOIN ai_provider_config p ON m.provider_config_id = p.id
+                 JOIN ai_budget b ON p.workspace_id = b.workspace_id",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("model tokens and budget should load");
+        assert_eq!(tokens, 131_072);
+        assert_eq!(single_limit, 100_000);
+    }
+
+    #[test]
+    fn migration_v29_relaxes_only_the_untouched_default_budget() {
+        let directory = tempdir().expect("temporary directory should exist");
+        let repository = SqliteWorkspaceRepository::new(directory.path());
+        std::fs::create_dir_all(repository.workspace_directory())
+            .expect("workspace directory should exist");
+        let mut connection =
+            Connection::open(repository.database_path()).expect("workspace database should open");
+        configure_connection(&connection).expect("connection should configure");
+        apply_migrations(&mut connection, &MIGRATIONS[..28]).expect("v28 schema should create");
+        connection
+            .execute(
+                "INSERT INTO workspace(
+                    singleton_key, id, name, timezone, daily_review_quota,
+                    early_fill_enabled, created_at, updated_at, revision
+                 ) VALUES (1, '019f7328-4b66-7613-9729-e3570fc41525', 'test',
+                           'Asia/Shanghai', 5, 0, 1, 1, 1)",
+                [],
+            )
+            .expect("workspace fixture should insert");
+        connection
+            .execute(
+                "INSERT INTO ai_budget(
+                    workspace_id, single_call_limit, daily_token_limit,
+                    monthly_token_limit, limit_mode, updated_at
+                 ) VALUES ('019f7328-4b66-7613-9729-e3570fc41525', 8000, 50000,
+                           1000000, 'block', 1)",
+                [],
+            )
+            .expect("default budget fixture should insert");
+
+        apply_migrations(&mut connection, &[MIGRATION_029]).expect("v29 should migrate");
+        let mode: String = connection
+            .query_row("SELECT limit_mode FROM ai_budget", [], |row| row.get(0))
+            .expect("budget mode should load");
+        assert_eq!(mode, "warn");
+
+        connection
+            .execute(
+                "UPDATE ai_budget
+                 SET single_call_limit = 9000, limit_mode = 'block'",
+                [],
+            )
+            .expect("custom budget fixture should update");
+        connection
+            .execute_batch(MIGRATION_029.sql)
+            .expect("v29 SQL should be idempotent");
+        let custom_mode: String = connection
+            .query_row("SELECT limit_mode FROM ai_budget", [], |row| row.get(0))
+            .expect("custom budget mode should load");
+        assert_eq!(custom_mode, "block");
     }
 
     #[test]
@@ -1219,6 +1420,219 @@ mod tests {
             )
             .expect("existing provider protocol should be readable");
         assert_eq!(protocol, "openai_responses");
+    }
+
+    #[test]
+    fn migration_v27_preserves_conversations_calls_and_foreign_keys() {
+        let directory = tempdir().expect("temporary directory should exist");
+        let repository = SqliteWorkspaceRepository::new(directory.path());
+        std::fs::create_dir_all(repository.workspace_directory())
+            .expect("workspace directory should exist");
+        let mut connection =
+            Connection::open(repository.database_path()).expect("workspace database should open");
+        configure_connection(&connection).expect("connection should configure");
+        apply_migrations(&mut connection, &MIGRATIONS[..26]).expect("v26 schema should create");
+        connection
+            .execute_batch(
+                "INSERT INTO workspace(
+                    singleton_key, id, name, timezone, daily_review_quota,
+                    early_fill_enabled, created_at, updated_at, revision
+                 ) VALUES (
+                    1, '019f7328-4b66-7613-9729-e3570fc41525', 'test',
+                    'Asia/Shanghai', 5, 0, 1, 1, 1
+                 );
+                 INSERT INTO ai_provider_config(
+                    id, workspace_id, provider_type, display_name, base_url,
+                    secret_ref, enabled, created_at, updated_at, provider_protocol
+                 ) VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41526',
+                    '019f7328-4b66-7613-9729-e3570fc41525',
+                    'offline_test', 'Offline', NULL, NULL, 1, 1, 1, 'offline_test'
+                 );
+                 INSERT INTO ai_model_profile(
+                    id, provider_config_id, model_name, context_limit,
+                    max_output_tokens, created_at, updated_at
+                 ) VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41527',
+                    '019f7328-4b66-7613-9729-e3570fc41526',
+                    'offline-test', 4096, 1024, 1, 1
+                 );
+                 INSERT INTO ai_conversation(
+                    id, workspace_id, title, created_at, updated_at
+                 ) VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41528',
+                    '019f7328-4b66-7613-9729-e3570fc41525', '规划', 1, 1
+                 );
+                 INSERT INTO ai_call(
+                    id, provider_config_id, model_profile_id, conversation_id,
+                    purpose, request_fingerprint, state, input_token_estimate,
+                    output_token_limit, started_at, finished_at
+                 ) VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41529',
+                    '019f7328-4b66-7613-9729-e3570fc41526',
+                    '019f7328-4b66-7613-9729-e3570fc41527',
+                    '019f7328-4b66-7613-9729-e3570fc41528', 'planning_chat',
+                    '0000000000000000000000000000000000000000000000000000000000000000',
+                    'succeeded', 1, 10, 1, 2
+                 );",
+            )
+            .expect("v26 fixture should be inserted");
+
+        apply_migrations(&mut connection, &[MIGRATION_027]).expect("v27 should migrate");
+
+        let (kind, purpose): (String, String) = connection
+            .query_row(
+                "SELECT c.conversation_kind, a.purpose
+                 FROM ai_conversation c
+                 JOIN ai_call a ON a.conversation_id = c.id
+                 WHERE c.id = ?1",
+                ["019f7328-4b66-7613-9729-e3570fc41528"],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("migrated records should remain readable");
+        assert_eq!(kind, "planning");
+        assert_eq!(purpose, "planning_chat");
+
+        connection
+            .execute(
+                "INSERT INTO ai_conversation(
+                    id, workspace_id, title, conversation_kind, created_at, updated_at
+                 ) VALUES (?1, ?2, ?3, 'chat', ?4, ?4)",
+                rusqlite::params![
+                    "019f7328-4b66-7613-9729-e3570fc41530",
+                    "019f7328-4b66-7613-9729-e3570fc41525",
+                    "通用对话",
+                    2_i64
+                ],
+            )
+            .expect("generic chat conversation should be insertable");
+        connection
+            .execute(
+                "INSERT INTO ai_call(
+                    id, provider_config_id, model_profile_id, conversation_id,
+                    purpose, request_fingerprint, state, input_token_estimate,
+                    output_token_limit, started_at, finished_at
+                 ) VALUES (?1, ?2, ?3, ?4, 'general_chat', ?5, 'succeeded', 1, 10, 2, 3)",
+                rusqlite::params![
+                    "019f7328-4b66-7613-9729-e3570fc41531",
+                    "019f7328-4b66-7613-9729-e3570fc41526",
+                    "019f7328-4b66-7613-9729-e3570fc41527",
+                    "019f7328-4b66-7613-9729-e3570fc41530",
+                    "1111111111111111111111111111111111111111111111111111111111111111"
+                ],
+            )
+            .expect("generic chat call purpose should be accepted");
+
+        let foreign_key_violation: Option<String> = connection
+            .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
+            .optional()
+            .expect("foreign key check should run");
+        assert!(foreign_key_violation.is_none());
+    }
+
+    #[test]
+    fn migration_v28_adds_capability_defaults_and_attachment_guards() {
+        let directory = tempdir().expect("temporary directory should exist");
+        let repository = SqliteWorkspaceRepository::new(directory.path());
+        std::fs::create_dir_all(repository.workspace_directory())
+            .expect("workspace directory should exist");
+        let mut connection =
+            Connection::open(repository.database_path()).expect("workspace database should open");
+        configure_connection(&connection).expect("connection should configure");
+        apply_migrations(&mut connection, &MIGRATIONS[..27]).expect("v27 schema should create");
+
+        connection
+            .execute_batch(
+                "INSERT INTO workspace(
+                    singleton_key, id, name, timezone, daily_review_quota,
+                    early_fill_enabled, created_at, updated_at, revision
+                 ) VALUES (
+                    1, '019f7328-4b66-7613-9729-e3570fc41525', 'test',
+                    'Asia/Shanghai', 5, 0, 1, 1, 1
+                 );
+                 INSERT INTO ai_provider_config(
+                    id, workspace_id, provider_type, display_name, base_url,
+                    secret_ref, enabled, created_at, updated_at, provider_protocol
+                 ) VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41526',
+                    '019f7328-4b66-7613-9729-e3570fc41525',
+                    'offline_test', 'Offline', NULL, NULL, 1, 1, 1, 'offline_test'
+                 );
+                 INSERT INTO ai_model_profile(
+                    id, provider_config_id, model_name, context_limit,
+                    max_output_tokens, created_at, updated_at
+                 ) VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41527',
+                    '019f7328-4b66-7613-9729-e3570fc41526',
+                    'offline-test', 4096, 1024, 1, 1
+                 );
+                 INSERT INTO ai_conversation(
+                    id, workspace_id, title, conversation_kind,
+                    created_at, updated_at
+                 ) VALUES (
+                    '019f7328-4b66-7613-9729-e3570fc41528',
+                    '019f7328-4b66-7613-9729-e3570fc41525', '对话',
+                    'chat', 1, 1
+                 );",
+            )
+            .expect("v27 fixture should be inserted");
+
+        apply_migrations(&mut connection, &[MIGRATION_028]).expect("v28 should migrate");
+
+        let capabilities: (String, String, String, String) = connection
+            .query_row(
+                "SELECT supports_image, supports_file, supports_pdf, capability_source
+                 FROM ai_model_profile WHERE id = ?1",
+                ["019f7328-4b66-7613-9729-e3570fc41527"],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("capability defaults should be readable");
+        assert_eq!(
+            capabilities,
+            (
+                "unknown".into(),
+                "unknown".into(),
+                "unknown".into(),
+                "unknown".into()
+            )
+        );
+
+        connection
+            .execute(
+                "UPDATE ai_conversation SET model_profile_id = ?2 WHERE id = ?1",
+                rusqlite::params![
+                    "019f7328-4b66-7613-9729-e3570fc41528",
+                    "019f7328-4b66-7613-9729-e3570fc41527"
+                ],
+            )
+            .expect("conversation model override should be writable");
+        connection
+            .execute(
+                "INSERT INTO ai_attachment_ref(
+                    id, conversation_id, source, document_id, file_name,
+                    mime_type, size_bytes, sha256, status, created_at, updated_at
+                 ) VALUES (?1, ?2, 'temporary', NULL, ?3, ?4, 0, NULL, 'ready', 1, 1)",
+                rusqlite::params![
+                    "019f7328-4b66-7613-9729-e3570fc41529",
+                    "019f7328-4b66-7613-9729-e3570fc41528",
+                    "worksheet.pdf",
+                    "application/pdf"
+                ],
+            )
+            .expect("temporary attachment should be writable");
+        let invalid = connection.execute(
+            "INSERT INTO ai_attachment_ref(
+                id, conversation_id, source, document_id, file_name,
+                mime_type, size_bytes, sha256, status, created_at, updated_at
+             ) VALUES (?1, ?2, 'temporary', NULL, ?3, ?4, 0, NULL, 'failed', 1, 1)",
+            rusqlite::params![
+                "019f7328-4b66-7613-9729-e3570fc41530",
+                "019f7328-4b66-7613-9729-e3570fc41528",
+                "broken.pdf",
+                "application/pdf"
+            ],
+        );
+        assert!(invalid.is_err());
     }
 
     #[test]

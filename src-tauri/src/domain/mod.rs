@@ -13,7 +13,8 @@ mod search;
 mod workspace;
 
 pub(crate) use ai::{
-    AiBudget, AiCallSummary, AiModelProfile, AiProviderConfig, AiProviderType, AiUsageSummary,
+    AiBudget, AiCallSummary, AiCapabilitySource, AiCapabilityState, AiConversationKind,
+    AiModelCapabilities, AiModelProfile, AiProviderConfig, AiProviderType, AiUsageSummary,
 };
 pub(crate) use mindmap::{
     KnowledgeMap, KnowledgeMapBundle, KnowledgeNode, KnowledgeNodeResource, MasteryState,
