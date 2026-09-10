@@ -584,9 +584,10 @@
   display: grid;
   gap: var(--space-2);
   padding: var(--space-3);
-  border: 1px solid var(--color-border-default);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   background: var(--color-bg-surface);
+  box-shadow: var(--shadow-surface);
 }
 
 .question-ai-history > header,
@@ -659,9 +660,10 @@
   display: grid;
   gap: var(--space-2);
   padding: var(--space-3);
-  border: 1px solid var(--color-border-default);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   background: var(--color-bg-surface);
+  box-shadow: var(--shadow-surface);
 }
 
 .question-ai-confirm {
@@ -695,6 +697,24 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
+}
+
+.question-ai-toolbar .ui-button,
+.question-ai-result-actions .ui-button,
+.question-ai-result-meta .ui-button,
+.question-ai-prompt-stale .ui-button,
+.question-ai-confirm .ui-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.question-ai-toolbar .ui-button .material-symbols-rounded,
+.question-ai-result-actions .ui-button .material-symbols-rounded,
+.question-ai-result-meta .ui-button .material-symbols-rounded,
+.question-ai-prompt-stale .ui-button .material-symbols-rounded,
+.question-ai-confirm .ui-button .material-symbols-rounded {
+  font-size: 1.05rem;
 }
 
 .question-ai-confirm .question-ai-prompt-editor {

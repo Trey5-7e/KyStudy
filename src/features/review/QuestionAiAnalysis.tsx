@@ -28,6 +28,7 @@ import {
   MarkdownRenderer,
   markdownToPlainText,
 } from "../../shared/components/MarkdownRenderer";
+import { Button } from "../../shared/ui/Button";
 
 interface PendingPreview {
   preview: AiCallPreview;
@@ -277,25 +278,33 @@ export function QuestionAiAnalysis({
       {pending === undefined ? (
         <div className="question-ai-toolbar">
           {result === undefined ? (
-            <button
-              type="button"
-              className="secondary-button"
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={busy}
               onClick={() => void prepare()}
             >
-              {busy ? "正在准备题目图片…" : "AI 分析"}
-            </button>
+              <span className="material-symbols-rounded" aria-hidden="true">
+                psychology
+              </span>
+              <span>{busy ? "正在准备题目图片…" : "辅助解析"}</span>
+            </Button>
           ) : null}
-          <button
-            type="button"
-            className="secondary-button"
+          <Button
+            variant="secondary"
+            size="sm"
             disabled={busy}
             onClick={toggleHistory}
           >
-            {historyOpen
-              ? "收起历史解析"
-              : `历史解析${history === undefined ? "" : `（${history.length}）`}`}
-          </button>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              history
+            </span>
+            <span>
+              {historyOpen
+                ? "收起历史解析"
+                : `历史解析${history === undefined ? "" : `（${history.length}）`}`}
+            </span>
+          </Button>
         </div>
       ) : null}
       {historyOpen && pending === undefined ? (
@@ -392,9 +401,9 @@ export function QuestionAiAnalysis({
               题目、来源、题型和图片数量会随当前题目自动更新；修改提示词后请更新
               Token 预览。
             </p>
-            <button
-              type="button"
-              className="text-button"
+            <Button
+              variant="text"
+              size="sm"
               disabled={busy}
               onClick={() => {
                 const prompt = analysisPrompt(
@@ -427,20 +436,26 @@ export function QuestionAiAnalysis({
                 );
               }}
             >
-              恢复默认提示词
-            </button>
+              <span className="material-symbols-rounded" aria-hidden="true">
+                restart_alt
+              </span>
+              <span>恢复默认提示词</span>
+            </Button>
           </div>
           {pending.promptPreviewStale ? (
             <div className="question-ai-prompt-stale">
               <span>提示词已修改，请先更新 Token 预览。</span>
-              <button
-                type="button"
-                className="secondary-button"
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={busy}
                 onClick={() => void updatePromptPreview()}
               >
-                更新 Token 预览
-              </button>
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  refresh
+                </span>
+                <span>更新 Token 预览</span>
+              </Button>
             </div>
           ) : null}
           {pending.preview.warnings.length === 0 ? null : (
@@ -449,30 +464,32 @@ export function QuestionAiAnalysis({
             </p>
           )}
           <div>
-            <button
-              type="button"
+            <Button
+              variant="primary"
               disabled={
                 busy || !pending.preview.allowed || pending.promptPreviewStale
               }
               onClick={() => void execute()}
             >
-              确认发送并分析
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
+              <span className="material-symbols-rounded" aria-hidden="true">
+                send
+              </span>
+              <span>确认发送并分析</span>
+            </Button>
+            <Button
+              variant="secondary"
               disabled={busy}
               onClick={() => setPending(undefined)}
             >
               取消
-            </button>
+            </Button>
           </div>
         </div>
       )}
       {result === undefined ? null : (
         <article className="question-ai-result">
           <header>
-            <strong>AI 参考解析</strong>
+            <strong>辅助参考解析</strong>
             <div className="question-ai-result-meta">
               <span>
                 {result.cacheHit
@@ -482,14 +499,17 @@ export function QuestionAiAnalysis({
               {resultSource === undefined ? null : (
                 <span>来源：{resultSource}</span>
               )}
-              <button
-                type="button"
-                className="text-button"
+              <Button
+                variant="ghost"
+                size="sm"
                 disabled={busy}
                 onClick={() => void prepare(true)}
               >
-                重新解析
-              </button>
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  refresh
+                </span>
+                <span>重新解析</span>
+              </Button>
             </div>
           </header>
           <p className="question-ai-warning">
@@ -500,9 +520,9 @@ export function QuestionAiAnalysis({
             source={result.responseText}
           />
           <div className="question-ai-result-actions">
-            <button
-              type="button"
-              className="text-button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 if (!navigator.clipboard) {
                   setCopyStatus("当前环境不支持自动复制，请手动选择文本复制。");
@@ -514,11 +534,14 @@ export function QuestionAiAnalysis({
                 );
               }}
             >
-              复制 Markdown
-            </button>
-            <button
-              type="button"
-              className="text-button"
+              <span className="material-symbols-rounded" aria-hidden="true">
+                content_copy
+              </span>
+              <span>复制 Markdown</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 if (!navigator.clipboard) {
                   setCopyStatus("当前环境不支持自动复制，请手动选择文本复制。");
@@ -532,8 +555,11 @@ export function QuestionAiAnalysis({
                   );
               }}
             >
-              复制纯文本
-            </button>
+              <span className="material-symbols-rounded" aria-hidden="true">
+                notes
+              </span>
+              <span>复制纯文本</span>
+            </Button>
           </div>
           {copyStatus === "" ? null : (
             <span className="question-ai-status" role="status">
