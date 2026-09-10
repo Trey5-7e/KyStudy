@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { Button } from "../../shared/ui/Button";
 import {
   practiceStatus,
   type QuestionBankSnapshot,
@@ -197,9 +198,11 @@ export function QuestionBankTree({
                                       : indexStateLabel(segment.indexState)}
                                   </small>
                                 </div>
-                                <button
+                                <Button
                                   type="button"
-                                  className="secondary-button question-bank-segment-manage"
+                                  variant="secondary"
+                                  size="sm"
+                                  className="question-bank-segment-manage"
                                   aria-label={`管理分段：${segment.subjectName} / ${segment.workbookName} / ${segment.sourceHeading}，PDF 第 ${segment.pageStart}-${segment.pageEnd} 页`}
                                   onClick={(event) =>
                                     onManageSegment(
@@ -208,8 +211,14 @@ export function QuestionBankTree({
                                     )
                                   }
                                 >
+                                  <span
+                                    className="material-symbols-rounded"
+                                    aria-hidden="true"
+                                  >
+                                    settings
+                                  </span>
                                   管理
-                                </button>
+                                </Button>
                               </div>
                             );
                           })}

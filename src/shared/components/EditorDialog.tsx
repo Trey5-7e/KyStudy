@@ -12,6 +12,8 @@ import {
   type RefObject,
 } from "react";
 
+import { Button, type ButtonSize, type ButtonVariant } from "../ui/Button";
+
 let openEditorDialogCount = 0;
 let previousDocumentOverflow = "";
 
@@ -43,27 +45,33 @@ export type EditorDialogCloseButtonProps = Omit<
 > & {
   children?: ReactNode;
   disabled?: boolean;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
 };
 
 /** A footer navigation action that returns to the parent when one exists. */
 export function EditorDialogCloseButton({
   children = "关闭",
-  className = "text-button",
+  className,
+  variant = "secondary",
+  size = "md",
   disabled = false,
   ...buttonProps
 }: EditorDialogCloseButtonProps) {
   const { requestClose, requestBack, hasBack, closeDisabled } =
     useEditorDialogNavigation();
   return (
-    <button
+    <Button
       {...buttonProps}
       type="button"
+      variant={variant}
+      size={size}
       className={className}
       disabled={disabled || closeDisabled}
       onClick={hasBack ? requestBack : requestClose}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -282,15 +290,19 @@ export function EditorDialog({
             </div>
             <div className="editor-dialog-header-actions">
               {onRequestBack === undefined ? null : (
-                <button
+                <Button
                   type="button"
-                  className="text-button"
+                  variant="ghost"
+                  size="sm"
                   disabled={closeDisabled}
                   aria-label={`${backLabel}${title}`}
                   onClick={requestBack}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    arrow_back
+                  </span>
                   {backLabel}
-                </button>
+                </Button>
               )}
               <button
                 type="button"
@@ -300,8 +312,11 @@ export function EditorDialog({
                 title={`关闭${title}`}
                 onClick={requestClose}
               >
-                <span className="editor-dialog-close-icon" aria-hidden="true">
-                  ×
+                <span
+                  className="material-symbols-rounded editor-dialog-close-icon"
+                  aria-hidden="true"
+                >
+                  close
                 </span>
               </button>
             </div>
@@ -323,22 +338,30 @@ export function EditorDialog({
               <strong id={confirmTitleId}>放弃未保存的修改？</strong>
               <p id={confirmDescriptionId}>离开后，本次填写的内容不会保留。</p>
               <div>
-                <button
+                <Button
                   type="button"
-                  className="danger-button"
+                  variant="danger"
+                  size="sm"
                   disabled={closeDisabled}
                   onClick={discardChanges}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    delete_outline
+                  </span>
                   放弃修改
-                </button>
-                <button
+                </Button>
+                <Button
                   ref={confirmButtonRef}
                   type="button"
-                  className="secondary-button"
+                  variant="secondary"
+                  size="sm"
                   onClick={continueEditing}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    edit
+                  </span>
                   继续编辑
-                </button>
+                </Button>
               </div>
             </div>
           ) : null}

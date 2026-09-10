@@ -5,6 +5,7 @@ import {
   EditorDialogCloseButton,
   EditorDialogFooter,
 } from "../../shared/components/EditorDialog";
+import { Button } from "../../shared/ui/Button";
 import { savePaperPdf } from "../../shared/tauri/paperExportClient";
 import type { IndexedQuestion } from "../../shared/tauri/questionBankClient";
 import type { QuestionType } from "../../shared/tauri/questionClient";
@@ -232,16 +233,19 @@ export function PaperExportDialog({
             </p>
           )}
           <EditorDialogFooter className="editor-actions question-bank-dialog-footer">
-            <EditorDialogCloseButton className="secondary-button">
+            <EditorDialogCloseButton disabled={busy}>
               取消
             </EditorDialogCloseButton>
-            <button
+            <Button
               type="submit"
-              className="primary-button"
+              variant="primary"
               disabled={busy || questions.length === 0}
             >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                picture_as_pdf
+              </span>
               {busy ? "正在生成…" : "生成 PDF 预览"}
-            </button>
+            </Button>
           </EditorDialogFooter>
         </form>
       ) : (
@@ -258,17 +262,23 @@ export function PaperExportDialog({
             </p>
           )}
           <EditorDialogFooter className="editor-actions question-bank-dialog-footer">
-            <EditorDialogCloseButton className="secondary-button">
+            <EditorDialogCloseButton disabled={busy}>
+              <span className="material-symbols-rounded" aria-hidden="true">
+                arrow_back
+              </span>
               返回设置
             </EditorDialogCloseButton>
-            <button
+            <Button
               type="button"
-              className="primary-button"
+              variant="primary"
               disabled={busy}
               onClick={() => void savePreview()}
             >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                save
+              </span>
               {busy ? "正在保存…" : "确认并保存 PDF"}
-            </button>
+            </Button>
           </EditorDialogFooter>
         </div>
       )}

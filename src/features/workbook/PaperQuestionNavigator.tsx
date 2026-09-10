@@ -1,3 +1,4 @@
+import { Button } from "../../shared/ui/Button";
 import type {
   AttemptResult,
   QuestionType,
@@ -82,42 +83,64 @@ export function PaperQuestionNavigator({
 }: PaperQuestionNavigatorProps) {
   return (
     <>
-      <div className="generated-paper-mode-row">
-        <span>浏览模式</span>
-        {(["continuous", "single"] as const).map((value) => (
-          <button
-            key={value}
-            type="button"
-            className={mode === value ? "is-active" : "secondary-button"}
-            aria-pressed={mode === value}
-            onClick={() => onModeChange(value)}
-          >
-            {value === "continuous" ? "连续浏览" : "单题浏览"}
-          </button>
-        ))}
+      <div
+        className="generated-paper-mode-row"
+        role="group"
+        aria-label="试卷浏览模式"
+      >
+        <span className="generated-paper-mode-label">浏览模式</span>
+        <div
+          className="generated-paper-mode-pills"
+          role="radiogroup"
+          aria-label="浏览模式切换"
+        >
+          {(["continuous", "single"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              className={mode === value ? "is-active" : undefined}
+              aria-checked={mode === value}
+              onClick={() => onModeChange(value)}
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                {value === "continuous" ? "view_stream" : "view_carousel"}
+              </span>
+              {value === "continuous" ? "连续浏览" : "单题浏览"}
+            </button>
+          ))}
+        </div>
         {mode === "single" ? (
           <div className="generated-paper-question-navigation">
-            <button
+            <Button
               type="button"
-              className="secondary-button"
+              variant="secondary"
+              size="sm"
               disabled={!canGoPrevious}
               onClick={onPrevious}
             >
-              ← 上一题
-            </button>
+              <span className="material-symbols-rounded" aria-hidden="true">
+                navigate_before
+              </span>
+              上一题
+            </Button>
             <span aria-live="polite">
               筛选内 {filteredIndex === undefined ? 0 : filteredIndex + 1}/
               {filteredTotal} · 全卷第{" "}
               {paperIndex === undefined ? 0 : paperIndex + 1} 题
             </span>
-            <button
+            <Button
               type="button"
-              className="secondary-button"
+              variant="secondary"
+              size="sm"
               disabled={!canGoNext}
               onClick={onNext}
             >
-              下一题 →
-            </button>
+              下一题
+              <span className="material-symbols-rounded" aria-hidden="true">
+                navigate_next
+              </span>
+            </Button>
           </div>
         ) : null}
       </div>
@@ -140,13 +163,17 @@ export function PaperQuestionNavigator({
       <details className="generated-paper-overview">
         <summary>题号总览（{questionOverview.length} 题）</summary>
         <div className="generated-paper-overview-actions">
-          <button
+          <Button
             type="button"
-            className="text-button"
+            variant="ghost"
+            size="sm"
             onClick={onNextUnanswered}
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              skip_next
+            </span>
             跳到下一道未作答题
-          </button>
+          </Button>
         </div>
         <div className="generated-paper-overview-grid" role="list">
           {questionOverview.map((question) => (
