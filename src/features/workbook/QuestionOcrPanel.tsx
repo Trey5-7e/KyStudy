@@ -16,6 +16,7 @@ import {
 import type { QuestionRegion } from "../../shared/tauri/questionClient";
 import type { ResourceCommandError } from "../../shared/tauri/resourceClient";
 import { MarkdownRenderer } from "../../shared/components/MarkdownRenderer";
+import { Button } from "../../shared/ui/Button";
 
 interface QuestionOcrPanelProps {
   questionId: string;
@@ -260,17 +261,23 @@ export function QuestionOcrPanel({
                 第 {region.pageNumber} 页 · 区域 {region.sortOrder + 1}
               </strong>
               {isActive ? (
-                <button
-                  type="button"
-                  className="secondary-button"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={active.cancelRequested}
                   onClick={() => void requestCancel()}
                 >
-                  {active.cancelRequested ? "正在取消" : "取消识别"}
-                </button>
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    close
+                  </span>
+                  <span>
+                    {active.cancelRequested ? "正在取消" : "取消识别"}
+                  </span>
+                </Button>
               ) : (
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={
                     component?.state !== "available" ||
                     componentBusy !== undefined ||
@@ -279,10 +286,15 @@ export function QuestionOcrPanel({
                   }
                   onClick={() => void recognize(region)}
                 >
-                  {draft === undefined && confirmed === undefined
-                    ? "识别区域"
-                    : "重新识别"}
-                </button>
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    document_scanner
+                  </span>
+                  <span>
+                    {draft === undefined && confirmed === undefined
+                      ? "识别区域"
+                      : "重新识别"}
+                  </span>
+                </Button>
               )}
             </div>
 
@@ -338,14 +350,17 @@ function OcrDraftEditor({
         <span>
           待确认草稿 · 平均置信度 {Math.round(draft.meanConfidence * 100)}%
         </span>
-        <button
-          type="button"
-          className="secondary-button"
+        <Button
+          variant="secondary"
+          size="sm"
           disabled={busy}
           onClick={() => setEditing((current) => !current)}
         >
-          {editing ? "预览公式" : "编辑文本"}
-        </button>
+          <span className="material-symbols-rounded" aria-hidden="true">
+            {editing ? "visibility" : "edit"}
+          </span>
+          <span>{editing ? "预览公式" : "编辑文本"}</span>
+        </Button>
       </div>
       {editing ? (
         <textarea
@@ -364,21 +379,28 @@ function OcrDraftEditor({
         </div>
       )}
       <div className="question-form-actions">
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           disabled={busy || text.trim() === ""}
           onClick={() => void onConfirm(draft.id, text)}
         >
-          确认文本
-        </button>
-        <button
-          type="button"
-          className="secondary-button"
+          <span className="material-symbols-rounded" aria-hidden="true">
+            check
+          </span>
+          <span>确认文本</span>
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           disabled={busy}
           onClick={() => void onDiscard(draft.id)}
         >
-          丢弃草稿
-        </button>
+          <span className="material-symbols-rounded" aria-hidden="true">
+            delete
+          </span>
+          <span>丢弃草稿</span>
+        </Button>
       </div>
     </div>
   );

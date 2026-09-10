@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 
 import { EditorDialog } from "../../shared/components/EditorDialog";
+import { Button } from "../../shared/ui/Button";
 import {
   normalizeQuestionBankError,
   reassignWorkbookSegment,
@@ -267,17 +268,16 @@ export function SegmentManagerDialog({
               </p>
             )}
             <div className="segment-manager-actions">
-              <button
-                type="button"
-                className="primary-button"
-                disabled={busy}
-                onClick={primaryAction}
-              >
-                {visibility === "browsable" ? "浏览题目" : "继续索引"}
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
+              <Button variant="primary" disabled={busy} onClick={primaryAction}>
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  {visibility === "browsable" ? "menu_book" : "play_arrow"}
+                </span>
+                <span>
+                  {visibility === "browsable" ? "浏览题目" : "继续索引"}
+                </span>
+              </Button>
+              <Button
+                variant="secondary"
                 disabled={busy}
                 onClick={() => {
                   setMessage("");
@@ -285,19 +285,24 @@ export function SegmentManagerDialog({
                   changeMode("reassign");
                 }}
               >
-                更正归类
-              </button>
-              <button
-                type="button"
-                className="danger-text-button"
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  category
+                </span>
+                <span>更正归类</span>
+              </Button>
+              <Button
+                variant="danger"
                 disabled={busy}
                 onClick={() => {
                   setRemoveMessage("");
                   changeMode("remove");
                 }}
               >
-                移除分段
-              </button>
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  delete
+                </span>
+                <span>移除分段</span>
+              </Button>
             </div>
           </>
         ) : null}
@@ -318,14 +323,18 @@ export function SegmentManagerDialog({
                 </h3>
                 <p>只更换练习册，科目和 PDF 页码保持不变。</p>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 className="text-button"
                 disabled={busy}
                 onClick={() => changeMode("overview")}
               >
-                返回概览
-              </button>
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  arrow_back
+                </span>
+                <span>返回概览</span>
+              </Button>
             </div>
             <label className="segment-manager-field">
               目标练习册
@@ -371,17 +380,15 @@ export function SegmentManagerDialog({
                     : "当前目标练习册不可用，请先处理冲突。"}
             </p>
             <div className="editor-actions segment-manager-footer">
-              <button
-                type="button"
-                className="secondary-button"
+              <Button
+                variant="secondary"
                 disabled={busy}
                 onClick={() => changeMode("overview")}
               >
                 取消
-              </button>
-              <button
-                type="button"
-                className="primary-button"
+              </Button>
+              <Button
+                variant="primary"
                 disabled={
                   busy ||
                   targetWorkbookId === currentSegment.workbookId ||
@@ -390,8 +397,11 @@ export function SegmentManagerDialog({
                 aria-describedby="segment-manager-reassign-reason"
                 onClick={() => void saveAssignment()}
               >
-                {busy ? "正在保存…" : "保存归类"}
-              </button>
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  save
+                </span>
+                <span>{busy ? "正在保存…" : "保存归类"}</span>
+              </Button>
             </div>
           </section>
         ) : null}
@@ -439,22 +449,23 @@ export function SegmentManagerDialog({
               </p>
             )}
             <div className="editor-actions segment-manager-footer">
-              <button
-                type="button"
-                className="secondary-button"
+              <Button
+                variant="secondary"
                 disabled={busy}
                 onClick={() => changeMode("overview")}
               >
                 取消
-              </button>
-              <button
-                type="button"
-                className="danger-button"
+              </Button>
+              <Button
+                variant="danger"
                 disabled={busy}
                 onClick={() => void removeSegment()}
               >
-                {busy ? "正在移除…" : "确认移除分段"}
-              </button>
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  delete_forever
+                </span>
+                <span>{busy ? "正在移除…" : "确认移除分段"}</span>
+              </Button>
             </div>
           </section>
         ) : null}
@@ -476,14 +487,16 @@ export function SegmentManagerDialog({
               <p>{message}</p>
             </div>
             <div className="editor-actions segment-manager-footer">
-              <button
-                type="button"
-                className="primary-button"
+              <Button
+                variant="primary"
                 disabled={busy}
                 onClick={() => void retryStaleRefresh()}
               >
-                {busy ? "正在重新加载…" : "重新加载"}
-              </button>
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  refresh
+                </span>
+                <span>{busy ? "正在重新加载…" : "重新加载"}</span>
+              </Button>
             </div>
           </section>
         ) : null}

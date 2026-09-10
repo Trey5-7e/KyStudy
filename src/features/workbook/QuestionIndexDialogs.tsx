@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { EditorDialog } from "../../shared/components/EditorDialog";
+import { Button } from "../../shared/ui/Button";
 import {
   getQuestionGapAcknowledgements,
   normalizeQuestionBankError,
@@ -496,9 +497,9 @@ export function QuestionIndexBrowserDialog({
             {question === undefined ? null : (
               <section className="question-browser-card" aria-live="polite">
                 <div className="question-browser-toolbar">
-                  <button
-                    type="button"
-                    className="secondary-button"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     disabled={selectedIndex === 0 || navigationDisabled}
                     onClick={() => {
                       if (navigationDisabled) return;
@@ -506,14 +507,20 @@ export function QuestionIndexBrowserDialog({
                       if (previous !== undefined) setSelectedId(previous.id);
                     }}
                   >
-                    ← 上一题
-                  </button>
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      navigate_before
+                    </span>
+                    <span>上一题</span>
+                  </Button>
                   <strong>
                     {selectedIndex + 1} / {questions.length}
                   </strong>
-                  <button
-                    type="button"
-                    className="secondary-button"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     disabled={
                       selectedIndex + 1 >= questions.length ||
                       navigationDisabled
@@ -524,8 +531,14 @@ export function QuestionIndexBrowserDialog({
                       if (next !== undefined) setSelectedId(next.id);
                     }}
                   >
-                    下一题 →
-                  </button>
+                    <span>下一题</span>
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      navigate_next
+                    </span>
+                  </Button>
                 </div>
                 {editing ? (
                   <IndexedQuestionEditForm
@@ -563,22 +576,26 @@ export function QuestionIndexBrowserDialog({
                       </p>
                     )}
                     <div className="editor-actions">
-                      <button
-                        type="button"
-                        className="secondary-button"
+                      <Button
+                        variant="secondary"
                         disabled={busy}
                         onClick={() => setConfirmDelete(false)}
                       >
                         取消
-                      </button>
-                      <button
-                        type="button"
-                        className="danger-button"
+                      </Button>
+                      <Button
+                        variant="danger"
                         disabled={busy}
                         onClick={() => void remove()}
                       >
-                        {busy ? "正在删除…" : "确认删除题目"}
-                      </button>
+                        <span
+                          className="material-symbols-rounded"
+                          aria-hidden="true"
+                        >
+                          delete_forever
+                        </span>
+                        <span>{busy ? "正在删除…" : "确认删除题目"}</span>
+                      </Button>
                     </div>
                   </div>
                 ) : (
@@ -600,8 +617,9 @@ export function QuestionIndexBrowserDialog({
                           aria-label="相对当前题补题"
                         >
                           <span>补题</span>
-                          <button
-                            type="button"
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={() =>
                               setRelativeInsert({
                                 anchorQuestion: question,
@@ -609,10 +627,17 @@ export function QuestionIndexBrowserDialog({
                               })
                             }
                           >
-                            前面插入
-                          </button>
-                          <button
-                            type="button"
+                            <span
+                              className="material-symbols-rounded"
+                              aria-hidden="true"
+                            >
+                              vertical_align_top
+                            </span>
+                            <span>前面插入</span>
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={() =>
                               setRelativeInsert({
                                 anchorQuestion: question,
@@ -620,30 +645,54 @@ export function QuestionIndexBrowserDialog({
                               })
                             }
                           >
-                            后面插入
-                          </button>
+                            <span
+                              className="material-symbols-rounded"
+                              aria-hidden="true"
+                            >
+                              vertical_align_bottom
+                            </span>
+                            <span>后面插入</span>
+                          </Button>
                         </div>
-                        <button
-                          type="button"
-                          className="secondary-button"
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => setCaptureQuestion(question)}
                         >
-                          调整题目区域
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary-button"
+                          <span
+                            className="material-symbols-rounded"
+                            aria-hidden="true"
+                          >
+                            crop
+                          </span>
+                          <span>调整题目区域</span>
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => setEditing(true)}
                         >
-                          编辑题目
-                        </button>
-                        <button
-                          type="button"
-                          className="danger-text-button"
+                          <span
+                            className="material-symbols-rounded"
+                            aria-hidden="true"
+                          >
+                            edit
+                          </span>
+                          <span>编辑题目</span>
+                        </Button>
+                        <Button
+                          variant="danger"
+                          size="sm"
                           onClick={() => setConfirmDelete(true)}
                         >
-                          删除题目
-                        </button>
+                          <span
+                            className="material-symbols-rounded"
+                            aria-hidden="true"
+                          >
+                            delete
+                          </span>
+                          <span>删除题目</span>
+                        </Button>
                       </div>
                     </header>
                     <QuestionRegionCard
@@ -798,38 +847,58 @@ export function QuestionGapDiagnosisDialog({
                         </strong>
                       </div>
                       {issue.kind === "missing" ? (
-                        <button
-                          type="button"
-                          className="primary-button"
+                        <Button
+                          variant="primary"
+                          size="sm"
                           disabled={acknowledgementBusy}
                           onClick={() => onInsert(issue)}
                         >
-                          补第 {issue.suggestedQuestionNumber} 题
-                        </button>
+                          <span
+                            className="material-symbols-rounded"
+                            aria-hidden="true"
+                          >
+                            add
+                          </span>
+                          <span>补第 {issue.suggestedQuestionNumber} 题</span>
+                        </Button>
                       ) : (
                         <div className="question-gap-actions">
-                          <button
-                            type="button"
-                            className="secondary-button"
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             disabled={acknowledgementBusy}
                             onClick={() => onLocate(issue.questionId)}
                           >
-                            定位检查
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary-button"
+                            <span
+                              className="material-symbols-rounded"
+                              aria-hidden="true"
+                            >
+                              search
+                            </span>
+                            <span>定位检查</span>
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             disabled={acknowledgementBusy}
                             onClick={() =>
                               onAcknowledge(issue.id, !acknowledged)
                             }
                           >
-                            {acknowledgementBusyKey === issue.id
-                              ? "正在保存…"
-                              : acknowledged
-                                ? "恢复提示"
-                                : "确认无需处理"}
-                          </button>
+                            <span
+                              className="material-symbols-rounded"
+                              aria-hidden="true"
+                            >
+                              {acknowledged ? "undo" : "check"}
+                            </span>
+                            <span>
+                              {acknowledgementBusyKey === issue.id
+                                ? "正在保存…"
+                                : acknowledged
+                                  ? "恢复提示"
+                                  : "确认无需处理"}
+                            </span>
+                          </Button>
                         </div>
                       )}
                     </header>
@@ -960,17 +1029,15 @@ export function IndexedQuestionEditForm({
         </p>
       )}
       <div className="editor-actions">
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={busy}
-          onClick={onCancel}
-        >
+        <Button variant="secondary" disabled={busy} onClick={onCancel}>
           取消
-        </button>
-        <button type="submit" className="primary-button" disabled={busy}>
-          {busy ? "正在保存…" : "保存题目"}
-        </button>
+        </Button>
+        <Button variant="primary" type="submit" disabled={busy}>
+          <span className="material-symbols-rounded" aria-hidden="true">
+            save
+          </span>
+          <span>{busy ? "正在保存…" : "保存题目"}</span>
+        </Button>
       </div>
     </form>
   );
