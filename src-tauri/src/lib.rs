@@ -1,5 +1,6 @@
 //! `KyStudy` desktop composition root.
 
+pub mod agent;
 mod application;
 mod bootstrap;
 mod commands;
@@ -361,6 +362,13 @@ macro_rules! kystudy_command_handler {
             commands::preview_ai_chat,
             commands::execute_ai_chat,
             commands::execute_ai_chat_stream,
+            commands::get_agent_run,
+            commands::start_agent_run,
+            commands::find_latest_agent_run,
+            commands::resolve_agent_source,
+            commands::get_agent_run_detail,
+            commands::list_agent_events,
+            commands::cancel_agent_run,
             commands::get_workspace_status,
             commands::initialize_default_workspace,
             commands::list_subjects,

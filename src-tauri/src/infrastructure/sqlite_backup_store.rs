@@ -1122,7 +1122,11 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP TABLE review_scheme_undo;
+                "DROP TABLE ai_agent_event;
+                 DROP TABLE ai_agent_step;
+                 DROP TABLE ai_agent_run;
+                 DROP TABLE ai_agent_scope;
+                 DROP TABLE review_scheme_undo;
                  DROP TABLE question_gap_acknowledgement;
                  DROP TABLE cycle_plan_shift_undo_item;
                  DROP TABLE cycle_plan_shift_undo;
@@ -1223,6 +1227,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the historical v2 fixture is intentionally explicit"
+    )]
     fn restore_migrates_a_verified_v2_backup_copy_to_the_latest_schema() {
         let fixture = initialized_fixture();
         let output = tempdir().expect("output directory should exist");
@@ -1231,7 +1239,11 @@ mod tests {
         let connection = Connection::open(&database_path).expect("backup database should open");
         connection
             .execute_batch(
-                "DROP INDEX idx_resource_document_active;
+                "DROP TABLE ai_agent_event;
+                 DROP TABLE ai_agent_step;
+                 DROP TABLE ai_agent_run;
+                 DROP TABLE ai_agent_scope;
+                 DROP INDEX idx_resource_document_active;
                  ALTER TABLE resource_document DROP COLUMN deleted_at;
                  DROP TABLE review_scheme_undo;
                  DROP TABLE question_gap_acknowledgement;

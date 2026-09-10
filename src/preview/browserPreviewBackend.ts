@@ -755,6 +755,10 @@ export async function invokeBrowserPreview(
       return [];
     case "list_resources":
       return PREVIEW_RESOURCES;
+    case "list_resource_index_statuses":
+      return [];
+    case "find_latest_agent_run":
+      return null;
     case "list_subjects":
       return PREVIEW_SUBJECTS;
     case "get_workspace_status":

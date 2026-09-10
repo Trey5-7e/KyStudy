@@ -217,6 +217,16 @@ const MIGRATIONS: &[Migration] = &[
     MIGRATION_028,
     MIGRATION_029,
     MIGRATION_030,
+    Migration {
+        version: 31,
+        name: "agent_kernel",
+        sql: include_str!("../../migrations/0031_agent_kernel.sql"),
+    },
+    Migration {
+        version: 32,
+        name: "agent_token_policy",
+        sql: include_str!("../../migrations/0032_agent_token_policy.sql"),
+    },
 ];
 
 /// `rusqlite` adapter for the single local workspace used in M1.
@@ -239,6 +249,30 @@ impl SqliteWorkspaceRepository {
 
     pub(crate) fn database_path(&self) -> PathBuf {
         self.workspace_directory().join(DATABASE_FILE_NAME)
+    }
+
+    pub(crate) fn agent_host(&self) -> Result<crate::agent::AgentHost, crate::agent::AgentError> {
+        use crate::agent::{AgentError, AgentHost, AgentStore, StoreWorker};
+        let workspace = self
+            .find_default()
+            .map_err(|_| AgentError::Store)?
+            .ok_or(AgentError::Scope)?;
+        let ownership = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(self.workspace_directory().join("agent-owner.lock"))
+            .map_err(|_| AgentError::Store)?;
+        fs4::FileExt::try_lock(&ownership).map_err(|_| AgentError::Busy)?;
+        let db = open_database(&self.database_path(), false).map_err(|_| AgentError::Store)?;
+        let mut store = AgentStore::attach(db)?;
+        store.interrupt_orphans(
+            &workspace.id,
+            crate::application::current_utc_millis().map_err(|_| AgentError::Store)?,
+        )?;
+        let worker = StoreWorker::new(store)?;
+        Ok(AgentHost::new(worker, workspace.id).with_ownership(ownership))
     }
 }
 
@@ -420,12 +454,14 @@ fn apply_migrations(
     if migrations.is_empty() {
         return Ok(());
     }
-    // v27 rebuilds ai_call to extend its CHECK constraint. SQLite rewrites
+    // v27 rebuilds ai_call; v32 rebuilds ai_agent_run. SQLite rewrites
     // foreign-key targets when a table is renamed, so the migration needs a
     // short foreign-key-off window while the replacement table is installed.
     // Preserve and restore both connection pragmas around the transaction.
-    let rebuilds_ai_call = migrations.iter().any(|migration| migration.version == 27);
-    let (previous_foreign_keys, previous_legacy_alter_table) = if rebuilds_ai_call {
+    let rebuilds_table = migrations
+        .iter()
+        .any(|migration| matches!(migration.version, 27 | 32));
+    let (previous_foreign_keys, previous_legacy_alter_table) = if rebuilds_table {
         let foreign_keys = connection
             .pragma_query_value(None, "foreign_keys", |row| row.get::<_, bool>(0))
             .map_err(database_error)?;
@@ -494,6 +530,17 @@ fn apply_migrations_in_transaction(
     transaction
         .pragma_update(None, "application_id", APPLICATION_ID)
         .map_err(database_error)?;
+    if migrations.iter().any(|migration| migration.version == 32) {
+        let violation = transaction
+            .query_row("PRAGMA foreign_key_check", [], |row| {
+                row.get::<_, String>(0)
+            })
+            .optional()
+            .map_err(database_error)?;
+        if violation.is_some() {
+            return Err(PersistenceError::MigrationHistoryInconsistent);
+        }
+    }
     transaction.commit().map_err(database_error)
 }
 
@@ -686,6 +733,149 @@ mod tests {
             .expect("workspace should initialize");
 
         assert_eq!(workspace.schema_version, LATEST_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn agent_host_file_ownership_excludes_a_second_host_and_releases_on_drop() {
+        let directory = tempdir().unwrap();
+        let repository = SqliteWorkspaceRepository::new(directory.path());
+        repository
+            .initialize_default(&NewWorkspace::default_at(1_700_000_000_000))
+            .unwrap();
+        let first = repository.agent_host().unwrap();
+        assert!(matches!(
+            repository.agent_host(),
+            Err(crate::agent::AgentError::Busy)
+        ));
+        drop(first);
+        assert!(repository.agent_host().is_ok());
+    }
+
+    #[test]
+    fn migration_v31_adds_empty_agent_tables_without_rewriting_old_conversations() {
+        let directory = tempdir().expect("temp directory");
+        let database = directory.path().join("upgrade.sqlite");
+        let mut connection = Connection::open(database).expect("open fixture");
+        configure_connection(&connection).expect("configure fixture");
+        apply_migrations(&mut connection, &MIGRATIONS[..30]).expect("v30 fixture");
+        let workspace_id = "00000000-0000-4000-8000-000000000001";
+        connection.execute("INSERT INTO workspace(singleton_key,id,name,timezone,daily_review_quota,early_fill_enabled,created_at,updated_at) VALUES (1,?1,'fixture','Asia/Shanghai',5,0,1,1)",[workspace_id]).expect("workspace");
+        connection.execute("INSERT INTO ai_conversation(id,workspace_id,title,created_at,updated_at,conversation_kind) VALUES ('00000000-0000-4000-8000-000000000002',?1,'preserve me',1,1,'chat')",[workspace_id]).expect("conversation");
+        apply_migrations(&mut connection, &MIGRATIONS[30..31]).expect("v31 migration");
+        let title: String = connection
+            .query_row("SELECT title FROM ai_conversation", [], |row| row.get(0))
+            .expect("unchanged title");
+        assert_eq!(title, "preserve me");
+        let count: u32 = connection
+            .query_row("SELECT COUNT(*) FROM ai_agent_run", [], |row| row.get(0))
+            .expect("empty run table");
+        assert_eq!(count, 0);
+        let violation: Option<String> = connection
+            .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
+            .optional()
+            .expect("foreign key check");
+        assert_eq!(violation, None);
+    }
+
+    fn populated_agent_v31() -> (tempfile::TempDir, Connection) {
+        let directory = tempdir().expect("fixture directory");
+        let mut db = Connection::open(directory.path().join("agent.sqlite3")).expect("fixture");
+        configure_connection(&db).expect("configure");
+        apply_migrations(&mut db, &MIGRATIONS[..31]).expect("v31");
+        db.execute_batch("INSERT INTO workspace(singleton_key,id,name,timezone,daily_review_quota,early_fill_enabled,created_at,updated_at) VALUES (1,'00000000-0000-4000-8000-000000000001','fixture','Asia/Shanghai',5,0,1,1);
+            INSERT INTO ai_conversation(id,workspace_id,title,created_at,updated_at,conversation_kind) VALUES ('00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','preserve',1,1,'chat');
+            INSERT INTO ai_agent_scope(id,workspace_id,grant_json) VALUES ('s','00000000-0000-4000-8000-000000000001','{}');
+            INSERT INTO ai_agent_run(id,workspace_id,conversation_id,scope_id,state,goal,model_limit,tool_limit,input_limit,output_limit,active_limit_ms,model_used,input_used,event_sequence,created_at,updated_at,finished_at) VALUES ('r','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','s','completed','goal',6,8,48000,8000,180000,1,123,2,1,2,2);
+            INSERT INTO ai_agent_step(run_id,sequence,kind,state,owner_epoch,result_json) VALUES ('r',1,'model','completed',1,'{\"kind\":\"final\"}');
+            INSERT INTO ai_agent_event(run_id,sequence,type,payload,created_at) VALUES ('r',2,'completed','{\"historical\":true}',2);
+            UPDATE ai_agent_scope SET revoked_at=3 WHERE id='s';").expect("populated history");
+        (directory, db)
+    }
+
+    #[test]
+    fn migration_v32_preserves_terminal_revoked_history_and_foreign_keys() {
+        let (_directory, mut db) = populated_agent_v31();
+        apply_migrations(&mut db, &MIGRATIONS[31..32]).expect("v32");
+        let run: (String, u32, String) = db
+            .query_row(
+                "SELECT state,input_used,token_policy FROM ai_agent_run",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(run, ("completed".into(), 123, "enforce".into()));
+        let child: (String,String,i64) = db.query_row("SELECT e.payload,t.result_json,s.revoked_at FROM ai_agent_event e JOIN ai_agent_step t ON e.run_id=t.run_id JOIN ai_agent_run r ON r.id=e.run_id JOIN ai_agent_scope s ON s.id=r.scope_id", [], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?))).unwrap();
+        assert_eq!(
+            child,
+            (
+                "{\"historical\":true}".into(),
+                "{\"kind\":\"final\"}".into(),
+                3
+            )
+        );
+        assert!(
+            db.pragma_query_value(None, "foreign_keys", |row| row.get::<_, bool>(0))
+                .unwrap()
+        );
+        assert!(
+            db.query_row("PRAGMA foreign_key_check", [], |row| row
+                .get::<_, String>(0))
+                .optional()
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            db.execute(
+                "UPDATE ai_agent_run SET state='running',finished_at=NULL,revision=revision+1",
+                []
+            )
+            .is_err()
+        );
+        db.execute(
+            "DELETE FROM ai_conversation WHERE id='00000000-0000-4000-8000-000000000002'",
+            [],
+        )
+        .unwrap();
+        for table in [
+            "ai_agent_run",
+            "ai_agent_scope",
+            "ai_agent_step",
+            "ai_agent_event",
+        ] {
+            assert_eq!(
+                db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row
+                    .get::<_, u32>(0))
+                    .unwrap(),
+                0
+            );
+        }
+    }
+
+    #[test]
+    fn migration_v32_failure_rolls_back_and_restores_connection_pragmas() {
+        let (_directory, mut db) = populated_agent_v31();
+        let failing = Migration {
+            version: 33,
+            name: "injected_failure",
+            sql: "SELECT * FROM missing_fixture_table;",
+        };
+        assert!(apply_migrations(&mut db, &[MIGRATIONS[31], failing]).is_err());
+        assert_eq!(
+            db.pragma_query_value(None, "user_version", |row| row.get::<_, u32>(0))
+                .unwrap(),
+            31
+        );
+        assert!(
+            db.pragma_query_value(None, "foreign_keys", |row| row.get::<_, bool>(0))
+                .unwrap()
+        );
+        assert!(db.prepare("SELECT token_policy FROM ai_agent_run").is_err());
+        assert_eq!(
+            db.query_row("SELECT input_used FROM ai_agent_run", [], |row| row
+                .get::<_, u32>(0))
+                .unwrap(),
+            123
+        );
     }
 
     #[test]

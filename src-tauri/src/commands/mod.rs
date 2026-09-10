@@ -656,11 +656,19 @@ pub(crate) async fn delete_ai_chat_conversation(
     request: PlanningConversationIdRequestDto,
     state: State<'_, AppState>,
 ) -> Result<(), AppErrorDto> {
+    state.agent_host().await.map_err(AppErrorDto::from_agent)?;
+    let conversation_lease = state
+        .ai_conversations
+        .acquire(&request.conversation_id)
+        .map_err(|_| AppErrorDto::ai_chat_operation_conflict())?;
     let use_cases = state.ai_chat.clone();
-    tauri::async_runtime::spawn_blocking(move || use_cases.delete(&request.conversation_id))
-        .await
-        .map_err(|_| AppErrorDto::task_failed())?
-        .map_err(|error| AppErrorDto::from_planning_chat(&error))
+    tauri::async_runtime::spawn_blocking(move || {
+        let _conversation_lease = conversation_lease;
+        use_cases.delete(&request.conversation_id)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map_err(|error| AppErrorDto::from_planning_chat(&error))
 }
 
 #[tauri::command]
@@ -760,6 +768,11 @@ pub(crate) async fn execute_ai_chat(
     operation_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<PlanningChatReplyDto, AppErrorDto> {
+    state.agent_host().await.map_err(AppErrorDto::from_agent)?;
+    let conversation_lease = state
+        .ai_conversations
+        .acquire(&request.conversation_id)
+        .map_err(|_| AppErrorDto::ai_chat_operation_conflict())?;
     let use_cases = state.ai_chat.clone();
     let input = request.into();
     let operation_id = operation_id.unwrap_or_else(|| Uuid::now_v7().to_string());
@@ -769,6 +782,7 @@ pub(crate) async fn execute_ai_chat(
         .ok_or_else(AppErrorDto::ai_chat_operation_conflict)?;
     let coordinator = state.ai_chat_jobs.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
+        let _conversation_lease = conversation_lease;
         use_cases.execute_direct_with_cancel(&input, &canceled)
     })
     .await;
@@ -786,6 +800,11 @@ pub(crate) async fn execute_ai_chat_stream(
     on_event: tauri::ipc::Channel<AiChatStreamChunkDto>,
     state: State<'_, AppState>,
 ) -> Result<PlanningChatReplyDto, AppErrorDto> {
+    state.agent_host().await.map_err(AppErrorDto::from_agent)?;
+    let conversation_lease = state
+        .ai_conversations
+        .acquire(&request.conversation_id)
+        .map_err(|_| AppErrorDto::ai_chat_operation_conflict())?;
     let use_cases = state.ai_chat.clone();
     let input = request.into();
     let operation_id = operation_id.unwrap_or_else(|| Uuid::now_v7().to_string());
@@ -795,6 +814,7 @@ pub(crate) async fn execute_ai_chat_stream(
         .ok_or_else(AppErrorDto::ai_chat_operation_conflict)?;
     let coordinator = state.ai_chat_jobs.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
+        let _conversation_lease = conversation_lease;
         use_cases.execute_direct_with_cancel_stream(&input, &canceled, &mut |delta| {
             on_event
                 .send(AiChatStreamChunkDto {
@@ -818,6 +838,146 @@ pub(crate) async fn execute_ai_chat_stream(
 )]
 pub(crate) fn cancel_ai_chat(operation_id: String, state: State<'_, AppState>) -> bool {
     Uuid::parse_str(&operation_id).is_ok() && state.ai_chat_jobs.cancel(&operation_id)
+}
+
+#[tauri::command]
+pub(crate) async fn find_latest_agent_run(
+    conversation_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<crate::agent::RunSnapshot>, AppErrorDto> {
+    validate_agent_run_id(&conversation_id)?;
+    state
+        .agent_host()
+        .await
+        .map_err(AppErrorDto::from_agent)?
+        .latest(conversation_id)
+        .await
+        .map_err(AppErrorDto::from_agent)
+}
+
+#[tauri::command]
+pub(crate) async fn resolve_agent_source(
+    run_id: String,
+    source_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::agent::AgentSource, AppErrorDto> {
+    validate_agent_run_id(&run_id)?;
+    if source_id.len() > 512 {
+        return Err(AppErrorDto::from_agent(crate::agent::AgentError::Invalid));
+    }
+    state
+        .agent_host()
+        .await
+        .map_err(AppErrorDto::from_agent)?
+        .source(run_id, source_id)
+        .await
+        .map_err(AppErrorDto::from_agent)
+}
+
+#[tauri::command]
+pub(crate) async fn start_agent_run(
+    request: crate::agent::StartAgentRun,
+    state: State<'_, AppState>,
+) -> Result<crate::agent::RunSnapshot, AppErrorDto> {
+    let lease = state
+        .ai_conversations
+        .acquire(&request.conversation_id)
+        .map_err(AppErrorDto::from_agent)?;
+    let host = state
+        .agent_host()
+        .await
+        .map_err(AppErrorDto::from_agent)?
+        .clone();
+    // The Host-owned start operation survives disappearance of the invoking UI listener.
+    tauri::async_runtime::spawn(async move { host.start_readonly(request, lease).await })
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map_err(AppErrorDto::from_agent)
+}
+
+#[tauri::command]
+pub(crate) async fn get_agent_run_detail(
+    run_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::agent::AgentRunDetail, AppErrorDto> {
+    validate_agent_run_id(&run_id)?;
+    state
+        .agent_host()
+        .await
+        .map_err(AppErrorDto::from_agent)?
+        .detail(&run_id)
+        .await
+        .map_err(AppErrorDto::from_agent)
+}
+
+#[tauri::command]
+pub(crate) async fn get_agent_run(
+    run_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::agent::RunSnapshot, AppErrorDto> {
+    validate_agent_run_id(&run_id)?;
+    state
+        .agent_host()
+        .await
+        .map_err(AppErrorDto::from_agent)?
+        .snapshot(&run_id)
+        .await
+        .map_err(AppErrorDto::from_agent)
+}
+
+#[tauri::command]
+pub(crate) async fn list_agent_events(
+    run_id: String,
+    after: u32,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::agent::Event>, AppErrorDto> {
+    validate_agent_run_id(&run_id)?;
+    state
+        .agent_host()
+        .await
+        .map_err(AppErrorDto::from_agent)?
+        .events(&run_id, after)
+        .await
+        .map_err(AppErrorDto::from_agent)
+}
+
+#[tauri::command]
+pub(crate) async fn cancel_agent_run(
+    run_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::agent::RunSnapshot, AppErrorDto> {
+    validate_agent_run_id(&run_id)?;
+    state
+        .agent_host()
+        .await
+        .map_err(AppErrorDto::from_agent)?
+        .cancel(&run_id)
+        .await
+        .map_err(AppErrorDto::from_agent)
+}
+
+fn validate_agent_run_id(id: &str) -> Result<(), AppErrorDto> {
+    Uuid::parse_str(id)
+        .map(|_| ())
+        .map_err(|_| AppErrorDto::from_agent(crate::agent::AgentError::Invalid))
+}
+
+#[cfg(test)]
+mod agent_command_tests {
+    #[test]
+    fn lifecycle_commands_reject_paths_before_loading_the_workspace() {
+        let error = super::validate_agent_run_id("../../foreign.sqlite3").unwrap_err();
+        assert_eq!(error.code, "AGENT_INVALID_ARGUMENTS");
+        assert!(super::validate_agent_run_id("00000000-0000-4000-8000-000000000004").is_ok());
+    }
+
+    #[test]
+    fn agent_errors_do_not_include_database_or_provider_details() {
+        let error = super::AppErrorDto::from_agent(crate::agent::AgentError::Store);
+        assert_eq!(error.code, "AGENT_STORE_ERROR");
+        assert!(!error.operation_id.is_empty());
+        assert!(!error.message.contains("sqlite"));
+    }
 }
 
 /// Workspace metadata returned without a database path or row representation.
@@ -5090,6 +5250,28 @@ pub(crate) struct AppErrorDto {
 }
 
 impl AppErrorDto {
+    fn from_agent(error: crate::agent::AgentError) -> Self {
+        use crate::agent::AgentError;
+        let code = match error {
+            AgentError::SourceStale => "AGENT_SOURCE_STALE",
+            AgentError::IndexNotReady => "AGENT_INDEX_NOT_READY",
+            AgentError::Unsupported => "AGENT_TOOLS_UNSUPPORTED",
+            AgentError::Protocol => "AGENT_PROVIDER_PROTOCOL_ERROR",
+            AgentError::Invalid => "AGENT_INVALID_ARGUMENTS",
+            AgentError::Scope => "AGENT_SCOPE_DENIED",
+            AgentError::Stale => "AGENT_STALE_OWNER",
+            AgentError::Busy => "AGENT_WORKSPACE_BUSY",
+            AgentError::Budget => "AGENT_BUDGET_EXHAUSTED",
+            AgentError::Transition => "AGENT_INVALID_TRANSITION",
+            AgentError::Store => "AGENT_STORE_ERROR",
+        };
+        Self {
+            code,
+            message: "学习 Agent 操作未完成。",
+            action: "刷新运行状态后重试；若仍失败，请保留操作编号。",
+            operation_id: Uuid::new_v4().to_string(),
+        }
+    }
     fn ai_chat_operation_conflict() -> Self {
         Self {
             code: "AI_CHAT_OPERATION_CONFLICT",

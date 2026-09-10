@@ -181,6 +181,8 @@ pub(crate) struct AppState {
     pub(crate) ocr_jobs: OcrCoordinator,
     pub(crate) ai_chat_jobs: AiChatCoordinator,
     pub(crate) operations: WorkspaceOperationGate,
+    pub(crate) ai_conversations: crate::agent::ConversationGate,
+    agent_host: tokio::sync::OnceCell<crate::agent::AgentHost>,
 }
 
 impl AppState {
@@ -240,11 +242,28 @@ impl AppState {
             ocr_jobs: OcrCoordinator::default(),
             ai_chat_jobs: AiChatCoordinator::default(),
             operations: WorkspaceOperationGate::default(),
+            ai_conversations: crate::agent::ConversationGate::default(),
+            agent_host: tokio::sync::OnceCell::new(),
         }
     }
 
     pub(crate) fn data_directory(&self) -> &Path {
         &self.application_data_directory
+    }
+
+    pub(crate) async fn agent_host(
+        &self,
+    ) -> Result<&crate::agent::AgentHost, crate::agent::AgentError> {
+        self.agent_host
+            .get_or_try_init(|| async {
+                let directory = self.application_data_directory.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    SqliteWorkspaceRepository::new(&directory).agent_host()
+                })
+                .await
+                .map_err(|_| crate::agent::AgentError::Store)?
+            })
+            .await
     }
 }
 

@@ -2175,6 +2175,7 @@ dependencies = [
  "base64 0.22.1",
  "fs4",
  "keyring",
+ "png 0.17.16",
  "quick-xml",
  "reqwest",
  "rusqlite",
@@ -2188,6 +2189,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "uuid",
  "zip 6.0.0",
 ]

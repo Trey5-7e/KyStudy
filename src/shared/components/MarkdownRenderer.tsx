@@ -22,6 +22,8 @@ export interface MarkdownCitationSource {
 }
 
 export interface MarkdownRendererProps {
+  /** Render untrusted study answers without remote resources or action cards. */
+  readOnly?: boolean;
   source: string;
   className?: string;
   sources?: MarkdownCitationSource[];
@@ -63,6 +65,7 @@ export function MarkdownRenderer({
   onStartPaper,
   onExportPaper,
   mathOutput,
+  readOnly = false,
 }: MarkdownRendererProps) {
   // The option remains accepted by callers that were written for the previous
   // renderer. The app uses one KaTeX output mode everywhere so desktop and web
@@ -77,6 +80,7 @@ export function MarkdownRenderer({
   const components = useMemo<Components>(
     () => ({
       a({ href, children }) {
+        if (readOnly) return <span>{children}</span>;
         const safeHref =
           typeof href === "string" ? sanitizeMarkdownHref(href) : undefined;
         if (safeHref?.startsWith("citation:")) {
@@ -110,6 +114,7 @@ export function MarkdownRenderer({
         );
       },
       img({ src, alt }) {
+        if (readOnly) return <span>{alt ?? ""}</span>;
         const safeSrc =
           typeof src === "string" ? sanitizeMarkdownImageSrc(src) : undefined;
         return safeSrc === undefined ? (
@@ -126,7 +131,10 @@ export function MarkdownRenderer({
       code({ className: codeClassName, children, ...props }) {
         const match = /language-([\w-]+)/.exec(codeClassName || "");
         const lang = match ? match[1] : undefined;
-        if (lang === "kystudy-paper" || lang === "kystudy_paper") {
+        if (
+          !readOnly &&
+          (lang === "kystudy-paper" || lang === "kystudy_paper")
+        ) {
           const rawText = String(children).replace(/\n$/, "");
           const parsed = parseAiPaperProposal(rawText);
           if (parsed) {
@@ -150,7 +158,13 @@ export function MarkdownRenderer({
         );
       },
     }),
-    [onOpenReference, onStartPaper, onExportPaper, questionBankQuestions],
+    [
+      onOpenReference,
+      onStartPaper,
+      onExportPaper,
+      questionBankQuestions,
+      readOnly,
+    ],
   );
 
   return (

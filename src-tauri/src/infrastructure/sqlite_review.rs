@@ -1499,7 +1499,11 @@ mod tests {
         let connection = Connection::open(database_path).expect("database should open");
         connection
             .execute_batch(
-                "DROP INDEX idx_resource_document_active;
+                "DROP TABLE ai_agent_event;
+                 DROP TABLE ai_agent_step;
+                 DROP TABLE ai_agent_run;
+                 DROP TABLE ai_agent_scope;
+                 DROP INDEX idx_resource_document_active;
                  ALTER TABLE resource_document DROP COLUMN deleted_at;
                  DROP TABLE review_scheme_undo;
                  DROP TABLE question_gap_acknowledgement;

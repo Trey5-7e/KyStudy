@@ -10,6 +10,20 @@ import {
 } from "./MarkdownRenderer";
 
 describe("MarkdownRenderer", () => {
+  it("keeps study answers read-only without external requests or action links", () => {
+    const markup = renderToStaticMarkup(
+      <MarkdownRenderer
+        readOnly
+        source={
+          "## 内容\n\n[链接](https://example.com) ![图片](https://example.com/image.png)\n\n**重点**"
+        }
+      />,
+    );
+    expect(markup).toContain("<h2>");
+    expect(markup).toContain("<strong>");
+    expect(markup).not.toContain("<a ");
+    expect(markup).not.toContain("<img");
+  });
   it("renders Markdown and inline formulas through KaTeX HTML", () => {
     const markup = renderToStaticMarkup(
       <MarkdownRenderer
