@@ -6,6 +6,7 @@ import {
   PageStatus,
   PageSurface,
 } from "../../shared/components/PagePrimitives";
+import { Button } from "../../shared/ui/Button";
 import {
   archiveReviewScheme,
   generateReviewSchemeQueue,
@@ -114,9 +115,9 @@ export function ReviewPanel({
           title="先创建本地工作区"
           description="工作区创建后才能保存错题和复习方案。"
           action={
-            <button type="button" onClick={onOpenSettings}>
+            <Button variant="primary" onClick={onOpenSettings}>
               前往设置
-            </button>
+            </Button>
           }
         />
       </PageSurface>
@@ -129,9 +130,13 @@ export function ReviewPanel({
           tone="error"
           title={state.error.message}
           action={
-            <button type="button" onClick={() => void refresh()}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void refresh()}
+            >
               重新读取
-            </button>
+            </Button>
           }
         >
           {state.error.action}
@@ -153,24 +158,43 @@ export function ReviewPanel({
     <PageSurface className="review-scheme-page" labelledBy="review-title">
       {header(
         <>
-          <button
-            type="button"
+          {managementOpen && dashboard.schemes.length > 0 ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setManagementOpen(false)}
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                arrow_back
+              </span>
+              <span>返回今日复习</span>
+            </Button>
+          ) : null}
+          <Button
+            variant={showManagement ? "primary" : "secondary"}
+            size="sm"
             onClick={() =>
               showManagement
                 ? open({ ...EMPTY_DRAFT, quotas: { ...EMPTY_DRAFT.quotas } })
                 : setManagementOpen(true)
             }
           >
-            {showManagement ? "新建复习方案" : "管理复习方案"}
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
+            <span className="material-symbols-rounded" aria-hidden="true">
+              {showManagement ? "add" : "tune"}
+            </span>
+            <span>{showManagement ? "新建复习方案" : "管理复习方案"}</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             disabled={busy}
             onClick={() => void refresh()}
           >
-            刷新
-          </button>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              refresh
+            </span>
+            <span>刷新</span>
+          </Button>
         </>,
       )}
       {error && (
