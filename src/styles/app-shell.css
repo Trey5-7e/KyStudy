@@ -1,3 +1,33 @@
+@font-face {
+  font-family: "Material Symbols Rounded Variable";
+  font-style: normal;
+  font-display: block;
+  font-weight: 100 700;
+  src: url("@fontsource-variable/material-symbols-rounded/files/material-symbols-rounded-latin-wght-normal.woff2")
+    format("woff2-variations");
+}
+
+.material-symbols-rounded {
+  display: inline-block;
+  font-family: "Material Symbols Rounded Variable";
+  font-size: 1.25rem;
+  font-style: normal;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 500,
+    "GRAD" 0,
+    "opsz" 24;
+}
+
 /* The application frame is intentionally independent from feature layouts. */
 .skip-link {
   position: fixed;
