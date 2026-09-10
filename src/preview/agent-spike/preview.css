@@ -1,0 +1,67 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #18253b;
+  background: #eff3f8;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 960px;
+  padding: 24px;
+  margin: auto;
+}
+h1 {
+  font-size: 24px;
+}
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+button {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid #a3b0c4;
+  background: white;
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+}
+button:hover {
+  background: #dce7f5;
+}
+button:focus-visible {
+  outline: 3px solid #2157a0;
+  outline-offset: 2px;
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+p {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+#receipt {
+  font-family: monospace;
+  font-size: 13px;
+}
+canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  background: white;
+  box-shadow: 0 3px 16px #18253b22;
+}
+#output {
+  min-height: 180px;
+}
+@media (max-width: 640px) {
+  main {
+    padding: 16px;
+  }
+  h1 {
+    font-size: 20px;
+  }
+}

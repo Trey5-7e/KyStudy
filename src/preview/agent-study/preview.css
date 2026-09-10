@@ -1,0 +1,32 @@
+body {
+  margin: 0;
+  background: var(--color-bg-app);
+  font-family: var(--font-family-app);
+  color: var(--color-text-primary);
+}
+.agent-preview-shell {
+  max-width: 1200px;
+  margin: 24px auto;
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-lg);
+}
+.agent-preview-notice {
+  padding: 16px 24px 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+.agent-preview-shell > nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 0 24px;
+}
+.agent-preview-shell > nav a {
+  color: var(--color-primary);
+}
+@media (max-width: 640px) {
+  .agent-preview-shell {
+    margin: 0;
+    border-radius: 0;
+  }
+}

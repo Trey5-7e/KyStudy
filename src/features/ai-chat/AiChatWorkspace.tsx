@@ -14,6 +14,7 @@ import {
 } from "../../shared/tauri/aiClient";
 import type { IndexedQuestion } from "../../shared/tauri/questionBankClient";
 import { AiChatPanel } from "./AiChatPanel";
+import { AgentStudyPanel } from "../agent/AgentStudyPanel";
 import "./ai-workspace.css";
 
 export interface AiChatWorkspaceProps {
@@ -55,6 +56,7 @@ export function AiChatWorkspace({
   const [modelOptionsProviderId, setModelOptionsProviderId] =
     useState<string>();
   const [modelUpdating, setModelUpdating] = useState(false);
+  const [mode, setMode] = useState<"chat" | "agent">("chat");
 
   useEffect(() => {
     let active = true;
@@ -190,6 +192,22 @@ export function AiChatWorkspace({
   return (
     <div className="ai-chat-page">
       <PageHeader title="AI 学习助手" />
+      <nav className="agent-study-modes" aria-label="助手模式">
+        <Button
+          variant={mode === "chat" ? "primary" : "secondary"}
+          aria-pressed={mode === "chat"}
+          onClick={() => setMode("chat")}
+        >
+          普通对话
+        </Button>
+        <Button
+          variant={mode === "agent" ? "primary" : "secondary"}
+          aria-pressed={mode === "agent"}
+          onClick={() => setMode("agent")}
+        >
+          资料研读
+        </Button>
+      </nav>
 
       {error === undefined ? null : (
         <PageStatus
@@ -217,6 +235,11 @@ export function AiChatWorkspace({
               ? "正在准备本地 AI 配置和对话存储，请稍候。"
               : "初始化失败后不会加载对话列表，修复配置后可以重试。"}
           </PageStatus>
+        ) : mode === "agent" ? (
+          <AgentStudyPanel
+            provider={activeProvider}
+            onOpenReference={onOpenReference}
+          />
         ) : (
           <AiChatPanel
             headerAction={modelPicker}

@@ -1,0 +1,675 @@
+/* ==========================================================================
+   KyStudy 1.5 - Agent Study (资料研读) 样式
+   遵循设计规范：解耦叠加窗口、标准设计令牌、响应式适配与无障碍对比度
+   ========================================================================== */
+
+.agent-study {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  color: var(--color-text-primary);
+}
+
+/* --------------------------------------------------------------------------
+   面板头部 (Header)
+   -------------------------------------------------------------------------- */
+.agent-study-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+}
+
+.agent-study-title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.agent-study-header-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.agent-study-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: var(--line-height-tight);
+}
+
+.agent-study-subtitle {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-body);
+}
+
+/* 提示与报警横幅 */
+.agent-study-alert {
+  margin-bottom: var(--space-2);
+}
+
+/* --------------------------------------------------------------------------
+   卡片通用容器 (Cards & Surfaces)
+   -------------------------------------------------------------------------- */
+.agent-study-card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-surface);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.agent-study-form-card {
+  max-width: 840px;
+  margin-inline: auto;
+  width: 100%;
+}
+
+/* --------------------------------------------------------------------------
+   研读配置表单 (Form Layout)
+   -------------------------------------------------------------------------- */
+.agent-study-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.agent-study-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.agent-study-page-hint-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-top: calc(var(--space-2) * -0.5);
+}
+
+.agent-study-page-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: var(--font-size-xs);
+}
+
+/* 高级选项折叠卡 (Advanced Options Accordion) */
+.agent-study-advanced-details {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  overflow: hidden;
+  transition: border-color 150ms ease;
+}
+
+.agent-study-advanced-details[open] {
+  border-color: var(--color-border-default);
+}
+
+.agent-study-advanced-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.agent-study-advanced-summary::-webkit-details-marker {
+  display: none;
+}
+
+.agent-study-advanced-summary-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.agent-study-advanced-arrow {
+  display: inline-block;
+  transition: transform 180ms ease;
+  font-size: 1.2rem;
+  color: var(--color-text-muted);
+}
+
+.agent-study-advanced-details[open] .agent-study-advanced-arrow {
+  transform: rotate(180deg);
+}
+
+.agent-study-advanced-body {
+  padding: 0 var(--space-4) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: var(--space-3);
+}
+
+.agent-study-thresholds {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+/* 隐私与发送边界说明 */
+.agent-study-privacy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-body);
+}
+
+.agent-study-privacy-icon {
+  font-size: 1.15rem;
+  color: var(--color-primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   研读主工作区 (Reading & Workspace)
+   -------------------------------------------------------------------------- */
+.agent-study-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 960px;
+  margin-inline: auto;
+}
+
+/* 工具栏 (Toolbar) */
+.agent-study-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.agent-study-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.agent-study-toolbar-session-icon {
+  font-size: 1.15rem;
+  color: var(--color-primary);
+}
+
+.agent-study-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* 运行中微动效卡片 */
+.agent-study-running-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-info-soft);
+  border: 1px solid color-mix(in srgb, var(--color-info) 30%, transparent);
+  color: var(--color-info);
+  animation: agent-study-pulse 2.2s infinite ease-in-out;
+}
+
+.agent-study-running-spinner {
+  font-size: 1.35rem;
+  animation: agent-study-spin 1.4s infinite linear;
+}
+
+@keyframes agent-study-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes agent-study-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.agent-study-running-text {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  line-height: var(--line-height-body);
+}
+
+/* 研读问题概览卡 (Question Header Card) */
+.agent-study-question-card {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-left: 4px solid var(--color-primary);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.agent-study-question-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.agent-study-question-title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: var(--line-height-tight);
+}
+
+.agent-study-scope-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.agent-study-scope-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+}
+
+/* 回答主体 (Answer Content) */
+.agent-study-answer-card {
+  padding: var(--space-6);
+}
+
+.agent-study-answer {
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+  color: var(--color-text-primary);
+}
+
+.agent-study-answer :is(pre, .katex-display) {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.agent-study-answer table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin-block: var(--space-3);
+}
+
+.agent-study-answer :is(th, td) {
+  border: 1px solid var(--color-border-default);
+  padding: 8px 12px;
+}
+
+.agent-study-answer :is(h1, h2, h3) {
+  line-height: var(--line-height-tight);
+  margin-block: 24px 12px;
+  color: var(--color-text-primary);
+}
+
+.agent-study-answer h1 {
+  font-size: 1.4rem;
+}
+
+.agent-study-answer h2 {
+  font-size: 1.2rem;
+}
+
+.agent-study-answer ul,
+.agent-study-answer ol {
+  padding-left: 24px;
+}
+
+/* --------------------------------------------------------------------------
+   文献引用标签 (Source Citation Chips)
+   -------------------------------------------------------------------------- */
+.agent-study-sources-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.agent-study-sources-label {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.agent-study-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.agent-study-source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 12px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 140ms ease;
+  text-align: left;
+}
+
+.agent-study-source-chip:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgb(30 91 66 / 10%);
+}
+
+.agent-study-source-chip:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.agent-study-source-chip-icon {
+  font-size: 1.05rem;
+  color: var(--color-primary);
+}
+
+/* --------------------------------------------------------------------------
+   追问输入栏 (Follow-up Composer)
+   -------------------------------------------------------------------------- */
+.agent-study-followup {
+  margin-top: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.agent-study-followup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.agent-study-followup-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.agent-study-followup-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  flex: 1 1 280px;
+  margin: 0;
+  line-height: var(--line-height-body);
+}
+
+/* --------------------------------------------------------------------------
+   叠加窗口内特定排版 (Modal Dialog Contents)
+   -------------------------------------------------------------------------- */
+
+/* 原文对照窗口内部 */
+.agent-study-comparison-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.agent-study-comparison-text-box {
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  max-height: 55vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.agent-study-comparison-pre {
+  margin: 0;
+  font-family: var(--font-family-app);
+  font-size: var(--font-size-sm);
+  line-height: 1.85;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--color-text-primary);
+}
+
+/* 运行详情与诊断窗口内部 */
+.agent-study-diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.agent-study-diagnostics-heading {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.agent-study-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.agent-study-timeline-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+.agent-study-timeline-icon {
+  font-size: 1.15rem;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.agent-study-timeline-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: var(--space-2);
+}
+
+.agent-study-timeline-content strong {
+  color: var(--color-text-primary);
+}
+
+.agent-study-timeline-content span {
+  color: var(--color-text-muted);
+}
+
+.agent-study-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+.agent-study-metric-card {
+  padding: var(--space-3);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.agent-study-metric-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.agent-study-metric-value {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.agent-study-dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* --------------------------------------------------------------------------
+   响应式断点控制
+   -------------------------------------------------------------------------- */
+@media (max-width: 760px) {
+  .agent-study-form-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agent-study-thresholds {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agent-study-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .agent-study-toolbar-right {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .agent-study-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .agent-study-card {
+    padding: var(--space-4);
+  }
+
+  .agent-study-followup-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .agent-study-followup-footer > button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-study-running-banner,
+  .agent-study-running-spinner,
+  .agent-study-source-chip,
+  .agent-study-advanced-arrow {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+}

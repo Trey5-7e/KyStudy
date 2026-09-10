@@ -1,0 +1,219 @@
+{
+  "algorithmVersion": "weighted-xorshift32-v1",
+  "seed": 42,
+  "snapshotRevision": "synthetic-v1",
+  "today": "2026-09-06",
+  "allowedIds": [
+    "q01",
+    "q02",
+    "q03",
+    "q04",
+    "q05",
+    "q06",
+    "q07",
+    "q08",
+    "q09",
+    "q10",
+    "q11",
+    "q12",
+    "q13",
+    "q14",
+    "q15",
+    "q16",
+    "q17",
+    "q18"
+  ],
+  "attempts": [
+    {
+      "questionId": "q02",
+      "date": "2026-09-06"
+    },
+    {
+      "questionId": "q12",
+      "date": "2026-09-06"
+    },
+    {
+      "questionId": "q04",
+      "date": "2026-09-05"
+    }
+  ],
+  "quotas": {
+    "choice": 4,
+    "blank": 3,
+    "solution": 3
+  },
+  "questions": [
+    {
+      "id": "q01",
+      "subject": "linear",
+      "kind": "choice",
+      "status": "unattempted",
+      "incorrectCount": 0,
+      "partialCount": 0
+    },
+    {
+      "id": "q02",
+      "subject": "linear",
+      "kind": "choice",
+      "status": "incorrect",
+      "incorrectCount": 1,
+      "partialCount": 1
+    },
+    {
+      "id": "q03",
+      "subject": "linear",
+      "kind": "choice",
+      "status": "uncertain",
+      "incorrectCount": 2,
+      "partialCount": 0
+    },
+    {
+      "id": "q04",
+      "subject": "linear",
+      "kind": "choice",
+      "status": "correct",
+      "incorrectCount": 0,
+      "partialCount": 1
+    },
+    {
+      "id": "q05",
+      "subject": "linear",
+      "kind": "choice",
+      "status": "unattempted",
+      "incorrectCount": 1,
+      "partialCount": 0
+    },
+    {
+      "id": "q06",
+      "subject": "linear",
+      "kind": "choice",
+      "status": "incorrect",
+      "incorrectCount": 2,
+      "partialCount": 1
+    },
+    {
+      "id": "q07",
+      "subject": "linear",
+      "kind": "choice",
+      "status": "uncertain",
+      "incorrectCount": 0,
+      "partialCount": 0
+    },
+    {
+      "id": "q08",
+      "subject": "linear",
+      "kind": "blank",
+      "status": "correct",
+      "incorrectCount": 1,
+      "partialCount": 1
+    },
+    {
+      "id": "q09",
+      "subject": "linear",
+      "kind": "blank",
+      "status": "unattempted",
+      "incorrectCount": 2,
+      "partialCount": 0
+    },
+    {
+      "id": "q10",
+      "subject": "linear",
+      "kind": "blank",
+      "status": "incorrect",
+      "incorrectCount": 0,
+      "partialCount": 1
+    },
+    {
+      "id": "q11",
+      "subject": "linear",
+      "kind": "blank",
+      "status": "uncertain",
+      "incorrectCount": 1,
+      "partialCount": 0
+    },
+    {
+      "id": "q12",
+      "subject": "linear",
+      "kind": "blank",
+      "status": "correct",
+      "incorrectCount": 2,
+      "partialCount": 1
+    },
+    {
+      "id": "q13",
+      "subject": "linear",
+      "kind": "blank",
+      "status": "unattempted",
+      "incorrectCount": 0,
+      "partialCount": 0
+    },
+    {
+      "id": "q14",
+      "subject": "linear",
+      "kind": "solution",
+      "status": "incorrect",
+      "incorrectCount": 1,
+      "partialCount": 1
+    },
+    {
+      "id": "q15",
+      "subject": "linear",
+      "kind": "solution",
+      "status": "uncertain",
+      "incorrectCount": 2,
+      "partialCount": 0
+    },
+    {
+      "id": "q16",
+      "subject": "linear",
+      "kind": "solution",
+      "status": "correct",
+      "incorrectCount": 0,
+      "partialCount": 1
+    },
+    {
+      "id": "q17",
+      "subject": "linear",
+      "kind": "solution",
+      "status": "unattempted",
+      "incorrectCount": 1,
+      "partialCount": 0
+    },
+    {
+      "id": "q18",
+      "subject": "linear",
+      "kind": "solution",
+      "status": "incorrect",
+      "incorrectCount": 2,
+      "partialCount": 1
+    },
+    {
+      "id": "q19",
+      "subject": "other",
+      "kind": "solution",
+      "status": "uncertain",
+      "incorrectCount": 0,
+      "partialCount": 0
+    },
+    {
+      "id": "q20",
+      "subject": "other",
+      "kind": "solution",
+      "status": "correct",
+      "incorrectCount": 1,
+      "partialCount": 1
+    }
+  ],
+  "expectedIds": [
+    "q01",
+    "q06",
+    "q03",
+    "q07",
+    "q11",
+    "q09",
+    "q13",
+    "q17",
+    "q18",
+    "q14"
+  ]
+}

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>M0 受控渲染实验</title>
+  </head>
+  <body>
+    <main>
+      <h1>M0 · 受控 PDF 渲染实验</h1>
+      <p>
+        仅合成双页 PDF。模拟 Host/RenderJob 交接，不读取用户存储，不代表 Tauri
+        桌面验收。
+      </p>
+      <nav aria-label="实验操作">
+        <button id="page1">渲染第 1 页</button
+        ><button id="page2">渲染第 2 页</button>
+        <button id="region">渲染题目区域</button
+        ><button id="stale">测试过期任务</button>
+        <button id="restart">测试重启任务</button
+        ><button id="large">测试超大图片</button>
+        <button id="navigate">切换显示页</button>
+        <button id="rust1">Rust Host 第 1 页</button>
+        <button id="rust2">Rust Host 第 2 页</button>
+        <button id="rust-region">Rust Host 题区往返</button>
+      </nav>
+      <p id="status" role="status">等待渲染</p>
+      <p id="receipt">暂无交接收据</p>
+      <section id="output" aria-label="合成 PDF 输出"></section>
+    </main>
+    <script type="module" src="./preview.ts"></script>
+  </body>
+</html>
