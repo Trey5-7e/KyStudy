@@ -717,9 +717,13 @@ export function AiFoundationPanel({
           </div>
           <button
             type="button"
+            className="ui-button ui-button-secondary ui-button-sm"
             onClick={inlineManagement ? openCreate : openManagement}
             disabled={busy !== undefined}
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              {inlineManagement ? "add" : "tune"}
+            </span>
             {inlineManagement ? "新增 API 配置" : "管理 AI 配置"}
           </button>
         </div>
@@ -809,26 +813,45 @@ export function AiFoundationPanel({
                     {!provider.active ? (
                       <button
                         type="button"
+                        className="ui-button ui-button-primary ui-button-sm"
                         onClick={() => activateProvider(provider.id)}
                         disabled={busy !== undefined}
                       >
+                        <span
+                          className="material-symbols-rounded"
+                          aria-hidden="true"
+                        >
+                          check_circle
+                        </span>
                         设为当前
                       </button>
                     ) : null}
                     <button
                       type="button"
-                      className="secondary-button"
+                      className="ui-button ui-button-secondary ui-button-sm"
                       onClick={() => openEdit(provider)}
                       disabled={busy !== undefined}
                     >
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        edit
+                      </span>
                       编辑
                     </button>
                     <button
                       type="button"
-                      className="secondary-button"
+                      className="ui-button ui-button-secondary ui-button-sm"
                       onClick={() => activateProvider(provider.id, true)}
                       disabled={busy !== undefined}
                     >
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        wifi_tethering
+                      </span>
                       测试连接
                     </button>
                   </div>
@@ -902,11 +925,15 @@ export function AiFoundationPanel({
                 <button
                   type="button"
                   role="tab"
+                  className="ai-dialog-tab-active"
                   aria-selected="true"
                   aria-controls="ai-dialog-panel-providers"
                   onClick={() => setDialogMode("providers")}
                   disabled={busy !== undefined}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    hub
+                  </span>
                   Provider
                 </button>
                 <button
@@ -917,6 +944,9 @@ export function AiFoundationPanel({
                   onClick={openBudgetEditor}
                   disabled={busy !== undefined}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    account_balance_wallet
+                  </span>
                   Token 预算
                 </button>
                 <button
@@ -927,6 +957,9 @@ export function AiFoundationPanel({
                   onClick={() => setDialogMode("connection")}
                   disabled={busy !== undefined || activeProvider === undefined}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    wifi_tethering
+                  </span>
                   连接测试
                 </button>
                 <button
@@ -937,6 +970,9 @@ export function AiFoundationPanel({
                   onClick={() => setDialogMode("history")}
                   disabled={busy !== undefined}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    history
+                  </span>
                   调用历史
                 </button>
               </div>
@@ -953,9 +989,13 @@ export function AiFoundationPanel({
                 </div>
                 <button
                   type="button"
+                  className="ui-button ui-button-primary ui-button-sm"
                   onClick={openCreate}
                   disabled={busy !== undefined}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    add
+                  </span>
                   新增 Provider
                 </button>
               </div>
@@ -987,19 +1027,32 @@ export function AiFoundationPanel({
                       {!provider.active ? (
                         <button
                           type="button"
+                          className="ui-button ui-button-primary ui-button-sm"
                           onClick={() => activateProvider(provider.id)}
                           disabled={busy !== undefined}
                         >
+                          <span
+                            className="material-symbols-rounded"
+                            aria-hidden="true"
+                          >
+                            check_circle
+                          </span>
                           设为当前
                         </button>
                       ) : null}
                       {provider.active ? (
                         <button
                           type="button"
-                          className="secondary-button"
+                          className="ui-button ui-button-secondary ui-button-sm"
                           onClick={() => activateProvider(provider.id, true)}
                           disabled={busy !== undefined}
                         >
+                          <span
+                            className="material-symbols-rounded"
+                            aria-hidden="true"
+                          >
+                            wifi_tethering
+                          </span>
                           测试连接
                         </button>
                       ) : null}
@@ -1008,10 +1061,16 @@ export function AiFoundationPanel({
                         <div className="ai-provider-secondary-actions">
                           <button
                             type="button"
-                            className="secondary-button"
+                            className="ui-button ui-button-secondary ui-button-sm"
                             onClick={() => openEdit(provider)}
                             disabled={busy !== undefined}
                           >
+                            <span
+                              className="material-symbols-rounded"
+                              aria-hidden="true"
+                            >
+                              edit
+                            </span>
                             编辑
                           </button>
                           {deleteConfirmationId === provider.id ? (
@@ -1019,16 +1078,23 @@ export function AiFoundationPanel({
                               <span>删除配置和系统密钥？</span>
                               <button
                                 type="button"
+                                className="ui-button ui-button-danger ui-button-sm"
                                 onClick={() =>
                                   confirmDeleteProvider(provider.id)
                                 }
                                 disabled={busy !== undefined}
                               >
+                                <span
+                                  className="material-symbols-rounded"
+                                  aria-hidden="true"
+                                >
+                                  delete_forever
+                                </span>
                                 确认删除
                               </button>
                               <button
                                 type="button"
-                                className="secondary-button"
+                                className="ui-button ui-button-secondary ui-button-sm"
                                 onClick={() =>
                                   setDeleteConfirmationId(undefined)
                                 }
@@ -1040,12 +1106,18 @@ export function AiFoundationPanel({
                           ) : (
                             <button
                               type="button"
-                              className="secondary-button"
+                              className="ui-button ui-button-danger ui-button-sm"
                               onClick={() =>
                                 setDeleteConfirmationId(provider.id)
                               }
                               disabled={busy !== undefined}
                             >
+                              <span
+                                className="material-symbols-rounded"
+                                aria-hidden="true"
+                              >
+                                delete
+                              </span>
                               删除
                             </button>
                           )}
@@ -1217,10 +1289,16 @@ export function AiFoundationPanel({
                 {isRemoteProviderType(providerDraft.providerType) ? (
                   <button
                     type="button"
-                    className="secondary-button"
+                    className="ui-button ui-button-secondary ui-button-sm"
                     onClick={fetchModels}
                     disabled={busy !== undefined || !canFetchModels}
                   >
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      sync
+                    </span>
                     {busy === "models" ? "获取中…" : "获取模型"}
                   </button>
                 ) : null}
@@ -1265,10 +1343,16 @@ export function AiFoundationPanel({
                   {selectedPreset?.apiKeyUrl !== undefined ? (
                     <button
                       type="button"
-                      className="ai-provider-key-link"
+                      className="ui-button ui-button-ghost ui-button-sm ai-provider-key-link"
                       onClick={() => openPresetApiKeyPage(selectedPreset)}
                       disabled={busy !== undefined}
                     >
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        open_in_new
+                      </span>
                       获取 API Key
                     </button>
                   ) : null}
@@ -1281,10 +1365,16 @@ export function AiFoundationPanel({
                   !secretDeleteConfirmation ? (
                     <button
                       type="button"
-                      className="text-button"
+                      className="ui-button ui-button-ghost ui-button-sm"
                       onClick={() => setSecretDeleteConfirmation(true)}
                       disabled={busy !== undefined}
                     >
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        key_off
+                      </span>
                       删除已保存密钥
                     </button>
                   ) : null}
@@ -1294,14 +1384,21 @@ export function AiFoundationPanel({
                       <span>删除已保存的 API Key？</span>
                       <button
                         type="button"
+                        className="ui-button ui-button-danger ui-button-sm"
                         onClick={removeSecret}
                         disabled={busy !== undefined}
                       >
+                        <span
+                          className="material-symbols-rounded"
+                          aria-hidden="true"
+                        >
+                          delete_forever
+                        </span>
                         确认删除
                       </button>
                       <button
                         type="button"
-                        className="secondary-button"
+                        className="ui-button ui-button-secondary ui-button-sm"
                         onClick={() => setSecretDeleteConfirmation(false)}
                         disabled={busy !== undefined}
                       >
@@ -1436,7 +1533,14 @@ export function AiFoundationPanel({
                   </label>
                 </div>
               </details>
-              <button type="submit" disabled={busy !== undefined}>
+              <button
+                type="submit"
+                className="ui-button ui-button-primary ui-button-md"
+                disabled={busy !== undefined}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  save
+                </span>
                 {editingProviderId === undefined ? "保存 API 配置" : "保存修改"}
               </button>
             </form>
@@ -1535,7 +1639,14 @@ export function AiFoundationPanel({
                   <option value="warn">仅警告</option>
                 </select>
               </label>
-              <button type="submit" disabled={busy !== undefined}>
+              <button
+                type="submit"
+                className="ui-button ui-button-primary ui-button-md"
+                disabled={busy !== undefined}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  save
+                </span>
                 保存预算
               </button>
             </form>
@@ -1604,8 +1715,12 @@ export function AiFoundationPanel({
                 </label>
                 <button
                   type="submit"
+                  className="ui-button ui-button-primary ui-button-md"
                   disabled={busy !== undefined || activeProvider === undefined}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    visibility
+                  </span>
                   生成测试预览
                 </button>
               </form>
@@ -1669,11 +1784,18 @@ export function AiFoundationPanel({
                   </label>
                   <button
                     type="button"
+                    className="ui-button ui-button-primary ui-button-md"
                     onClick={executePreview}
                     disabled={
                       !confirmed || !preview.allowed || busy !== undefined
                     }
                   >
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      send
+                    </span>
                     确认并测试连接
                   </button>
                 </section>

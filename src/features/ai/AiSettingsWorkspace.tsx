@@ -14,7 +14,10 @@ export function AiSettingsWorkspace({ onOpenChat }: AiSettingsWorkspaceProps) {
         title="模型与 API"
         actions={
           <Button onClick={onOpenChat}>
-            <span aria-hidden="true">＋</span> 新建 AI 对话
+            <span className="material-symbols-rounded" aria-hidden="true">
+              add
+            </span>
+            新建 AI 对话
           </Button>
         }
       />
