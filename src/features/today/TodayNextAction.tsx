@@ -90,7 +90,7 @@ export function TodayNextAction({
         {kind === "review" ? (
           <Button
             variant="primary"
-            size="lg"
+            size="md"
             disabled={busyTaskId !== undefined}
             onClick={() => onStartReview(!reviewRestDay && !reviewFinished)}
           >
@@ -106,7 +106,7 @@ export function TodayNextAction({
           <Button
             ref={(node) => registerItemAction(nextCycle.item.id, node)}
             variant="primary"
-            size="lg"
+            size="md"
             disabled={busyTaskId !== undefined}
             aria-label={`${nextCycleAction.label}：${nextCycleLabel}`}
             onClick={(event) =>
@@ -123,11 +123,11 @@ export function TodayNextAction({
               : nextCycleAction.label}
           </Button>
         ) : kind === "plan" ? (
-          <Button variant="primary" size="lg" onClick={onOpenPlan}>
+          <Button variant="primary" size="md" onClick={onOpenPlan}>
             打开计划
           </Button>
         ) : (
-          <Button variant="primary" size="lg" onClick={onOpenWorkbook}>
+          <Button variant="primary" size="md" onClick={onOpenWorkbook}>
             打开习题册
           </Button>
         )}
