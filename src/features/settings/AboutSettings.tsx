@@ -229,7 +229,13 @@ export function AboutSettings() {
               void openExternalUrl(event, GITHUB_REPOSITORY_URL)
             }
           >
-            GitHub 开源仓库
+            <span>GitHub 开源仓库</span>
+            <span
+              className="material-symbols-rounded settings-link-icon"
+              aria-hidden="true"
+            >
+              open_in_new
+            </span>
           </a>
           <a
             href={GITHUB_ISSUES_URL}
@@ -238,7 +244,13 @@ export function AboutSettings() {
             className="settings-about-link"
             onClick={(event) => void openExternalUrl(event, GITHUB_ISSUES_URL)}
           >
-            意见反馈
+            <span>意见反馈</span>
+            <span
+              className="material-symbols-rounded settings-link-icon"
+              aria-hidden="true"
+            >
+              open_in_new
+            </span>
           </a>
         </div>
       </section>
@@ -252,10 +264,16 @@ export function AboutSettings() {
           actions={
             <Button
               size="sm"
+              variant="secondary"
               onClick={() => void checkForUpdate(false)}
               disabled={!isReleaseBuild || updateState.kind === "checking"}
             >
-              {updateState.kind === "checking" ? "检查中…" : "检查更新"}
+              <span className="material-symbols-rounded" aria-hidden="true">
+                update
+              </span>
+              <span>
+                {updateState.kind === "checking" ? "检查中…" : "检查更新"}
+              </span>
             </Button>
           }
         />
@@ -290,7 +308,16 @@ export function AboutSettings() {
                 </p>
               ) : null}
             </div>
-            <Button onClick={() => void installUpdate()}>下载并安装</Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => void installUpdate()}
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                download
+              </span>
+              <span>下载并安装</span>
+            </Button>
           </div>
         ) : null}
         {updateState.kind === "downloading" ? (

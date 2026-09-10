@@ -21,6 +21,7 @@ import {
 } from "../../shared/tauri/cyclePlanClient";
 import { setReviewRestWeekdays } from "../../shared/tauri/reviewSchemeClient";
 import { PageHeader, PageStatus } from "../../shared/components/PagePrimitives";
+import { Button } from "../../shared/ui/Button";
 import { localDate } from "./cycleCalendar";
 import { cyclePlanItemTransitionNotice } from "./cyclePlanItemActions";
 import {
@@ -481,9 +482,9 @@ export function CyclePlanPanel() {
           tone="error"
           title={error.message}
           action={
-            <button type="button" onClick={retryDashboard}>
+            <Button variant="secondary" size="sm" onClick={retryDashboard}>
               重新读取
-            </button>
+            </Button>
           }
         >
           {error.action}

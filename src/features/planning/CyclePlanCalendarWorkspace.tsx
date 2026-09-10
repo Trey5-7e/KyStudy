@@ -1,6 +1,7 @@
 import { useMemo, useState, type RefObject } from "react";
 
 import { PageEmpty, PageSurface } from "../../shared/components/PagePrimitives";
+import { Button } from "../../shared/ui/Button";
 import type {
   CyclePlanDashboard,
   CyclePlanItem,
@@ -65,13 +66,14 @@ function CycleRestDays({
           </label>
         ))}
       </fieldset>
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        size="sm"
         disabled={busy || values.length >= 7}
         onClick={() => void onSave(values)}
       >
         保存休息日
-      </button>
+      </Button>
     </details>
   );
 }
@@ -106,25 +108,29 @@ function MonthCalendar({
           <h3 id="cycle-calendar-title">{formatMonth(year, month)}</h3>
         </div>
         <div className="cycle-calendar-actions">
-          <button
-            type="button"
-            className="secondary-button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onPrevious}
             aria-label="上个月"
           >
-            ‹
-          </button>
-          <button type="button" className="secondary-button" onClick={onToday}>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              chevron_left
+            </span>
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onToday}>
             今天
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onNext}
             aria-label="下个月"
           >
-            ›
-          </button>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              chevron_right
+            </span>
+          </Button>
         </div>
       </header>
       <div className="cycle-calendar-weekdays" role="row">
@@ -226,15 +232,15 @@ function CyclePlanCard({
         完成
       </p>
       <div className="cycle-plan-card-actions">
-        <button
-          type="button"
-          className="secondary-button"
+        <Button
+          variant="secondary"
+          size="sm"
           disabled={busy}
           aria-label={`查看计划：${plan.name}`}
           onClick={(event) => onOpen(event.currentTarget)}
         >
           查看计划
-        </button>
+        </Button>
       </div>
     </article>
   );
@@ -341,7 +347,7 @@ export function CyclePlanCalendarWorkspace({
                         <div className="cycle-plan-card-actions">
                           {cyclePlanItemActions(item.state).map(
                             (action, index) => (
-                              <button
+                              <Button
                                 key={action.targetState}
                                 ref={
                                   index === 0
@@ -359,8 +365,8 @@ export function CyclePlanCalendarWorkspace({
                                       }
                                     : undefined
                                 }
-                                type="button"
-                                className="secondary-button"
+                                variant="secondary"
+                                size="sm"
                                 disabled={busy}
                                 aria-label={`${action.label}：${itemLabel}`}
                                 onClick={(event) =>
@@ -373,7 +379,7 @@ export function CyclePlanCalendarWorkspace({
                                 }
                               >
                                 {action.label}
-                              </button>
+                              </Button>
                             ),
                           )}
                         </div>

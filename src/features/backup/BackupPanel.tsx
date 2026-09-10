@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { Button } from "../../shared/ui/Button";
 import {
   createWorkspaceBackup,
   normalizeBackupCommandError,
@@ -66,21 +67,28 @@ export function BackupPanel() {
           </p>
         </div>
         <div className="backup-actions">
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             disabled={busy}
             onClick={() => void createBackup()}
           >
-            创建完整备份
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
+            <span className="material-symbols-rounded" aria-hidden="true">
+              backup
+            </span>
+            <span>创建完整备份</span>
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             disabled={busy}
             onClick={() => void restoreBackup()}
           >
-            验证并生成恢复副本
-          </button>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              settings_backup_restore
+            </span>
+            <span>验证并生成恢复副本</span>
+          </Button>
         </div>
       </div>
 

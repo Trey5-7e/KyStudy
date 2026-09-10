@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { Button } from "../../shared/ui/Button";
 import {
   getWorkspaceStatus,
   initializeDefaultWorkspace,
@@ -80,9 +81,9 @@ export function WorkspacePanel() {
       </div>
 
       {state.kind === "missing" ? (
-        <button type="button" onClick={() => void initializeWorkspace()}>
+        <Button variant="primary" onClick={() => void initializeWorkspace()}>
           创建本地工作区
-        </button>
+        </Button>
       ) : null}
 
       {state.kind === "ready" ? (
