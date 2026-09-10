@@ -12,6 +12,7 @@ import {
   EditorDialogCloseButton,
   EditorDialogFooter,
 } from "../../shared/components/EditorDialog";
+import { Button } from "../../shared/ui/Button";
 import {
   normalizeQuestionBankError,
   recordBulkQuestionAttempts,
@@ -365,17 +366,16 @@ export function PaperSetupDialog({
             取消
           </EditorDialogCloseButton>
           {rememberedQuestions.length === 0 ? null : (
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={restoreLastDraft}
-            >
+            <Button variant="secondary" onClick={restoreLastDraft}>
+              <span className="material-symbols-rounded" aria-hidden="true">
+                history
+              </span>
               打开上次组卷（{rememberedQuestions.length} 道）
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             type="submit"
-            className="primary-button"
+            variant="primary"
             aria-describedby="paper-generate-reason"
             disabled={
               statuses.size === 0 ||
@@ -385,8 +385,11 @@ export function PaperSetupDialog({
                 scopeGroups.every((group) => !group.enabled))
             }
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              quiz
+            </span>
             生成练习卷
-          </button>
+          </Button>
         </EditorDialogFooter>
       </form>
     </EditorDialog>
@@ -855,29 +858,34 @@ export function PaperDialog({
               </span>
             </div>
             <div className="generated-paper-toolbar-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={persistPaperDraft}
-              >
+              <Button variant="secondary" size="sm" onClick={persistPaperDraft}>
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  save_as
+                </span>
                 暂存本卷
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={recipe === undefined}
                 onClick={refreshGeneratedPaper}
               >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  refresh
+                </span>
                 刷新组卷
-              </button>
-              <button
-                type="button"
-                className="primary-button"
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
                 disabled={paperQuestions.length === 0 || busy}
                 onClick={() => setExporting(true)}
               >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  picture_as_pdf
+                </span>
                 导出 PDF（{paperQuestions.length} 题）
-              </button>
+              </Button>
             </div>
           </div>
           <PaperQuestionNavigator
@@ -1005,28 +1013,32 @@ export function PaperDialog({
             </p>
           )}
           <EditorDialogFooter className="editor-actions question-bank-dialog-footer">
-            <button
-              type="button"
-              className="secondary-button"
+            <Button
+              variant="secondary"
               disabled={busy}
               onClick={() => void saveProgress()}
             >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                save
+              </span>
               {busy ? "正在保存…" : "保存记录"}
-            </button>
-            <button
-              type="button"
-              className="primary-button"
+            </Button>
+            <Button
+              variant="primary"
               disabled={busy}
               onClick={() => void submitPaper()}
             >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                check_circle
+              </span>
               {busy ? "正在提交…" : "提交组卷"}
-            </button>
+            </Button>
           </EditorDialogFooter>
         </div>
       </EditorDialog>
       {aiAnalysisQuestion === undefined ? null : (
         <EditorDialog
-          title="AI 解析"
+          title="辅助参考解析"
           description={`${aiAnalysisQuestion.title} · ${aiAnalysisQuestion.subjectName} / ${aiAnalysisQuestion.chapter}`}
           dirty={false}
           onRequestClose={() => setAiAnalysisQuestionId(undefined)}

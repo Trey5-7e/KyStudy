@@ -82,26 +82,31 @@ const TOOL_SECTIONS: ReadonlyArray<{
   id: QuestionBankToolsSection;
   label: string;
   description: string;
+  icon: string;
 }> = [
   {
     id: "category",
     label: "分类",
     description: "建立科目和练习册",
+    icon: "category",
   },
   {
     id: "index",
     label: "索引",
     description: "补题、校对和浏览",
+    icon: "find_in_page",
   },
   {
     id: "practice",
     label: "做题",
     description: "登记结果或生成练习卷",
+    icon: "edit_note",
   },
   {
     id: "maintenance",
     label: "维护",
     description: "刷新题库快照与 OCR 组件",
+    icon: "build",
   },
 ];
 
@@ -217,35 +222,25 @@ function readCount(
   return typeof nestedValue === "number" ? nestedValue : 0;
 }
 
+const TOOL_MATERIAL_ICONS: Record<ToolIconKind, string> = {
+  subject: "school",
+  workbook: "menu_book",
+  manual: "crop",
+  browse: "search",
+  record: "checklist",
+  paper: "quiz",
+  refresh: "refresh",
+  ocr: "document_scanner",
+};
+
 function ToolIcon({ kind }: { kind: ToolIconKind }) {
-  const paths: Record<ToolIconKind, string> = {
-    subject:
-      "M12 3.5 20 7v5.5c0 4.1-2.8 7.1-8 8.5-5.2-1.4-8-4.4-8-8.5V7l8-3.5Zm0 4v9m-4.5-4.5h9",
-    workbook:
-      "M5 5.5h11.5A2.5 2.5 0 0 1 19 8v10.5H7A2 2 0 0 0 5 20.5V5.5Zm0 0v15m2-2h12",
-    manual:
-      "m5 17.5-.8 3.3 3.3-.8L19 8.5a2.3 2.3 0 0 0-3.3-3.3L5 17.5Zm8.7-10.7 3.3 3.3M5 4.5h5",
-    browse: "m16.5 16.5 4 4m-2.5-10a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z",
-    record: "M5 4.5h14v15H5v-15Zm3 3.5h8M8 12h1m3 0h5M8 15.5h1m3 0h5",
-    paper:
-      "M5 5.5h11a2 2 0 0 1 2 2v11H7a2 2 0 0 1-2-2v-11Zm3 0V3.5h9a2 2 0 0 1 2 2v2M8 10.5h7m-7 3h5",
-    refresh: "M19.5 8.5A7.5 7.5 0 1 0 20 14h-3m3-5.5v4h-4",
-    ocr: "M4.5 5.5h15v13h-15zM8 9h8M8 12h6M8 15h4",
-  };
   return (
-    <svg
-      className="question-bank-tool-icon"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      focusable="false"
+    <span
+      className="material-symbols-rounded question-bank-tool-icon"
       aria-hidden="true"
     >
-      <path d={paths[kind]} />
-    </svg>
+      {TOOL_MATERIAL_ICONS[kind]}
+    </span>
   );
 }
 
@@ -578,7 +573,20 @@ export function QuestionBankToolsDialog({
                         )
                       }
                     >
-                      <strong>{item.label}</strong>
+                      <strong>
+                        <span
+                          className="material-symbols-rounded"
+                          aria-hidden="true"
+                          style={{
+                            fontSize: "1.1rem",
+                            verticalAlign: "text-bottom",
+                            marginRight: "6px",
+                          }}
+                        >
+                          {item.icon}
+                        </span>
+                        {item.label}
+                      </strong>
                       <span>{item.description}</span>
                       <small>
                         {

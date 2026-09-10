@@ -4825,6 +4825,11 @@ button:disabled {
 .question-bank-tool-icon {
   width: 1.25rem;
   height: 1.25rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .question-bank-tool-card-body {

@@ -12,6 +12,7 @@ import {
   EditorDialogCloseButton,
   EditorDialogFooter,
 } from "../../shared/components/EditorDialog";
+import { Button } from "../../shared/ui/Button";
 import {
   normalizeQuestionBankError,
   recordBulkQuestionAttempts,
@@ -423,14 +424,17 @@ export function QuickRecordDialog({
           <EditorDialogCloseButton className="secondary-button" disabled={busy}>
             取消
           </EditorDialogCloseButton>
-          <button
+          <Button
             type="submit"
-            className="primary-button"
+            variant="primary"
             aria-describedby="quick-record-save-reason"
             disabled={busy || scoped.length === 0}
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              save
+            </span>
             {busy ? "正在保存…" : "保存本次练习"}
-          </button>
+          </Button>
         </EditorDialogFooter>
       </form>
     </EditorDialog>
