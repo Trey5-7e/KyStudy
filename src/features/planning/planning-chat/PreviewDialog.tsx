@@ -86,7 +86,7 @@ export function PreviewDialog({
               <button
                 key={`${source.documentId}:${source.pageNumber}`}
                 type="button"
-                className="secondary-button"
+                className="ui-button ui-button-secondary ui-button-sm"
                 onClick={() => {
                   onClose();
                   requestAnimationFrame(() =>
@@ -94,6 +94,9 @@ export function PreviewDialog({
                   );
                 }}
               >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  menu_book
+                </span>
                 {source.citationLabel} {source.documentTitle} · 第
                 {source.pageNumber} 页
               </button>
@@ -103,14 +106,14 @@ export function PreviewDialog({
         {preview.attachments.length === 0 ? null : (
           <ul
             className="planning-preview-attachments"
-            aria-label="闄勪欢浼犺緭璇婃柇"
+            aria-label="附件传输诊断"
           >
             {preview.attachments.map((attachment) => (
               <li key={attachment.id}>
                 <strong>{attachment.fileName}</strong>
                 <span>{transportLabel(attachment.transport)}</span>
                 {attachment.indexedPages === undefined ? null : (
-                  <span>宸茬储寮曪細{attachment.indexedPages} 页</span>
+                  <span>已索引：{attachment.indexedPages} 页</span>
                 )}
                 {attachment.warning === undefined ? null : (
                   <small>{attachment.warning}</small>
@@ -138,9 +141,13 @@ export function PreviewDialog({
         </label>
         <button
           type="button"
+          className="ui-button ui-button-primary ui-button-md"
           disabled={!confirmed || !preview.preview.allowed || busy}
           onClick={onExecute}
         >
+          <span className="material-symbols-rounded" aria-hidden="true">
+            send
+          </span>
           确认并发送
         </button>
       </section>

@@ -247,6 +247,7 @@ export function CyclePlanEditor({
         <div className="cycle-plan-form-actions">
           <button
             type="button"
+            className="ui-button ui-button-primary ui-button-md"
             disabled={busy || !valid || preview === undefined}
             onClick={() => {
               if (valid && preview !== undefined) {

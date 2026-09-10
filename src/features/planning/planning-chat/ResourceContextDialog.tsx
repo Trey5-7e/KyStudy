@@ -145,7 +145,7 @@ export function ResourceContextDialog({
                 {importEvent.state === "running" ? (
                   <button
                     type="button"
-                    className="text-button"
+                    className="ui-button ui-button-ghost ui-button-sm"
                     disabled={uploadCanceling}
                     onClick={onCancelUpload}
                   >
@@ -167,10 +167,13 @@ export function ResourceContextDialog({
               importEvent.state === "canceled" ? (
                 <button
                   type="button"
-                  className="secondary-button"
+                  className="ui-button ui-button-secondary ui-button-sm"
                   disabled={busy}
                   onClick={onRetryUpload}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    folder_open
+                  </span>
                   重新选择资料
                 </button>
               ) : null}
@@ -224,10 +227,16 @@ export function ResourceContextDialog({
                       attachment.status === "failed") ? (
                       <button
                         type="button"
-                        className="text-button"
+                        className="ui-button ui-button-ghost ui-button-sm"
                         disabled={busy}
                         onClick={() => onRetryAttachment(attachment.id)}
                       >
+                        <span
+                          className="material-symbols-rounded"
+                          aria-hidden="true"
+                        >
+                          refresh
+                        </span>
                         重试
                       </button>
                     ) : null}

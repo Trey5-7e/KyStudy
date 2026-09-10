@@ -380,10 +380,13 @@ export function CyclePlanAiAssistant({
               <p>{resourcesError}</p>
               <button
                 type="button"
-                className="secondary-button"
+                className="ui-button ui-button-secondary ui-button-sm"
                 disabled={busy || resourcesLoading}
                 onClick={() => void loadPlanningResources()}
               >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  refresh
+                </span>
                 重试
               </button>
             </div>
@@ -438,10 +441,13 @@ export function CyclePlanAiAssistant({
           </label>
           <button
             type="button"
-            className="secondary-button"
+            className="ui-button ui-button-secondary ui-button-md"
             disabled={busy || searchQuery.trim() === ""}
             onClick={() => void search()}
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              search
+            </span>
             搜索页码
           </button>
         </div>
@@ -511,10 +517,13 @@ export function CyclePlanAiAssistant({
         </label>
         <button
           type="button"
-          className="secondary-button"
+          className="ui-button ui-button-secondary ui-button-md"
           disabled={busy || instruction.trim() === ""}
           onClick={() => void prepare()}
         >
+          <span className="material-symbols-rounded" aria-hidden="true">
+            visibility
+          </span>
           生成外发预览
         </button>
       </div>
@@ -565,14 +574,18 @@ export function CyclePlanAiAssistant({
           <div className="cycle-ai-preview-actions">
             <button
               type="button"
+              className="ui-button ui-button-primary ui-button-md"
               disabled={busy || !preview.allowed}
               onClick={() => void execute()}
             >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                send
+              </span>
               确认发送
             </button>
             <button
               type="button"
-              className="secondary-button"
+              className="ui-button ui-button-secondary ui-button-md"
               disabled={busy}
               onClick={() => {
                 previewRequestRef.current += 1;
@@ -667,14 +680,18 @@ export function CyclePlanAiAssistant({
               <div>
                 <button
                   type="button"
+                  className="ui-button ui-button-primary ui-button-sm"
                   disabled={busy}
                   onClick={() => onAccept(card)}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    check
+                  </span>
                   采用这张草案
                 </button>
                 <button
                   type="button"
-                  className="secondary-button"
+                  className="ui-button ui-button-ghost ui-button-sm"
                   disabled={busy}
                   onClick={() =>
                     setCards(
@@ -682,6 +699,9 @@ export function CyclePlanAiAssistant({
                     )
                   }
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    close
+                  </span>
                   忽略
                 </button>
               </div>
