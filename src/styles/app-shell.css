@@ -85,8 +85,9 @@
 }
 
 .app-navigation > a {
-  display: grid;
-  gap: 0.12rem;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   border-left: 3px solid transparent;
   border-radius: var(--radius-xs);
   padding: var(--space-2) var(--space-3);
@@ -95,6 +96,34 @@
   background: transparent;
   text-decoration: none;
   touch-action: manipulation;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.app-navigation > a strong {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: var(--line-height-tight);
+}
+
+.app-nav-icon {
+  font-size: 1.25rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  transition: color 140ms ease;
+}
+
+.app-navigation > a:hover .app-nav-icon {
+  color: var(--color-text-primary);
+}
+
+.app-navigation > .app-nav-active .app-nav-icon {
+  color: var(--color-primary);
+}
+
+.app-nav-caption {
+  display: none;
 }
 
 .app-navigation > a:hover {
@@ -113,47 +142,40 @@
   background: var(--color-bg-surface);
 }
 
-.app-navigation span {
-  color: var(--color-text-muted);
-  font-size: 0.67rem;
-  font-weight: 600;
-}
-
 .app-settings-link {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   margin-top: auto;
   border-top: 1px solid var(--color-border-subtle);
-  padding: 0.85rem var(--space-2) var(--space-1);
+  padding: var(--space-3) var(--space-3) var(--space-2);
   color: var(--color-text-secondary);
   background: transparent;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   text-align: left;
   text-decoration: none;
+  border-radius: var(--radius-xs);
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
 }
 
-.app-settings-link > span:first-child {
-  display: grid;
-  width: 1.8rem;
-  height: 1.8rem;
-  flex: 0 0 auto;
-  border-radius: var(--radius-sm);
-  place-items: center;
-  color: var(--color-primary);
-  background: var(--color-bg-hover);
-  font-size: var(--font-size-md);
-}
-
-.app-settings-link > span:last-child {
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.app-settings-link small {
+.app-settings-link .app-nav-icon {
+  font-size: 1.25rem;
   color: var(--color-text-muted);
-  font-size: 0.67rem;
+  flex-shrink: 0;
+  transition: color 140ms ease;
+}
+
+.app-settings-link strong {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: var(--line-height-tight);
+}
+
+.app-settings-link:hover .app-nav-icon,
+.app-settings-link-active .app-nav-icon {
+  color: var(--color-primary);
 }
 
 .app-settings-link:hover,
@@ -197,7 +219,7 @@
   }
 
   .app-brand {
-    padding-bottom: var(--space-3);
+    padding-bottom: var(--space-2);
   }
 
   .app-navigation {
@@ -205,14 +227,17 @@
     overflow-x: auto;
     overscroll-behavior-x: contain;
     touch-action: pan-x;
+    gap: var(--space-1);
     padding-bottom: var(--space-1);
   }
 
   .app-navigation > a {
-    min-width: 7.5rem;
+    min-width: auto;
     flex: 0 0 auto;
-    border-bottom: 3px solid transparent;
+    border-bottom: 2px solid transparent;
     border-left: 0;
+    white-space: nowrap;
+    padding: var(--space-2) var(--space-3);
   }
 
   .app-navigation > .app-nav-active {
@@ -224,7 +249,7 @@
     margin-top: var(--space-1);
     border-top: 0;
     border-radius: var(--radius-sm);
-    padding: var(--space-1) var(--space-2);
+    padding: var(--space-2) var(--space-3);
   }
 
   .app-content {
@@ -237,16 +262,21 @@
 
 @media (max-width: 640px) {
   .app-navigation > a {
-    min-width: 6.5rem;
+    padding: var(--space-2);
+    gap: var(--space-1);
+  }
+
+  .app-navigation > a strong {
+    font-size: var(--font-size-xs);
+  }
+
+  .app-nav-icon {
+    font-size: 1.1rem;
   }
 }
 
 @media (max-width: 320px) {
   :root {
     --content-gutter: var(--space-3);
-  }
-
-  .app-navigation > a {
-    min-width: 5.75rem;
   }
 }
