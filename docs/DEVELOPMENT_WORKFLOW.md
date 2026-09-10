@@ -108,6 +108,7 @@ pnpm tauri build --no-bundle
 - 同一批次只维护一个简短计划；完成项不反复复述。
 - 普通维护不新增逐轮长验收文档。只有用户可见流程、数据语义、迁移或 Release 边界变化时才新增验收文档。
 - 最终报告只包含结果、关键验证、产物和需要用户执行的验收。
+- **每次优化交付必重编**：每次 UI 优化或批次功能交付时，必须执行 `pnpm tauri build --no-bundle` 重新编译，并在交付回复中明确提供构建出的可执行程序绝对路径（如 `F:\develop\KyStudy\src-tauri\target\release\kystudy.exe`），以便用户直接启动验收。
 
 ## 7. R35 落地结果
 
