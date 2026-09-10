@@ -5,6 +5,7 @@ import {
   EditorDialogFooter,
   useEditorDialogNavigation,
 } from "../../shared/components/EditorDialog";
+import { Button } from "../../shared/ui/Button";
 import {
   importQuestionIndex,
   insertIndexedQuestion,
@@ -56,14 +57,13 @@ function ManualIndexCancelButton({
 }) {
   const { requestClose, requestBack } = useEditorDialogNavigation();
   return (
-    <button
-      type="button"
-      className="secondary-button"
+    <Button
+      variant="secondary"
       disabled={disabled}
       onClick={useBack ? requestBack : requestClose}
     >
       取消
-    </button>
+    </Button>
   );
 }
 
@@ -388,8 +388,9 @@ export function ManualIndexDialog({
                     ? ""
                     : "（新）"}
                 </span>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="text-button"
                   disabled={workingRegions.length <= 1}
                   onClick={() =>
@@ -398,8 +399,11 @@ export function ManualIndexDialog({
                     )
                   }
                 >
-                  移除
-                </button>
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    delete
+                  </span>
+                  <span>移除</span>
+                </Button>
               </div>
             ))}
           </div>
@@ -420,9 +424,8 @@ export function ManualIndexDialog({
               useBack={onRequestBack !== undefined}
               disabled={busy}
             />
-            <button
-              type="button"
-              className="primary-button"
+            <Button
+              variant="primary"
               aria-describedby="manual-index-save-reason"
               disabled={
                 busy ||
@@ -435,14 +438,23 @@ export function ManualIndexDialog({
               }
               onClick={() => void save()}
             >
-              {busy
-                ? "正在保存…"
-                : existingQuestion === undefined
-                  ? relativeInsert === undefined
-                    ? "创建题目卡片"
-                    : "插入题目卡片"
-                  : "保存区域调整"}
-            </button>
+              <span className="material-symbols-rounded" aria-hidden="true">
+                {busy
+                  ? "hourglass_empty"
+                  : existingQuestion === undefined
+                    ? "add_task"
+                    : "save"}
+              </span>
+              <span>
+                {busy
+                  ? "正在保存…"
+                  : existingQuestion === undefined
+                    ? relativeInsert === undefined
+                      ? "创建题目卡片"
+                      : "插入题目卡片"
+                    : "保存区域调整"}
+              </span>
+            </Button>
           </EditorDialogFooter>
         </div>
         <div className="manual-index-reader">
