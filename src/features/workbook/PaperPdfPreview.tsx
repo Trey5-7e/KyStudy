@@ -4,6 +4,7 @@ import type { PDFPageProxy } from "pdfjs-dist";
 import { openPdf, type PdfSession } from "../library/pdf/pdfEngine";
 import { MemoryRangeSource } from "../library/pdf/rangeSource";
 import { RenderCoordinator } from "../library/pdf/renderCoordinator";
+import "../library/pdf/pdf-reader.css";
 
 export function PaperPdfPreview({ bytes }: { bytes: Uint8Array }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -89,60 +90,125 @@ export function PaperPdfPreview({ bytes }: { bytes: Uint8Array }) {
 
   return (
     <section className="paper-pdf-preview" aria-label="练习卷 PDF 预览">
-      <div className="reader-toolbar">
-        <button
-          type="button"
-          disabled={pageNumber <= 1 || pageCount === 0}
-          onClick={() => {
-            const next = Math.max(1, pageNumber - 1);
-            setPageNumber(next);
-            setPageInput(String(next));
-          }}
-        >
-          上一页
-        </button>
-        <button
-          type="button"
-          disabled={pageNumber >= pageCount || pageCount === 0}
-          onClick={() => {
-            const next = Math.min(pageCount, pageNumber + 1);
-            setPageNumber(next);
-            setPageInput(String(next));
-          }}
-        >
-          下一页
-        </button>
-        <label>
-          页码
-          <input
-            type="number"
-            min={1}
-            max={Math.max(pageCount, 1)}
-            value={pageInput}
-            onChange={(event) => setPageInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") goToPage();
+      <div
+        className="reader-toolbar"
+        role="toolbar"
+        aria-label="练习卷 PDF 预览控制"
+      >
+        <div className="reader-toolbar-group reader-nav-group">
+          <button
+            type="button"
+            className="reader-btn"
+            disabled={pageNumber <= 1 || pageCount === 0}
+            title="上一页"
+            aria-label="上一页"
+            onClick={() => {
+              const next = Math.max(1, pageNumber - 1);
+              setPageNumber(next);
+              setPageInput(String(next));
             }}
-          />
-        </label>
-        <button type="button" disabled={pageCount === 0} onClick={goToPage}>
-          跳转
-        </button>
-        <button
-          type="button"
-          disabled={scale <= 0.7}
-          onClick={() => setScale((current) => Math.max(0.7, current - 0.1))}
-        >
-          缩小
-        </button>
-        <button
-          type="button"
-          disabled={scale >= 2}
-          onClick={() => setScale((current) => Math.min(2, current + 0.1))}
-        >
-          放大
-        </button>
-        <span role="status">{status}</span>
+          >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              navigate_before
+            </span>
+            <span>上一页</span>
+          </button>
+
+          <div className="reader-page-indicator">
+            <span>第</span>
+            <input
+              type="number"
+              min={1}
+              max={Math.max(pageCount, 1)}
+              value={pageInput}
+              aria-label="输入目标页码"
+              onChange={(event) => setPageInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") goToPage();
+              }}
+            />
+            <span className="reader-page-count">/ {pageCount} 页</span>
+            <button
+              type="button"
+              className="reader-btn reader-btn-ghost reader-btn-compact"
+              disabled={pageCount === 0}
+              title="跳转到指定页"
+              onClick={goToPage}
+            >
+              跳转
+            </button>
+          </div>
+
+          <button
+            type="button"
+            className="reader-btn"
+            disabled={pageNumber >= pageCount || pageCount === 0}
+            title="下一页"
+            aria-label="下一页"
+            onClick={() => {
+              const next = Math.min(pageCount, pageNumber + 1);
+              setPageNumber(next);
+              setPageInput(String(next));
+            }}
+          >
+            <span>下一页</span>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              navigate_next
+            </span>
+          </button>
+        </div>
+
+        <div className="reader-toolbar-group reader-zoom-group">
+          <button
+            type="button"
+            className="reader-btn reader-btn-icon"
+            disabled={scale <= 0.7}
+            title="缩小"
+            aria-label="缩小"
+            onClick={() =>
+              setScale((current) =>
+                Math.max(0.7, Math.round((current - 0.1) * 10) / 10),
+              )
+            }
+          >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              zoom_out
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="reader-btn reader-btn-subtle reader-scale-badge"
+            title="重置缩放为 100%"
+            aria-label="重置缩放为 100%"
+            onClick={() => setScale(1.0)}
+          >
+            {Math.round(scale * 100)}%
+          </button>
+
+          <button
+            type="button"
+            className="reader-btn reader-btn-icon"
+            disabled={scale >= 2}
+            title="放大"
+            aria-label="放大"
+            onClick={() =>
+              setScale((current) =>
+                Math.min(2, Math.round((current + 0.1) * 10) / 10),
+              )
+            }
+          >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              zoom_in
+            </span>
+          </button>
+        </div>
+
+        <div className="reader-toolbar-status">
+          <span role="status" className="reader-status-text">
+            {status}
+          </span>
+        </div>
       </div>
       <div className="pdf-canvas-shell paper-pdf-preview-canvas">
         <canvas ref={canvasRef} aria-label={`PDF 第 ${pageNumber} 页`} />

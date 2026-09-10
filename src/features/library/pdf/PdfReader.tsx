@@ -25,6 +25,7 @@ import {
   type RegionEditHandle,
   type ViewportRectangle,
 } from "./pdfRegions";
+import "./pdf-reader.css";
 
 export interface PdfRegionOverlay {
   id: string;
@@ -344,15 +345,17 @@ export function PdfReader({
   return (
     <div className="pdf-reader">
       <div className="reader-toolbar" role="toolbar" aria-label="PDF 阅读控制">
-        <div className="reader-toolbar-group">
+        <div className="reader-toolbar-group reader-nav-group">
           <button
             type="button"
             className="reader-btn"
             disabled={pageNumber <= 1}
             title="上一页"
+            aria-label="上一页"
             onClick={() => {
-              setPageNumber((current) => Math.max(1, current - 1));
-              setPageInput(String(Math.max(1, pageNumber - 1)));
+              const next = Math.max(1, pageNumber - 1);
+              setPageNumber(next);
+              setPageInput(String(next));
             }}
           >
             <span className="material-symbols-rounded" aria-hidden="true">
@@ -360,14 +363,46 @@ export function PdfReader({
             </span>
             <span>上一页</span>
           </button>
+
+          <div className="reader-page-indicator">
+            <span>第</span>
+            <input
+              type="number"
+              name="pdfPageNumber"
+              autoComplete="off"
+              inputMode="numeric"
+              min={1}
+              max={pageCount}
+              value={pageInput}
+              aria-label="输入目标页码"
+              onChange={(event) => setPageInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  goToPage();
+                }
+              }}
+            />
+            <span className="reader-page-count">/ {pageCount} 页</span>
+            <button
+              type="button"
+              className="reader-btn reader-btn-ghost reader-btn-compact"
+              title="跳转到指定页"
+              onClick={goToPage}
+            >
+              跳转
+            </button>
+          </div>
+
           <button
             type="button"
             className="reader-btn"
             disabled={pageNumber >= pageCount}
             title="下一页"
+            aria-label="下一页"
             onClick={() => {
-              setPageNumber((current) => Math.min(pageCount, current + 1));
-              setPageInput(String(Math.min(pageCount, pageNumber + 1)));
+              const next = Math.min(pageCount, pageNumber + 1);
+              setPageNumber(next);
+              setPageInput(String(next));
             }}
           >
             <span>下一页</span>
@@ -377,58 +412,56 @@ export function PdfReader({
           </button>
         </div>
 
-        <div className="reader-toolbar-group">
-          <label className="reader-page-indicator">
-            <span>页码</span>
-            <input
-              type="number"
-              name="pdfPageNumber"
-              autoComplete="off"
-              inputMode="numeric"
-              min={1}
-              max={pageCount}
-              value={pageInput}
-              onChange={(event) => setPageInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  goToPage();
-                }
-              }}
-            />
-            <span className="reader-page-count">/ {pageCount}</span>
-          </label>
-          <button type="button" className="reader-btn" onClick={goToPage}>
-            跳转
-          </button>
-        </div>
-
-        <div className="reader-toolbar-group">
+        <div className="reader-toolbar-group reader-zoom-group">
           <button
             type="button"
-            className="reader-btn"
+            className="reader-btn reader-btn-icon"
             title="缩小"
-            onClick={() => setScale((current) => Math.max(0.5, current - 0.1))}
+            aria-label="缩小"
+            onClick={() =>
+              setScale((current) =>
+                Math.max(0.5, Math.round((current - 0.1) * 10) / 10),
+              )
+            }
           >
             <span className="material-symbols-rounded" aria-hidden="true">
               zoom_out
             </span>
-            <span>缩小</span>
           </button>
+
           <button
             type="button"
-            className="reader-btn"
+            className="reader-btn reader-btn-subtle reader-scale-badge"
+            title="重置缩放为 100%"
+            aria-label="重置缩放为 100%"
+            onClick={() => setScale(1.0)}
+          >
+            {Math.round(scale * 100)}%
+          </button>
+
+          <button
+            type="button"
+            className="reader-btn reader-btn-icon"
             title="放大"
-            onClick={() => setScale((current) => Math.min(3, current + 0.1))}
+            aria-label="放大"
+            onClick={() =>
+              setScale((current) =>
+                Math.min(3, Math.round((current + 0.1) * 10) / 10),
+              )
+            }
           >
             <span className="material-symbols-rounded" aria-hidden="true">
               zoom_in
             </span>
-            <span>放大</span>
           </button>
+
+          <div className="reader-group-divider" aria-hidden="true" />
+
           <button
             type="button"
             className="reader-btn"
-            title="旋转"
+            title="顺时针旋转 90°"
+            aria-label="顺时针旋转 90°"
             onClick={() => setRotation((current) => (current + 90) % 360)}
           >
             <span className="material-symbols-rounded" aria-hidden="true">
@@ -438,9 +471,11 @@ export function PdfReader({
           </button>
         </div>
 
-        <span role="status" className="reader-status-text">
-          {status}
-        </span>
+        <div className="reader-toolbar-status">
+          <span role="status" className="reader-status-text">
+            {status}
+          </span>
+        </div>
       </div>
       <div className="pdf-canvas-shell">
         <div className="pdf-page-stage">
