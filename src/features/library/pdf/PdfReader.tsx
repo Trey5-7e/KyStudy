@@ -343,67 +343,104 @@ export function PdfReader({
 
   return (
     <div className="pdf-reader">
-      <div className="reader-toolbar">
-        <button
-          type="button"
-          disabled={pageNumber <= 1}
-          onClick={() => {
-            setPageNumber((current) => Math.max(1, current - 1));
-            setPageInput(String(Math.max(1, pageNumber - 1)));
-          }}
-        >
-          上一页
-        </button>
-        <button
-          type="button"
-          disabled={pageNumber >= pageCount}
-          onClick={() => {
-            setPageNumber((current) => Math.min(pageCount, current + 1));
-            setPageInput(String(Math.min(pageCount, pageNumber + 1)));
-          }}
-        >
-          下一页
-        </button>
-        <label>
-          页码
-          <input
-            type="number"
-            name="pdfPageNumber"
-            autoComplete="off"
-            inputMode="numeric"
-            min={1}
-            max={pageCount}
-            value={pageInput}
-            onChange={(event) => setPageInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                goToPage();
-              }
+      <div className="reader-toolbar" role="toolbar" aria-label="PDF 阅读控制">
+        <div className="reader-toolbar-group">
+          <button
+            type="button"
+            className="reader-btn"
+            disabled={pageNumber <= 1}
+            title="上一页"
+            onClick={() => {
+              setPageNumber((current) => Math.max(1, current - 1));
+              setPageInput(String(Math.max(1, pageNumber - 1)));
             }}
-          />
-        </label>
-        <button type="button" onClick={goToPage}>
-          跳转
-        </button>
-        <button
-          type="button"
-          onClick={() => setScale((current) => Math.max(0.5, current - 0.1))}
-        >
-          缩小
-        </button>
-        <button
-          type="button"
-          onClick={() => setScale((current) => Math.min(3, current + 0.1))}
-        >
-          放大
-        </button>
-        <button
-          type="button"
-          onClick={() => setRotation((current) => (current + 90) % 360)}
-        >
-          旋转
-        </button>
-        <span role="status">{status}</span>
+          >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              navigate_before
+            </span>
+            <span>上一页</span>
+          </button>
+          <button
+            type="button"
+            className="reader-btn"
+            disabled={pageNumber >= pageCount}
+            title="下一页"
+            onClick={() => {
+              setPageNumber((current) => Math.min(pageCount, current + 1));
+              setPageInput(String(Math.min(pageCount, pageNumber + 1)));
+            }}
+          >
+            <span>下一页</span>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              navigate_next
+            </span>
+          </button>
+        </div>
+
+        <div className="reader-toolbar-group">
+          <label className="reader-page-indicator">
+            <span>页码</span>
+            <input
+              type="number"
+              name="pdfPageNumber"
+              autoComplete="off"
+              inputMode="numeric"
+              min={1}
+              max={pageCount}
+              value={pageInput}
+              onChange={(event) => setPageInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  goToPage();
+                }
+              }}
+            />
+            <span className="reader-page-count">/ {pageCount}</span>
+          </label>
+          <button type="button" className="reader-btn" onClick={goToPage}>
+            跳转
+          </button>
+        </div>
+
+        <div className="reader-toolbar-group">
+          <button
+            type="button"
+            className="reader-btn"
+            title="缩小"
+            onClick={() => setScale((current) => Math.max(0.5, current - 0.1))}
+          >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              zoom_out
+            </span>
+            <span>缩小</span>
+          </button>
+          <button
+            type="button"
+            className="reader-btn"
+            title="放大"
+            onClick={() => setScale((current) => Math.min(3, current + 0.1))}
+          >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              zoom_in
+            </span>
+            <span>放大</span>
+          </button>
+          <button
+            type="button"
+            className="reader-btn"
+            title="旋转"
+            onClick={() => setRotation((current) => (current + 90) % 360)}
+          >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              rotate_right
+            </span>
+            <span>旋转</span>
+          </button>
+        </div>
+
+        <span role="status" className="reader-status-text">
+          {status}
+        </span>
       </div>
       <div className="pdf-canvas-shell">
         <div className="pdf-page-stage">

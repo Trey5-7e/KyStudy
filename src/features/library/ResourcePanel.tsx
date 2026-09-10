@@ -397,10 +397,14 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
         actions={
           <Button
             variant="primary"
+            className="library-import-btn"
             disabled={!listenerReady || activeImport !== null}
             onClick={() => void beginImport()}
           >
-            {listenerReady ? "选择并导入资料" : "正在准备导入…"}
+            <span className="material-symbols-rounded" aria-hidden="true">
+              upload_file
+            </span>
+            <span>{listenerReady ? "选择并导入资料" : "正在准备导入…"}</span>
           </Button>
         }
       />
@@ -478,7 +482,10 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
               onClick={() => selectSectionTab(tab.id)}
               onKeyDown={(event) => handleSectionTabKeyDown(event, tab.id)}
             >
-              {tab.label}
+              <span className="material-symbols-rounded" aria-hidden="true">
+                {tab.id === "files" ? "folder" : "account_tree"}
+              </span>
+              <span>{tab.label}</span>
             </Button>
           ))}
         </div>
@@ -520,7 +527,13 @@ export function ResourcePanel({ openRequest }: ResourcePanelProps) {
                     onClick={() => selectFileView(view.id)}
                     onKeyDown={(event) => handleFileViewKeyDown(event, view.id)}
                   >
-                    {view.label}
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      {view.id === "browse" ? "format_list_bulleted" : "search"}
+                    </span>
+                    <span>{view.label}</span>
                   </Button>
                 ))}
                 <ToolbarSpacer />
