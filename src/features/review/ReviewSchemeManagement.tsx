@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Button } from "../../shared/ui/Button";
 import type { ResourceDocument } from "../../shared/tauri/resourceClient";
 import type { StudySubject } from "../../shared/tauri/scheduleClient";
 import type {
@@ -44,9 +45,14 @@ export function RestDaySettings({
           </label>
         ))}
       </fieldset>
-      <button type="button" disabled={busy} onClick={() => void onSave(values)}>
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={busy}
+        onClick={() => void onSave(values)}
+      >
         保存休息日
-      </button>
+      </Button>
     </section>
   );
 }
@@ -210,13 +216,9 @@ export function SchemeForm({
           已设置 <strong>{total}</strong> 题 / 每日{" "}
           <strong>{dailyQuota || 0}</strong> 题
         </p>
-        <button
-          type="submit"
-          className="primary-button"
-          disabled={busy || !valid}
-        >
+        <Button type="submit" variant="primary" disabled={busy || !valid}>
           保存复习方案
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -250,54 +252,74 @@ export function SchemeCard({
   const pending = q?.items.find((i) => i.state === "pending");
   return (
     <article className="review-scheme-card">
-      <h3>{s.name}</h3>
-      <p>
-        {quotaSummary(s.typeQuotas)} / 每日 {s.dailyQuota}
-      </p>
-      <p>
-        今日到期 {value.dueCount}，进度 {q?.completedCount ?? 0}/
-        {q?.quota ?? s.dailyQuota}
-      </p>
+      <header>
+        <div>
+          <h3>{s.name}</h3>
+          <p>
+            {quotaSummary(s.typeQuotas)} / 每日 {s.dailyQuota}
+          </p>
+        </div>
+        <span className={s.enabled ? "scheme-enabled" : "scheme-paused"}>
+          {s.enabled ? "启用中" : "已暂停"}
+        </span>
+      </header>
+      <div className="review-scheme-stats">
+        <div>
+          <dt>今日到期</dt>
+          <dd>{value.dueCount}</dd>
+        </div>
+        <div>
+          <dt>今日进度</dt>
+          <dd>
+            {q?.completedCount ?? 0} / {q?.quota ?? s.dailyQuota}
+          </dd>
+        </div>
+        <div>
+          <dt>状态</dt>
+          <dd>{q === undefined ? "未开始" : pending ? "进行中" : "已完成"}</dd>
+        </div>
+      </div>
       {q === undefined ? (
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           disabled={busy || !s.enabled}
           onClick={() => void onGenerate("").then(setReview)}
         >
           开始今天的复习
-        </button>
+        </Button>
       ) : pending ? (
-        <button type="button" disabled={busy} onClick={() => setReview(true)}>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={busy}
+          onClick={() => setReview(true)}
+        >
           继续复习
-        </button>
+        </Button>
       ) : (
-        <strong>今日已完成</strong>
+        <strong className="review-scheme-completed-badge">今日已完成</strong>
       )}
       <footer>
-        <button
-          type="button"
-          className="text-button"
-          disabled={busy}
-          onClick={onEdit}
-        >
+        <Button variant="text" size="sm" disabled={busy} onClick={onEdit}>
           编辑
-        </button>
-        <button
-          type="button"
-          className="text-button"
+        </Button>
+        <Button
+          variant="text"
+          size="sm"
           disabled={busy}
           onClick={() => void onToggle()}
         >
           {s.enabled ? "暂停" : "启用"}
-        </button>
-        <button
-          type="button"
-          className="text-button"
+        </Button>
+        <Button
+          variant="text"
+          size="sm"
           disabled={busy}
           onClick={() => void onArchive()}
         >
           归档
-        </button>
+        </Button>
       </footer>
       {review && pending ? (
         <div className="review-inline">
@@ -331,43 +353,48 @@ function QuestionReview({
   onUndo(queueId: string): Promise<boolean>;
 }) {
   return (
-    <div>
+    <div className="review-inline-panel">
       <h4>{item.question.question.title}</h4>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() =>
-          void onFeedback(queueId, item.question.question.id, "mastered")
-        }
-      >
-        掌握
-      </button>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() =>
-          void onFeedback(queueId, item.question.question.id, "uncertain")
-        }
-      >
-        模糊
-      </button>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() =>
-          void onFeedback(queueId, item.question.question.id, "failed")
-        }
-      >
-        不会
-      </button>
-      <button
-        type="button"
-        className="text-button"
-        disabled={busy || !queueId}
-        onClick={() => void onUndo(queueId)}
-      >
-        撤销
-      </button>
+      <div className="review-inline-actions">
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={busy}
+          onClick={() =>
+            void onFeedback(queueId, item.question.question.id, "mastered")
+          }
+        >
+          掌握
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={busy}
+          onClick={() =>
+            void onFeedback(queueId, item.question.question.id, "uncertain")
+          }
+        >
+          模糊
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={busy}
+          onClick={() =>
+            void onFeedback(queueId, item.question.question.id, "failed")
+          }
+        >
+          不会
+        </Button>
+        <Button
+          variant="text"
+          size="sm"
+          disabled={busy || !queueId}
+          onClick={() => void onUndo(queueId)}
+        >
+          撤销
+        </Button>
+      </div>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   PageStatus,
   PageSurface,
 } from "../../shared/components/PagePrimitives";
+import { Button } from "../../shared/ui/Button";
 import {
   archiveWorkbookCategory,
   deleteAllTrashedWorkbookSegments,
@@ -825,10 +826,10 @@ export function QuestionBankPanel({
 
   const pageActions: ReactNode = (
     <>
-      <button
+      <Button
         ref={importTriggerRef}
-        type="button"
-        className="primary-button"
+        variant="primary"
+        size="sm"
         onClick={(event) => {
           importTriggerRef.current = event.currentTarget;
           openExclusiveWindow({
@@ -838,12 +839,15 @@ export function QuestionBankPanel({
           });
         }}
       >
-        导入 PDF
-      </button>
-      <button
+        <span className="material-symbols-rounded" aria-hidden="true">
+          upload_file
+        </span>
+        <span>导入 PDF</span>
+      </Button>
+      <Button
         ref={toolsTriggerRef}
-        type="button"
-        className="secondary-button"
+        variant="secondary"
+        size="sm"
         onClick={(event) => {
           toolsTriggerRef.current = event.currentTarget;
           setToolsSection("category");
@@ -851,18 +855,27 @@ export function QuestionBankPanel({
           openExclusiveWindow(toolWindow("category"));
         }}
       >
-        题库工具
-      </button>
-      <button
+        <span className="material-symbols-rounded" aria-hidden="true">
+          construction
+        </span>
+        <span>题库工具</span>
+      </Button>
+      <Button
         ref={segmentTrashTriggerRef}
-        type="button"
-        className="text-button question-bank-trash-link"
+        variant="ghost"
+        size="sm"
+        className="question-bank-trash-link"
         aria-haspopup="dialog"
         onClick={(event) => openSegmentTrash(event.currentTarget)}
       >
-        分段回收站
-        {segmentTrashLoaded ? `（${trashedSegments.length}）` : ""}
-      </button>
+        <span className="material-symbols-rounded" aria-hidden="true">
+          delete_outline
+        </span>
+        <span>
+          分段回收站
+          {segmentTrashLoaded ? `（${trashedSegments.length}）` : ""}
+        </span>
+      </Button>
     </>
   );
 
@@ -881,9 +894,13 @@ export function QuestionBankPanel({
           tone="error"
           title={error.message}
           action={
-            <button type="button" onClick={() => void refresh()}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void refresh()}
+            >
               重试
-            </button>
+            </Button>
           }
         >
           {error.action}
@@ -895,14 +912,14 @@ export function QuestionBankPanel({
           tone="error"
           title="题库读取失败"
           action={
-            <button
-              type="button"
-              className="secondary-button"
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={questionBankLoadState === "loading"}
               onClick={() => void refresh()}
             >
               重试
-            </button>
+            </Button>
           }
         >
           <>
@@ -926,13 +943,13 @@ export function QuestionBankPanel({
           tone="warning"
           title="暂时无法刷新题库，仍显示上次快照"
           action={
-            <button
-              type="button"
-              className="secondary-button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => void refresh()}
             >
               重试
-            </button>
+            </Button>
           }
         >
           <>
@@ -1029,14 +1046,14 @@ export function QuestionBankPanel({
             }
             action={
               segmentTrashError === undefined ? (
-                <button
-                  type="button"
-                  className="secondary-button"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   aria-haspopup="dialog"
                   onClick={(event) => openSegmentTrash(event.currentTarget)}
                 >
                   打开分段回收站
-                </button>
+                </Button>
               ) : undefined
             }
             headingLevel={2}
