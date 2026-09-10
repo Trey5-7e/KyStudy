@@ -2744,35 +2744,11 @@ button:disabled {
   margin: 0;
 }
 
-.question-bank-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 18px;
-  align-items: center;
-  min-width: 0;
-  padding: 10px 14px;
-  border: 1px solid #e0e5de;
-  border-radius: 12px;
-  background: #f8faf7;
-  color: #68776e;
-  font-size: 0.84rem;
-}
-
-.question-bank-summary span {
-  white-space: nowrap;
-}
-
-.question-bank-summary strong {
-  margin-left: 4px;
-  color: #244d3a;
-  font-variant-numeric: tabular-nums;
-}
-
 .question-bank-category-overview {
-  border: 1px solid #dfe5dd;
-  border-radius: 18px;
-  background: #fff;
-  box-shadow: 0 10px 28px rgb(42 64 51 / 6%);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-surface);
 }
 
 .question-bank-category-overview-disclosure > summary {
@@ -2852,10 +2828,10 @@ button:disabled {
 
 .question-bank-category-list {
   min-width: 0;
-  padding: 12px;
-  border: 1px solid #e0e6df;
-  border-radius: 14px;
-  background: #f8faf7;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
 }
 
 .question-bank-category-list ul {
@@ -2874,9 +2850,9 @@ button:disabled {
   gap: 10px;
   min-width: 0;
   padding: 8px 10px;
-  border: 1px solid #e0e6df;
-  border-radius: 10px;
-  background: #fff;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
 }
 
 .question-bank-category-list li > span {
@@ -3019,10 +2995,13 @@ button:disabled {
 }
 
 .question-bank-workbook-card {
-  padding: 14px;
-  border: 1px solid #e0e6df;
-  border-radius: 14px;
-  background: #f8faf7;
+  min-width: 0;
+  overflow: hidden;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-surface);
 }
 
 .question-bank-workbook-title > div {
@@ -5767,11 +5746,6 @@ button:disabled {
 .question-bank-workbooks {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
   min-width: 0;
-}
-
-.question-bank-workbook-card {
-  min-width: 0;
-  overflow: hidden;
 }
 
 .question-bank-import-steps {
