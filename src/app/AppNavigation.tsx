@@ -12,14 +12,45 @@ export const PRIMARY_NAVIGATION: ReadonlyArray<{
   id: PrimaryAppView;
   label: string;
   caption: string;
+  icon: string;
 }> = [
-  { id: "today", label: "今日", caption: "今天需要完成的内容" },
-  { id: "planning", label: "计划", caption: "周期计划与未来安排" },
-  { id: "workbook", label: "习题册", caption: "PDF 题目与作答" },
-  { id: "review", label: "错题", caption: "每日复习队列" },
-  { id: "library", label: "资料", caption: "PDF、图片与导图" },
-  { id: "ai-chat", label: "AI 学习助手", caption: "对话、资料与题目讨论" },
-  { id: "ai-settings", label: "模型与 API", caption: "Provider、模型与预算" },
+  {
+    id: "today",
+    label: "今日",
+    caption: "今天需要完成的内容",
+    icon: "wb_sunny",
+  },
+  {
+    id: "planning",
+    label: "计划",
+    caption: "周期计划与未来安排",
+    icon: "calendar_month",
+  },
+  {
+    id: "workbook",
+    label: "习题册",
+    caption: "PDF 题目与作答",
+    icon: "menu_book",
+  },
+  { id: "review", label: "错题", caption: "每日复习队列", icon: "rate_review" },
+  {
+    id: "library",
+    label: "资料",
+    caption: "PDF、图片与导图",
+    icon: "local_library",
+  },
+  {
+    id: "ai-chat",
+    label: "AI 学习助手",
+    caption: "对话、资料与题目讨论",
+    icon: "psychology",
+  },
+  {
+    id: "ai-settings",
+    label: "模型与 API",
+    caption: "Provider、模型与预算",
+    icon: "tune",
+  },
 ];
 
 export interface AppNavigationProps {
@@ -69,11 +100,14 @@ function SettingsLink({ activeView, onNavigate }: AppNavigationProps) {
       aria-current={isActive ? "page" : undefined}
       onClick={(event) => handleNavigationClick(event, "settings", onNavigate)}
     >
-      <span aria-hidden="true">⚙</span>
-      <span>
-        <strong>设置</strong>
-        <small>学习偏好、隐私与数据</small>
+      <span
+        className="material-symbols-rounded app-nav-icon"
+        aria-hidden="true"
+      >
+        settings
       </span>
+      <strong>设置</strong>
+      <small className="app-nav-caption">学习偏好、隐私与数据</small>
     </a>
   );
 }
@@ -97,8 +131,14 @@ export function AppNavigation({ activeView, onNavigate }: AppNavigationProps) {
                 handleNavigationClick(event, item.id, onNavigate)
               }
             >
+              <span
+                className="material-symbols-rounded app-nav-icon"
+                aria-hidden="true"
+              >
+                {item.icon}
+              </span>
               <strong>{item.label}</strong>
-              <span>{item.caption}</span>
+              <small className="app-nav-caption">{item.caption}</small>
             </a>
           );
         })}
