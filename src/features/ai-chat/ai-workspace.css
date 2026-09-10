@@ -5,6 +5,51 @@
   min-width: 0;
 }
 
+.agent-study-modes {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 9999px;
+}
+
+.agent-study-modes .agent-study-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-3);
+  border-radius: 9999px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  transition: all 120ms ease;
+}
+
+.agent-study-modes .agent-study-mode-btn .material-symbols-rounded {
+  font-size: 1.125rem;
+}
+
+.agent-study-modes .agent-study-mode-btn.ui-button-ghost {
+  color: var(--color-text-secondary);
+  background: transparent;
+  border-color: transparent;
+}
+
+.agent-study-modes .agent-study-mode-btn.ui-button-ghost:hover {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-bg-surface) 60%, transparent);
+}
+
+.agent-study-modes .agent-study-mode-btn.ui-button-primary {
+  color: var(--color-primary);
+  background: var(--color-bg-surface);
+  border-color: var(--color-border-subtle);
+  box-shadow: var(--shadow-surface);
+  font-weight: 700;
+}
+
 .ai-chat-model-picker {
   display: inline-flex;
   align-items: center;
@@ -238,6 +283,16 @@
 }
 
 @media (max-width: 640px) {
+  .agent-study-modes {
+    width: 100%;
+    display: flex;
+  }
+
+  .agent-study-modes .agent-study-mode-btn {
+    flex: 1;
+    justify-content: center;
+  }
+
   .ai-chat-toolbar {
     align-items: flex-start;
     padding: var(--space-4);

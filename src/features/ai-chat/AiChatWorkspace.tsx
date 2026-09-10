@@ -191,23 +191,37 @@ export function AiChatWorkspace({
 
   return (
     <div className="ai-chat-page">
-      <PageHeader title="AI 学习助手" />
-      <nav className="agent-study-modes" aria-label="助手模式">
-        <Button
-          variant={mode === "chat" ? "primary" : "secondary"}
-          aria-pressed={mode === "chat"}
-          onClick={() => setMode("chat")}
-        >
-          普通对话
-        </Button>
-        <Button
-          variant={mode === "agent" ? "primary" : "secondary"}
-          aria-pressed={mode === "agent"}
-          onClick={() => setMode("agent")}
-        >
-          资料研读
-        </Button>
-      </nav>
+      <PageHeader
+        title="AI 学习助手"
+        actions={
+          <nav className="agent-study-modes" aria-label="助手模式">
+            <Button
+              variant={mode === "chat" ? "primary" : "ghost"}
+              size="sm"
+              className={`agent-study-mode-btn ${mode === "chat" ? "active" : ""}`}
+              aria-pressed={mode === "chat"}
+              onClick={() => setMode("chat")}
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                forum
+              </span>
+              <span>普通对话</span>
+            </Button>
+            <Button
+              variant={mode === "agent" ? "primary" : "ghost"}
+              size="sm"
+              className={`agent-study-mode-btn ${mode === "agent" ? "active" : ""}`}
+              aria-pressed={mode === "agent"}
+              onClick={() => setMode("agent")}
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                menu_book
+              </span>
+              <span>资料研读</span>
+            </Button>
+          </nav>
+        }
+      />
 
       {error === undefined ? null : (
         <PageStatus
