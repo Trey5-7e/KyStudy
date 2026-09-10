@@ -36,6 +36,7 @@ import {
   type StudySubject,
 } from "../../shared/tauri/scheduleClient";
 import { EditorDialog } from "../../shared/components/EditorDialog";
+import { Button } from "../../shared/ui/Button";
 import { MindMapNodeEditor, MindMapSettings } from "./MindMapDetails";
 import { MindElixirCanvas } from "./MindElixirCanvas";
 import "./mindmap.css";
@@ -308,16 +309,18 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
           </p>
         </div>
         <div className="mindmap-heading-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => setImportOpen(true)}
-          >
-            导入导图
-          </button>
-          <button type="button" onClick={() => setCreateOpen(true)}>
-            新建空白导图
-          </button>
+          <Button variant="secondary" onClick={() => setImportOpen(true)}>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              file_upload
+            </span>
+            <span>导入导图</span>
+          </Button>
+          <Button variant="primary" onClick={() => setCreateOpen(true)}>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              add
+            </span>
+            <span>新建空白导图</span>
+          </Button>
         </div>
       </div>
 
@@ -361,9 +364,9 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
                 ))}
               </select>
             </label>
-            <button type="submit" disabled={busy}>
+            <Button type="submit" variant="primary" disabled={busy}>
               创建导图
-            </button>
+            </Button>
           </form>
         </EditorDialog>
       ) : null}
@@ -443,9 +446,9 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
           ) : (
             <div className="mindmap-main">
               <div className="mindmap-toolbar" aria-label="导图工具栏">
-                <button
-                  type="button"
-                  className="secondary-button"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={busy || !selectedBundle.canUndo}
                   onClick={() =>
                     void runBundle(() =>
@@ -453,11 +456,14 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
                     )
                   }
                 >
-                  撤销
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    undo
+                  </span>
+                  <span>撤销</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={busy || !selectedBundle.canRedo}
                   onClick={() =>
                     void runBundle(() =>
@@ -465,22 +471,28 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
                     )
                   }
                 >
-                  重做
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    redo
+                  </span>
+                  <span>重做</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => {
                     setMapEditorDirty(false);
                     setMapSettingsOpen(true);
                   }}
                 >
-                  编辑导图信息
-                </button>
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    edit
+                  </span>
+                  <span>编辑导图信息</span>
+                </Button>
                 <span className="mindmap-toolbar-spacer" />
-                <button
-                  type="button"
-                  className="secondary-button"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={busy}
                   onClick={() =>
                     void runBundle(
@@ -489,35 +501,50 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
                     )
                   }
                 >
-                  复制导图
-                </button>
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    content_copy
+                  </span>
+                  <span>复制导图</span>
+                </Button>
                 {trashConfirmation === selectedBundle.map.id ? (
                   <>
-                    <button
-                      type="button"
-                      className="danger-button"
+                    <Button
+                      variant="danger"
+                      size="sm"
                       disabled={busy}
                       onClick={() => void removeCurrentMap()}
                     >
-                      确认移入回收状态
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button"
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        delete_forever
+                      </span>
+                      <span>确认移入回收状态</span>
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => setTrashConfirmation(undefined)}
                     >
                       取消
-                    </button>
+                    </Button>
                   </>
                 ) : (
-                  <button
-                    type="button"
-                    className="danger-button"
+                  <Button
+                    variant="danger"
+                    size="sm"
                     disabled={busy}
                     onClick={() => setTrashConfirmation(selectedBundle.map.id)}
                   >
-                    删除导图
-                  </button>
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      delete
+                    </span>
+                    <span>删除导图</span>
+                  </Button>
                 )}
               </div>
 
@@ -546,9 +573,9 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
                         }
                       />
                     </label>
-                    <button type="submit" disabled={busy}>
+                    <Button type="submit" variant="primary" disabled={busy}>
                       添加节点
-                    </button>
+                    </Button>
                   </form>
                 </EditorDialog>
               )}
@@ -672,28 +699,44 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
                       ) : (
                         <p>{selectedNode.noteMarkdown}</p>
                       )}
-                      <button
-                        type="button"
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        block
                         onClick={() => {
                           setNodeEditorDirty(false);
                           setNodeEditorOpen(true);
                         }}
                       >
-                        编辑节点
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary-button"
+                        <span
+                          className="material-symbols-rounded"
+                          aria-hidden="true"
+                        >
+                          edit
+                        </span>
+                        <span>编辑节点</span>
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        block
                         onClick={() => {
                           setAddParentId(selectedNode.id);
                           setNewNodeTitle("");
                         }}
                       >
-                        添加子节点
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary-button"
+                        <span
+                          className="material-symbols-rounded"
+                          aria-hidden="true"
+                        >
+                          add_circle
+                        </span>
+                        <span>添加子节点</span>
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        block
                         onClick={() =>
                           void runBundle(
                             () =>
@@ -705,8 +748,18 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
                           )
                         }
                       >
-                        {selectedNode.collapsed ? "展开子节点" : "折叠子节点"}
-                      </button>
+                        <span
+                          className="material-symbols-rounded"
+                          aria-hidden="true"
+                        >
+                          {selectedNode.collapsed
+                            ? "unfold_more"
+                            : "unfold_less"}
+                        </span>
+                        <span>
+                          {selectedNode.collapsed ? "展开子节点" : "折叠子节点"}
+                        </span>
+                      </Button>
                       <section
                         className="mindmap-inspector-resources"
                         aria-labelledby="mindmap-inspector-resources-title"
@@ -738,9 +791,9 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
                                     )}
                                   </div>
                                   {canOpen ? (
-                                    <button
-                                      type="button"
-                                      className="secondary-button"
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
                                       onClick={() =>
                                         onOpenResource(
                                           link.documentId,
@@ -749,7 +802,7 @@ export function MindMapPanel({ onOpenResource }: MindMapPanelProps) {
                                       }
                                     >
                                       打开
-                                    </button>
+                                    </Button>
                                   ) : null}
                                 </li>
                               );

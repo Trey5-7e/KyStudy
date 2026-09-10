@@ -9,6 +9,13 @@
   --tool-accent: var(--color-accent);
   --tool-danger: var(--color-danger);
   --tool-radius: var(--radius-lg);
+
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-surface);
+  backdrop-filter: none;
+  padding: var(--space-5);
 }
 
 .mindmap-heading,
@@ -191,12 +198,21 @@
 .mindmap-list > button {
   display: grid;
   gap: 0.3rem;
-  border: 1px solid color-mix(in srgb, var(--tool-primary) 16%, transparent);
-  border-radius: 0.9rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
   padding: 0.75rem;
   color: var(--tool-ink);
   text-align: left;
   background: var(--tool-nav);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.mindmap-list > button:hover:not(.mindmap-list-active) {
+  border-color: var(--color-border-hover);
+  background: var(--color-bg-subtle-hover);
 }
 .mindmap-list > button span,
 .mindmap-draft-heading span,
@@ -209,14 +225,17 @@
   font-size: 0.76rem;
 }
 .mindmap-list > .mindmap-list-active {
-  border-color: var(--tool-accent);
-  box-shadow: inset 0 0 0 1px var(--tool-accent);
+  border-color: var(--color-primary);
+  background: var(--color-primary-subtle);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
 }
 .mindmap-toolbar {
   align-items: center;
   flex-wrap: wrap;
+  gap: 0.5rem;
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--tool-radius);
-  padding: 0.7rem;
+  padding: 0.6rem 0.75rem;
   background: var(--tool-nav);
 }
 .mindmap-toolbar > span:not(.mindmap-toolbar-spacer) {
@@ -246,9 +265,24 @@
 }
 .mindmap-link-actions button,
 .mindmap-detail-actions > button,
-.mindmap-toolbar button {
+.mindmap-toolbar button:not(.ui-button) {
   padding: 0.45rem 0.7rem;
   font-size: 0.76rem;
+}
+.mindmap-toolbar .ui-button,
+.mindmap-heading-actions .ui-button,
+.mindmap-inspector .ui-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.mindmap-inspector .ui-button {
+  justify-content: center;
+}
+.mindmap-toolbar .ui-button .material-symbols-rounded,
+.mindmap-heading-actions .ui-button .material-symbols-rounded,
+.mindmap-inspector .ui-button .material-symbols-rounded {
+  font-size: 1.05rem;
 }
 .mindmap-inspector {
   display: grid;
