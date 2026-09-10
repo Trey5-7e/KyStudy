@@ -88,15 +88,23 @@
   z-index: 3;
 }
 .ai-provider-more > summary {
-  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
-  border-radius: var(--radius-xs);
-  padding: 0.48rem 0.68rem;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.38rem 0.65rem;
   color: var(--color-text-secondary);
   background: var(--color-bg-subtle);
   cursor: pointer;
-  font-size: 0.74rem;
-  font-weight: 800;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
   list-style: none;
+  transition: all 140ms ease;
+}
+.ai-provider-more > summary:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
 }
 .ai-provider-more > summary::-webkit-details-marker {
   display: none;
@@ -429,26 +437,38 @@
 .ai-dialog-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1);
+  gap: var(--space-2);
   border-bottom: 1px solid var(--color-border-subtle);
   padding-bottom: var(--space-2);
 }
 
 .ai-dialog-tabs button {
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: var(--radius-xs);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-3);
   color: var(--color-text-muted);
   background: transparent;
   font: inherit;
   font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 140ms ease;
 }
 
-.ai-dialog-tabs button[aria-selected="true"] {
-  border-bottom-color: var(--color-primary);
-  color: var(--color-primary);
+.ai-dialog-tabs button:hover:not(:disabled) {
+  color: var(--color-text-primary);
   background: var(--color-bg-subtle);
+}
+
+.ai-dialog-tabs button[aria-selected="true"],
+.ai-dialog-tabs button.ai-dialog-tab-active {
+  border-color: var(--color-border-subtle);
+  color: var(--color-primary);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .ai-dialog-panel {
