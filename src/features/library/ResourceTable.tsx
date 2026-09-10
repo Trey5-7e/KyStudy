@@ -301,7 +301,9 @@ function ResourceRowActions({
         }}
       >
         <summary ref={summaryRef} aria-label={`${resource.title} 的更多操作`}>
-          <span aria-hidden="true">⋯</span>
+          <span className="material-symbols-rounded" aria-hidden="true">
+            more_horiz
+          </span>
         </summary>
         <div
           ref={popoverRef}
