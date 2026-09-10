@@ -1,4 +1,5 @@
 import { PageHeader } from "../../shared/components/PagePrimitives";
+import { Button } from "../../shared/ui/Button";
 import type {
   CyclePlanCommandError,
   CyclePlanDashboard,
@@ -139,13 +140,17 @@ export function CyclePlanWorkspace({
         title="计划"
         description="设置学习节奏，月历会自动生成。"
         actions={
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             disabled={busy}
             onClick={(event) => openCreate(event.currentTarget)}
           >
-            新建周期计划
-          </button>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              add
+            </span>
+            <span>新建周期计划</span>
+          </Button>
         }
       />
       {openPlanId === undefined ? operationStatus : null}

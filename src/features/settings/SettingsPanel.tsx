@@ -68,12 +68,38 @@ export const SETTINGS_TABS: ReadonlyArray<{
   id: SettingsTab;
   label: string;
   description: string;
+  icon: string;
 }> = [
-  { id: "study", label: "学习与考试", description: "本地工作区和学习偏好" },
-  { id: "ai", label: "AI", description: "Provider、API Key 与预算" },
-  { id: "data", label: "数据", description: "备份、恢复与问题排查" },
-  { id: "application", label: "隐私与行为", description: "本地优先与外发确认" },
-  { id: "about", label: "关于", description: "版本、更新与开源仓库" },
+  {
+    id: "study",
+    label: "学习与考试",
+    description: "本地工作区和学习偏好",
+    icon: "school",
+  },
+  {
+    id: "ai",
+    label: "AI",
+    description: "Provider、API Key 与预算",
+    icon: "psychology",
+  },
+  {
+    id: "data",
+    label: "数据",
+    description: "备份、恢复与问题排查",
+    icon: "database",
+  },
+  {
+    id: "application",
+    label: "隐私与行为",
+    description: "本地优先与外发确认",
+    icon: "shield",
+  },
+  {
+    id: "about",
+    label: "关于",
+    description: "版本、更新与开源仓库",
+    icon: "info",
+  },
 ];
 
 export function nextSettingsTab(
@@ -190,7 +216,10 @@ function DiagnosticPanel() {
               variant="secondary"
               onClick={() => setPreviewOpen(true)}
             >
-              导出诊断摘要
+              <span className="material-symbols-rounded" aria-hidden="true">
+                file_download
+              </span>
+              <span>导出诊断摘要</span>
             </Button>
           </div>
         }
@@ -382,7 +411,15 @@ export function SettingsPanel() {
                 onClick={() => selectSettingsTab(tab.id)}
                 onKeyDown={(event) => handleSettingsTabKeyDown(event, tab.id)}
               >
-                <strong>{tab.label}</strong>
+                <div className="settings-tab-header">
+                  <span
+                    className="material-symbols-rounded settings-tab-icon"
+                    aria-hidden="true"
+                  >
+                    {tab.icon}
+                  </span>
+                  <strong>{tab.label}</strong>
+                </div>
                 <span id={`settings-tab-description-${tab.id}`}>
                   {tab.description}
                 </span>
