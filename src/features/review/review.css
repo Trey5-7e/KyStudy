@@ -424,11 +424,98 @@
   z-index: 2;
   bottom: 0;
   padding: var(--space-3);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
   background: var(--color-bg-surface);
   box-shadow: var(--shadow-surface);
   backdrop-filter: blur(10px);
+}
+
+.review-reveal-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4);
+  margin: var(--space-3) 0;
+  border: 1px dashed var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+}
+
+.review-reveal-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 46px;
+  padding: 0 var(--space-5);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text-inverse);
+  background: var(--color-primary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  box-shadow: var(--shadow-surface);
+  transition:
+    background-color 120ms ease,
+    transform 120ms ease;
+}
+
+.review-reveal-button:hover {
+  background: var(--color-primary-hover);
+  transform: translateY(-1px);
+}
+
+.review-reveal-button kbd,
+.review-feedback-buttons kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4rem;
+  height: 1.35rem;
+  padding: 0 0.35rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+  border-radius: var(--radius-xs);
+  background: rgb(0 0 0 / 12%);
+  border: 1px solid rgb(0 0 0 / 18%);
+}
+
+.review-reveal-button kbd {
+  background: rgb(255 255 255 / 22%);
+  border-color: rgb(255 255 255 / 35%);
+}
+
+.review-answer-revealed {
+  animation: reviewFadeIn 180ms ease-out;
+}
+
+@keyframes reviewFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.review-footer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+.review-hint-copy {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
 }
 
 .question-ai-analysis {
