@@ -1,25 +1,4 @@
-@import "@fontsource-variable/material-symbols-rounded/index.css";
-
-.material-symbols-rounded {
-  display: inline-block;
-  font-family: "Material Symbols Rounded Variable";
-  font-size: 1.25rem;
-  font-style: normal;
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: normal;
-  text-transform: none;
-  white-space: nowrap;
-  word-wrap: normal;
-  direction: ltr;
-  font-feature-settings: "liga";
-  -webkit-font-smoothing: antialiased;
-  font-variation-settings:
-    "FILL" 0,
-    "wght" 500,
-    "GRAD" 0,
-    "opsz" 24;
-}
+/* Assistant Chat UI styles. Global Material Symbols font and class are defined in app-shell.css */
 
 .aui-chat-thread-root {
   display: flex;
