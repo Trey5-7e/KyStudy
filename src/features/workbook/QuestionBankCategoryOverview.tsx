@@ -11,6 +11,7 @@ import {
   EditorDialogCloseButton,
   EditorDialogFooter,
 } from "../../shared/components/EditorDialog";
+import { Button } from "../../shared/ui/Button";
 import type { WorkbookCategory } from "../../shared/tauri/questionBankClient";
 import type { StudySubject } from "../../shared/tauri/scheduleClient";
 
@@ -180,19 +181,15 @@ export function QuestionBankCategoryOverview({
               </p>
             )}
             <EditorDialogFooter className="editor-actions question-bank-dialog-footer">
-              <EditorDialogCloseButton
-                className="secondary-button"
-                disabled={renameBusy}
-              >
+              <EditorDialogCloseButton disabled={renameBusy}>
                 取消
               </EditorDialogCloseButton>
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={renameBusy}
-              >
+              <Button type="submit" variant="primary" disabled={renameBusy}>
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  save
+                </span>
                 {renameBusy ? "正在保存…" : "保存名称"}
-              </button>
+              </Button>
             </EditorDialogFooter>
           </form>
         </EditorDialog>
@@ -294,7 +291,9 @@ function CategoryItemRow({
         onToggle={() => setMenuOpen(menuRef.current?.open ?? false)}
       >
         <summary aria-label={`${item.name} 的更多操作`}>
-          <span aria-hidden="true">⋯</span>
+          <span className="material-symbols-rounded" aria-hidden="true">
+            more_horiz
+          </span>
         </summary>
         <div className="question-bank-category-row-menu-popover" role="menu">
           <button
@@ -307,6 +306,9 @@ function CategoryItemRow({
               item.onRename();
             }}
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              edit
+            </span>
             重命名
           </button>
           <button
@@ -319,6 +321,9 @@ function CategoryItemRow({
               item.onDelete();
             }}
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              delete
+            </span>
             {busy ? "删除中…" : "删除"}
           </button>
         </div>

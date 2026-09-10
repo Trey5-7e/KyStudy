@@ -330,7 +330,7 @@ export function CreateSubjectDialog({
           </p>
         )}
         <EditorDialogFooter className="editor-actions question-bank-dialog-footer">
-          <EditorDialogCloseButton className="secondary-button" disabled={busy}>
+          <EditorDialogCloseButton disabled={busy}>
             取消
           </EditorDialogCloseButton>
           <Button type="submit" variant="primary" disabled={busy}>
@@ -405,7 +405,7 @@ export function CreateWorkbookDialog({
           </p>
         )}
         <EditorDialogFooter className="editor-actions question-bank-dialog-footer">
-          <EditorDialogCloseButton className="secondary-button" disabled={busy}>
+          <EditorDialogCloseButton disabled={busy}>
             取消
           </EditorDialogCloseButton>
           <Button type="submit" variant="primary" disabled={busy}>

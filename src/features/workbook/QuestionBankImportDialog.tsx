@@ -1,4 +1,4 @@
-﻿import {
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -11,6 +11,7 @@ import {
   EditorDialogCloseButton,
   EditorDialogFooter,
 } from "../../shared/components/EditorDialog";
+import { Button } from "../../shared/ui/Button";
 import {
   getResourceReaderDescriptor,
   type ResourceDocument,
@@ -532,9 +533,9 @@ export function ImportIndexDialog({
                   ))}
                 </select>
               </label>
-              <button
+              <Button
                 type="button"
-                className="secondary-button"
+                variant="primary"
                 disabled={
                   busy || subjects.length === 0 || workbooks.length === 0
                 }
@@ -545,31 +546,43 @@ export function ImportIndexDialog({
                 }
                 onClick={() => void analyze()}
               >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  document_scanner
+                </span>
                 {busy && detected.length === 0 ? "正在分析…" : "分析目录和题目"}
-              </button>
+              </Button>
               {detected.length === 0 ? null : (
                 <>
-                  <button
+                  <Button
                     type="button"
-                    className="secondary-button"
+                    variant="secondary"
                     disabled={busy}
                     onClick={() => setStep("assign")}
                   >
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      arrow_forward
+                    </span>
                     继续确认归类
-                  </button>
+                  </Button>
                   <p className="form-hint" role="status">
                     已保留上次分析结果；继续确认归类不会重新读取 PDF。
                   </p>
                 </>
               )}
               {analyzing ? (
-                <button
+                <Button
                   type="button"
-                  className="secondary-button"
+                  variant="ghost"
                   onClick={cancelCurrentAnalysis}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    close
+                  </span>
                   取消分析
-                </button>
+                </Button>
               ) : null}
               {ocrStatus === undefined ? null : (
                 <p className="form-hint" role="status">
@@ -588,10 +601,7 @@ export function ImportIndexDialog({
         ) : null}
         {step === "source" ? (
           <EditorDialogFooter className="editor-actions question-bank-import-footer">
-            <EditorDialogCloseButton
-              className="secondary-button"
-              disabled={busy}
-            >
+            <EditorDialogCloseButton disabled={busy}>
               取消
             </EditorDialogCloseButton>
           </EditorDialogFooter>
@@ -617,22 +627,32 @@ export function ImportIndexDialog({
                 </span>
               </div>
               <div className="question-bank-import-assignment-actions">
-                <button
+                <Button
                   type="button"
-                  className="text-button question-bank-import-export"
+                  variant="ghost"
+                  size="sm"
+                  className="question-bank-import-export"
                   disabled={busy || selectedResource === undefined}
                   onClick={exportBaseline}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    bug_report
+                  </span>
                   导出诊断 JSON
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="text-button question-bank-import-back"
+                  variant="ghost"
+                  size="sm"
+                  className="question-bank-import-back"
                   disabled={busy}
                   onClick={() => setStep("source")}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    arrow_back
+                  </span>
                   返回选择 PDF
-                </button>
+                </Button>
               </div>
             </div>
             <div className="pdf-detected-subject-list">
@@ -852,15 +872,12 @@ export function ImportIndexDialog({
                           : "确认归类后建立索引。"}
               </p>
               <EditorDialogFooter className="editor-actions question-bank-import-footer">
-                <EditorDialogCloseButton
-                  className="secondary-button"
-                  disabled={busy}
-                >
+                <EditorDialogCloseButton disabled={busy}>
                   取消
                 </EditorDialogCloseButton>
-                <button
+                <Button
                   type="button"
-                  className="primary-button"
+                  variant="primary"
                   aria-describedby="question-bank-import-save-reason"
                   disabled={
                     busy ||
@@ -873,12 +890,15 @@ export function ImportIndexDialog({
                   }
                   onClick={() => void save()}
                 >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    {allDetectedCompleted ? "check" : "save"}
+                  </span>
                   {busy && detected.length > 0
                     ? "正在建立索引…"
                     : allDetectedCompleted
                       ? "完成并关闭"
                       : "确认归类并建立索引"}
-                </button>
+                </Button>
               </EditorDialogFooter>
             </div>
           </>
