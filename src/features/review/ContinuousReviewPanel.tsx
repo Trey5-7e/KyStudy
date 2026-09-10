@@ -1,5 +1,7 @@
-import { useEffect, useRef, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { EditorDialog } from "../../shared/components/EditorDialog";
+import { Badge } from "../../shared/ui/Badge";
+import { Button } from "../../shared/ui/Button";
 import type {
   ReviewSchemeQueueItem,
   ReviewSchemeRating,
@@ -38,24 +40,29 @@ export function ContinuousReviewPanel({
   if (!active || !session.activeScheme)
     return (
       <section className="continuous-review-complete" aria-live="polite">
+        <Badge tone={session.totalCount === 0 ? "neutral" : "success"}>
+          {session.totalCount === 0 ? "暂无到期题" : "今日完成"}
+        </Badge>
         <h3 aria-label="review progress">
           {session.totalCount === 0 ? "今天没有到期题" : "今天的错题已完成"}
         </h3>
         <p>{session.completedCount} 道反馈已经保存。</p>
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={busy || !session.latestCompletedQueueId}
-          onClick={() =>
-            session.latestCompletedQueueId &&
-            void onUndo(session.latestCompletedQueueId)
-          }
-        >
-          撤销上一题
-        </button>
-        <button type="button" className="text-button" onClick={onManage}>
-          查看方案
-        </button>
+        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={busy || !session.latestCompletedQueueId}
+            onClick={() =>
+              session.latestCompletedQueueId &&
+              void onUndo(session.latestCompletedQueueId)
+            }
+          >
+            撤销上一题
+          </Button>
+          <Button variant="text" size="sm" onClick={onManage}>
+            查看方案
+          </Button>
+        </div>
       </section>
     );
   return (
@@ -65,14 +72,15 @@ export function ContinuousReviewPanel({
         <h3>
           {session.completedCount} / {session.totalCount}
         </h3>
-        <button
+        <Button
           ref={prepareRef}
-          type="button"
+          variant="primary"
+          size="md"
           disabled={busy}
           onClick={() => void onPrepare()}
         >
           准备今日队列
-        </button>
+        </Button>
       </section>
       {shouldOpen && (
         <EditorDialog
@@ -84,6 +92,7 @@ export function ContinuousReviewPanel({
           size="review"
         >
           <QuestionReviewContent
+            key={active.question.question.id}
             item={active}
             queueId={session.activeScheme.queue?.id ?? ""}
             busy={busy}
@@ -96,6 +105,7 @@ export function ContinuousReviewPanel({
     </>
   );
 }
+
 export function QuestionReviewContent({
   item,
   queueId,
@@ -117,17 +127,39 @@ export function QuestionReviewContent({
 }) {
   const ref = useRef<HTMLElement>(null);
   const q = item.question.question;
+  const [revealed, setRevealed] = useState(false);
+
   useEffect(() => {
     ref.current?.focus({ preventScroll: true });
-  }, [q.id]);
+  }, []);
+
   const key = (e: KeyboardEvent<HTMLElement>) => {
     if (busy || e.repeat) return;
+
+    if (e.key === " " || e.key === "Spacebar" || e.key === "Enter") {
+      if (!revealed) {
+        e.preventDefault();
+        setRevealed(true);
+        return;
+      }
+    }
+
+    if ((e.key === "z" || e.key === "Z") && canUndo) {
+      e.preventDefault();
+      void onUndo(queueId);
+      return;
+    }
+
     const rating = reviewRatingForShortcut(e.key);
     if (rating) {
       e.preventDefault();
+      if (!revealed) {
+        setRevealed(true);
+      }
       void onFeedback(queueId, q.id, rating);
     }
   };
+
   return (
     <section
       ref={ref}
@@ -142,42 +174,73 @@ export function QuestionReviewContent({
         regions={item.question.regions}
       />
       <h4>{q.title}</h4>
-      <QuestionAiAnalysis
-        key={`${q.id}-${q.updatedAt}`}
-        question={q}
-        regions={item.question.regions}
-      />
-      <div className="review-feedback-buttons">
-        <button
+
+      {!revealed ? (
+        <div className="review-reveal-container">
+          <button
+            type="button"
+            className="review-reveal-button"
+            onClick={() => setRevealed(true)}
+          >
+            <span>显示解析与答案</span>
+            <kbd>Space</kbd>
+          </button>
+          <span className="review-hint-copy">
+            先自行思考作答，点击或按空格键揭晓答案
+          </span>
+        </div>
+      ) : (
+        <div className="review-answer-revealed">
+          <QuestionAiAnalysis
+            key={`${q.id}-${q.updatedAt}`}
+            question={q}
+            regions={item.question.regions}
+          />
+          <div className="review-feedback-buttons">
+            <button
+              type="button"
+              className="feedback-mastered"
+              disabled={busy}
+              onClick={() => void onFeedback(queueId, q.id, "mastered")}
+            >
+              掌握 <kbd>1</kbd>
+            </button>
+            <button
+              type="button"
+              className="feedback-uncertain"
+              disabled={busy}
+              onClick={() => void onFeedback(queueId, q.id, "uncertain")}
+            >
+              模糊 <kbd>2</kbd>
+            </button>
+            <button
+              type="button"
+              className="feedback-failed"
+              disabled={busy}
+              onClick={() => void onFeedback(queueId, q.id, "failed")}
+            >
+              不会 <kbd>3</kbd>
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="review-footer-bar">
+        <Button
           type="button"
-          disabled={busy}
-          onClick={() => void onFeedback(queueId, q.id, "mastered")}
+          variant="text"
+          size="sm"
+          disabled={busy || !canUndo}
+          onClick={() => void onUndo(queueId)}
         >
-          掌握 <kbd>1</kbd>
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void onFeedback(queueId, q.id, "uncertain")}
-        >
-          模糊 <kbd>2</kbd>
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void onFeedback(queueId, q.id, "failed")}
-        >
-          不会 <kbd>3</kbd>
-        </button>
+          撤销上一题 <kbd>Z</kbd>
+        </Button>
+        {revealed && (
+          <span className="review-hint-copy">
+            按 1/2/3 评价掌握度，自动进入下一题
+          </span>
+        )}
       </div>
-      <button
-        type="button"
-        className="text-button"
-        disabled={busy || !canUndo}
-        onClick={() => void onUndo(queueId)}
-      >
-        撤销上一题
-      </button>
     </section>
   );
 }
