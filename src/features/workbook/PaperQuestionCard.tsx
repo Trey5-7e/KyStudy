@@ -3,6 +3,7 @@ import type { RefObject } from "react";
 import type { IndexedQuestion } from "../../shared/tauri/questionBankClient";
 import type { AttemptResult } from "../../shared/tauri/questionClient";
 import { QuestionRegionCard } from "../review/QuestionRegionCard";
+import { Button } from "../../shared/ui/Button";
 import { partLabel, typeLabel } from "./QuestionIndexDialogs";
 
 function attemptLabel(value: AttemptResult): string {
@@ -56,27 +57,36 @@ export function PaperQuestionCard({
             {question.questionNumber}
           </small>
           <div>
-            <button
-              type="button"
-              className="secondary-button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => onAdjust(question.id)}
             >
-              校正区域
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
+              <span className="material-symbols-rounded" aria-hidden="true">
+                crop
+              </span>
+              <span>校正区域</span>
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => onEdit(question.id)}
             >
-              编辑题目
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
+              <span className="material-symbols-rounded" aria-hidden="true">
+                edit
+              </span>
+              <span>编辑题目</span>
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => onAiAnalysis(question.id)}
             >
-              AI 解析
-            </button>
+              <span className="material-symbols-rounded" aria-hidden="true">
+                psychology
+              </span>
+              <span>辅助解析</span>
+            </Button>
           </div>
         </div>
       </header>
@@ -103,7 +113,14 @@ export function PaperQuestionCard({
             aria-pressed={result === option}
             onClick={() => onResult(question.id, option)}
           >
-            {attemptLabel(option)}
+            <span className="material-symbols-rounded" aria-hidden="true">
+              {option === "correct"
+                ? "check_circle"
+                : option === "uncertain"
+                  ? "help"
+                  : "cancel"}
+            </span>
+            <span>{attemptLabel(option)}</span>
           </button>
         ))}
       </div>
