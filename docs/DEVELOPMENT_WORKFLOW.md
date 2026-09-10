@@ -2,6 +2,8 @@
 
 本流程用于减少重复文件读取、重复测试和无效上下文，同时保留最终 Release 的完整证据。它从 R35 开始作为默认开发方式。
 
+Token 优化优先减少重复读取、无效上下文和多余请求，不用统一固定 Token 额度代替任务完成。产品 Token 限制保留可选调整，默认不设累计硬限；授权、上下文窗口、取消和循环/时间保护另行保持。日常汇报不反复突出额度；需要人工验收时提供对应构建的独立操作清单（含备份隔离、预期、失败处理和回传模板），不只让用户自行查实验记录。当前清单见 [M1 / Schema 31 人工验收](V0_1_5_M1_MANUAL_ACCEPTANCE.md)。
+
 ## 1. 一次定位
 
 先用窄查询确定改动边界：
@@ -55,6 +57,8 @@ cargo clippy --locked --manifest-path src-tauri\Cargo.toml --lib --tests -- -D w
 
 只有涉及迁移、事务或跨层契约时才扩大到对应集成测试。不要在每个小修复后运行完整 Rust 测试或 Tauri build。
 
+v0.1.5 Agent 内核的目标命令：`cargo test --locked --manifest-path src-tauri/Cargo.toml agent:: --lib`；迁移改动补充 `cargo test --locked --manifest-path src-tauri/Cargo.toml migration_v31 --lib`。`examples/agent_model_probe.rs` 会读取已授权 Provider 的 OS 凭据并产生模型请求，不属于自动测试门禁；必须取得具体模型与 Token 上限授权，并用 `--prior-reserved` 保留此前测试预扣，不能通过重跑清零额度。
+
 ## 3. 审查边界
 
 实现完成后只做一次交叉审查：
@@ -78,7 +82,26 @@ pnpm tauri build --no-bundle
 
 任一命令失败就停止。修改失败原因后，重新开始的范围由失败影响决定；不得只为获得更好日志无修改重跑。Release 构建成功后只读检查产物和残留进程，不自动启动 EXE。
 
-## 5. Token 与文件 I/O 预算
+## 5. Git 提交与分支协作规范
+
+智能体在开发过程中必须合理利用 Git 进行版本管理，严禁在工作区长时间堆积大量未提交代码：
+
+1. **里程碑即刻提交 (Commit on verified milestone)**：
+   - 只要当前逻辑单元（功能切片、UI 解耦、类型重构、缺陷修复）完成且通过目标检查（`pnpm check:target` 或对应模块的 `cargo test`），**必须立即提交**。
+   - 提交信息采用 Conventional Commits（如 `feat(agent): ...`、`refactor(ui): ...`、`fix(workbook): ...`）。
+2. **分支职责隔离**：
+   - 核心系统/后端功能在专用分支进行（如 `feature/v0.1.5-core`）；
+   - 前端 UI 优化在专用分支进行（如 `feature/v0.1.5-ui`）；
+   - 严禁多个方向的长期半成品直接混杂在 `main` 工作区。
+3. **并行开发推荐 `git worktree`**：
+   - 当需要同时推进核心开发与 UI 优化时，避免在单目录频繁切分支导致未提交代码冲突与 Rust 重复全量编译（Release 耗时数分钟）。
+   - 推荐在同级创建独立工作区：
+     ```powershell
+     git worktree add ../KyStudy-ui -b feature/v0.1.5-ui
+     ```
+     UI 在新目录独立运行 `pnpm dev` 与浏览器自检，核心目录保持原有编译环境，两不相扰。
+
+## 6. Token 与文件 I/O 预算
 
 - 进度消息只在范围确认、发现阻塞、实现完成、门禁完成时发送。
 - 工具输出先用路径、行号和短摘要过滤；避免输出完整日志、完整 Git 状态或大文件全文。
@@ -86,7 +109,7 @@ pnpm tauri build --no-bundle
 - 普通维护不新增逐轮长验收文档。只有用户可见流程、数据语义、迁移或 Release 边界变化时才新增验收文档。
 - 最终报告只包含结果、关键验证、产物和需要用户执行的验收。
 
-## 6. R35 落地结果
+## 7. R35 落地结果
 
 R35 新增根目录 `AGENTS.md`、`pnpm check:target` 和本文档。后续批次以目标验证作为开发循环，以一次完整门禁作为交付证据。
 

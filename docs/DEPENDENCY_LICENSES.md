@@ -47,6 +47,16 @@
 
 Cargo 全目标解析图包含 535 个非工作区包，当前没有缺失许可证元数据的包。解析图包含不同操作系统的条件依赖，不能直接当作 Windows 二进制的实际分发清单。
 
+## Learning Agent 后续依赖增量
+
+### 后续增量：2026-09-06 M0-C 开发实验
+
+`png = 0.17.16` 增加为 Rust dev-dependency，版本已存在于 Cargo.lock；包元数据为 `MIT OR Apache-2.0`，仅供 `examples/agent_render_host.rs` 的合成 PNG 解码实验与测试。没有新增生产 Runtime/Sidecar，未复制外部 Harness 源码；不能将此增量视为全量依赖重新审计。固定外部参考 commit 与 LICENSE/NOTICE 记录见 [TV-08](spikes/TV-08-learning-agent-harness.md)。
+
+### 2026-09-07 M1 运行内核
+
+2026-09-07 M1 增量：将锁文件已有 `tokio 1.53.0`（MIT）显式列为运行时依赖，只启用 `sync`/`time` 接缝以实现有界数据库队列和超时；不切换 Tauri 的异步 Runtime，不引入新版本或外部 Harness。该条为后续增量，不覆盖上方历史依赖数量记录。
+
 ## TV-07 OCR 技术验证候选
 
 以下依赖只存在于 `experiments/tv-07-ocr/requirements.lock.txt` 和项目外的验证环境，尚未

@@ -1,5 +1,7 @@
 # KyStudy 数据模型设计
 
+2026-09-09 阅读体验增量（Schema 32 不变）：`read_resource_pages` 的公开调用新增可选 Unicode 字符 `offset`，默认 0；回执新增 `offset/endOffset/nextOffset/totalCharacters`，每段重新验证原授权版本。旧 JSON 回执仍兼容，但不能凭缺失游标证明全文覆盖。`start_agent_run` 新增可选 `previousRunId`；后端仅在已完成、同会话、同授权版本和 Provider 快照下组装当前问题及上一轮公开短摘录，保存为现有 goal 字段中的 `study_followup` JSON。不复用私有续接或完整工具正文，也不新增迁移。
+
 | 项目       | 内容                              |
 | ---------- | --------------------------------- |
 | 文档版本   | 0.1                               |
@@ -847,6 +849,41 @@ schema v18 同时保证：同一 PDF 分段内的自动索引题目由稳定 `so
 如果用户删除 PDF 但选择保留题目和作答，Question 保持存在，QuestionRegion 标记来源不可用。已保存的题目截图是否保留由删除对话框单独说明。
 
 ## 18. 迁移与备份
+
+### Schema v31：Learning Agent 运行内核（2026-09-07）
+
+`0031_agent_kernel.sql` 只新增 Agent 派生数据，不重写既有聊天、题目、作答和计划：
+
+| 表               | 核心契约                                                                                                         |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `ai_agent_scope` | workspace 外键、不可变版本化 Grant JSON、撤销时间；Provider 快照只含配置 ID/revision/model，不含 Key             |
+| `ai_agent_run`   | 仅绑定同 workspace 的 chat 会话；状态、CAS revision、owner epoch、不可重置的预算计数、取消意图、失败码、终态时间 |
+| `ai_agent_step`  | 每次模型/工具派发前预扣并持久化 reserved；结果与步骤 completed 在同一短事务写入；中断保留历史                    |
+| `ai_agent_event` | `(run_id,sequence)` 唯一，提交后的有界公开快照，用于按 cursor 补拉；不保存私有推理链或凭据                       |
+
+部分唯一索引保证同 workspace 最多一个 running、同会话最多一个非终态 Run；CHECK/trigger 拒绝终态复活、范围变更和预算清零。取消 running 先写意图并禁止新派发，异步任务 abort/join 完成后再写 canceled；已有终态幂等返回。对话删除清理对应 Run/Step/Event/Scope，不因源资料删除级联清理会话。
+
+M1 数据库执行器为单独线程、长度 8 的有界队列；网络与工具等待不持有 SQLite 事务。语义恢复先消费已提交的模型输出/只读调用，保留原预算，不自动联网。普通聊天的发送互斥、命令/UI 入口、私有协议 checkpoint、审批/Artifact/handoff 正式表仍在后续接入范围，不把本内核当成完整 v0.1.5。
+
+升级前需备份旧工作区。旧 v0.1.4 程序不应打开 schema 31 数据库；回退需恢复迁移前备份，不能声称增表即可直接降级。本轮只在临时 SQLite 测试升级；读取真实 Provider 配置使用只读连接，未对用户数据库执行迁移。
+
+### Schema v32：可选 Token 策略与应用任务持有（2026-09-08）
+
+`0032_agent_token_policy.sql` 在迁移事务中替换 `ai_agent_run` 的约束，保留所有 Run、Scope、Step、Event。新 Run 默认 `observe`，阈值可不设置；`warn` 只产生可计算的提醒状态，`enforce` 仅在显式选择时拦截后续派发。配置随 Run 冻结，需调整时新建 Run；既有 v31 Run 迁移为 `enforce`，保留原额度、用量、终态及旧事件正文，不能因软件升级悄悄放开旧任务限制。
+
+迁移执行器在事务外暂时关闭外键，提交前检查外键完整性，再恢复连接配置；失败回滚保留 Schema 31。带数据测试覆盖已终结且 Grant 被撤销的 Run、收据/事件保留、级联删除及故障回滚。此处为新代码记录，不覆盖 v31 用户验收证据；代理未升级真实工作区。
+
+AppState 懒加载唯一 AgentHost，数据库初始化在阻塞线程执行，业务 SQL 走有界 StoreWorker。新增查询、事件补拉与取消命令绑定当前工作区，不接受模型提供的路径或 workspaceId；Host 保留运行句柄，取消命令响应方消失后仍执行 abort/join。没有本 Host 句柄的活动 Run 不冒充已清理，返回 Busy，后续由恢复入口处理。尚未注册生产启动/恢复命令或 Agent UI。
+
+### M2-A 文字研读接入（2026-09-09，仍为 Schema 32）
+
+Host 根据用户选择的 Provider 与已索引页生成 Grant；资料版本绑定 Blob、文档 revision、索引批次及已选页内容哈希/索引时间。正文读取在授权校验后的同一短事务内完成，只返回限长片段并标注截断；不会隐式建索引。每次外发在读取凭据前后检查 owner epoch、取消、配置指纹与来源版本。首个 Adapter 的私有 assistant 续接只保留在内存白名单中，Step/Event/备份不包含隐藏推理。
+
+`agent-owner.lock` 为工作区进程持有锁；锁随 Host 和活动 Provider 生命周期持有，进程退出由系统释放，不靠删除锁文件解锁。取得独占锁后将遗留 running Run 标为 interrupted，保留已用计数和收据，不自动联网。普通聊天发送、删除与 Agent 共用会话 guard；旧轮次中断/等待补充时可取消后新开，尚未提供原协议恢复入口。
+
+公开结果从既有 Step 读取，UI 只把 completed Run 的最终输出当作答案；来源跳转先校验本 Run 收据及当前 Grant 版本。研读记录目前在“资料研读”中查看，不回写为普通 AI 聊天消息或正式学习记录。
+
+### 通用迁移规则
 
 - 数据库使用单调递增的 schema 版本；
 - 每次迁移在事务中执行，不能在同一迁移中进行不可恢复的大文件删除；
