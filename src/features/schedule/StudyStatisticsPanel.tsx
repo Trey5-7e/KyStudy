@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { Button } from "../../shared/ui/Button";
 import {
   getStudyStatistics,
   localDateForTimezone,
@@ -125,9 +126,16 @@ export function StudyStatisticsPanel() {
       <div className="error-detail" role="alert">
         <p>{state.error.message}</p>
         <p>{state.error.action}</p>
-        <button type="button" onClick={() => void reloadInitial()}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void reloadInitial()}
+        >
+          <span className="material-symbols-rounded" aria-hidden="true">
+            refresh
+          </span>
           回到本周
-        </button>
+        </Button>
       </div>
     );
   }
@@ -164,7 +172,12 @@ export function StudyStatisticsPanel() {
             required
           />
         </label>
-        <button type="submit">重新统计</button>
+        <Button type="submit" variant="primary">
+          <span className="material-symbols-rounded" aria-hidden="true">
+            analytics
+          </span>
+          重新统计
+        </Button>
       </form>
       <dl className="statistics-grid">
         <div>

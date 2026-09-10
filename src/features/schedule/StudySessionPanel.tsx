@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { Button } from "../../shared/ui/Button";
 import {
   createStudySession,
   listOverdueTasks,
@@ -152,9 +153,12 @@ export function StudySessionPanel() {
       <div className="error-detail" role="alert">
         <p>{state.error.message}</p>
         <p>{state.error.action}</p>
-        <button type="button" onClick={() => void reload()}>
+        <Button variant="secondary" size="sm" onClick={() => void reload()}>
+          <span className="material-symbols-rounded" aria-hidden="true">
+            refresh
+          </span>
           重新加载
-        </button>
+        </Button>
       </div>
     );
   }
@@ -308,9 +312,12 @@ export function StudySessionPanel() {
             onChange={(event) => setReflection(event.target.value)}
           />
         </label>
-        <button type="submit" disabled={isSubmitting}>
+        <Button type="submit" variant="primary" disabled={isSubmitting}>
+          <span className="material-symbols-rounded" aria-hidden="true">
+            save
+          </span>
           {isSubmitting ? "正在保存…" : "保存学习记录"}
-        </button>
+        </Button>
       </form>
 
       {actionError === undefined ? null : (
