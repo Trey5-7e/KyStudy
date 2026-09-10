@@ -62,12 +62,16 @@ export function CyclePlanOperationStatus({
               <button
                 ref={undoButtonRef}
                 type="button"
+                className="ui-button ui-button-ghost ui-button-sm"
                 disabled={busy}
                 aria-label={
                   undo.kind === "shift" ? "撤销顺延" : `撤销${undo.itemLabel}`
                 }
                 onClick={onUndo}
               >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  undo
+                </span>
                 {undo.kind === "shift" ? "撤销顺延" : "撤销"}
               </button>
             )
@@ -170,7 +174,7 @@ function CyclePlanShiftPreviewView({
       <div className="cycle-plan-management-actions">
         <button
           type="button"
-          className="secondary-button"
+          className="ui-button ui-button-secondary ui-button-md"
           disabled={busy}
           onClick={onCancel}
         >
@@ -178,17 +182,24 @@ function CyclePlanShiftPreviewView({
         </button>
         <button
           type="button"
-          className="secondary-button"
+          className="ui-button ui-button-secondary ui-button-md"
           disabled={busy || state.status === "loading"}
           onClick={onRefresh}
         >
+          <span className="material-symbols-rounded" aria-hidden="true">
+            refresh
+          </span>
           刷新预览
         </button>
         <button
           type="button"
+          className="ui-button ui-button-primary ui-button-md"
           disabled={busy || !confirmable}
           onClick={onConfirm}
         >
+          <span className="material-symbols-rounded" aria-hidden="true">
+            check
+          </span>
           {state.status === "confirming" ? "正在确认…" : "确认顺延"}
         </button>
       </div>
@@ -248,18 +259,24 @@ function CyclePlanManagement({
         <div className="cycle-plan-management-actions">
           <button
             type="button"
-            className="danger-button"
+            className="ui-button ui-button-danger ui-button-md"
             disabled={busy}
             onClick={() => void onArchive()}
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              archive
+            </span>
             确认归档
           </button>
           <button
             type="button"
-            className="secondary-button"
+            className="ui-button ui-button-secondary ui-button-md"
             disabled={busy}
             onClick={onCancelArchive}
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              arrow_back
+            </span>
             返回计划
           </button>
         </div>
@@ -337,11 +354,14 @@ function CyclePlanManagement({
           </div>
           <button
             type="button"
-            className="secondary-button"
+            className="ui-button ui-button-secondary ui-button-sm"
             disabled={busy}
             aria-pressed={plan.calendarVisible}
             onClick={() => void onToggleCalendar()}
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              {plan.calendarVisible ? "visibility_off" : "visibility"}
+            </span>
             {cyclePlanVisibilityLabel(plan.calendarVisible)}
           </button>
         </div>
@@ -357,20 +377,26 @@ function CyclePlanManagement({
             {overview.recommendedStudyDaysPerUnit === undefined ? null : (
               <button
                 type="button"
-                className="secondary-button"
+                className="ui-button ui-button-secondary ui-button-sm"
                 disabled={busy}
                 onClick={onUseFaster}
               >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  speed
+                </span>
                 改为每 {overview.recommendedStudyDaysPerUnit} 个学习日
               </button>
             )}
             {overview.recommendedTotalUnits === undefined ? null : (
               <button
                 type="button"
-                className="secondary-button"
+                className="ui-button ui-button-secondary ui-button-sm"
                 disabled={busy}
                 onClick={onUseSmaller}
               >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  compress
+                </span>
                 减少为 {overview.recommendedTotalUnits} {plan.unitLabel}
               </button>
             )}
@@ -381,27 +407,36 @@ function CyclePlanManagement({
       <div className="cycle-plan-management-actions">
         <button
           type="button"
-          className="secondary-button"
+          className="ui-button ui-button-secondary ui-button-md"
           disabled={busy}
           onClick={onEdit}
         >
+          <span className="material-symbols-rounded" aria-hidden="true">
+            edit
+          </span>
           编辑规则
         </button>
         <button
           ref={shiftButtonRef}
           type="button"
-          className="secondary-button"
+          className="ui-button ui-button-secondary ui-button-md"
           disabled={busy}
           onClick={onShift}
         >
+          <span className="material-symbols-rounded" aria-hidden="true">
+            fast_forward
+          </span>
           从 {formatShortDate(selectedDate)} 后顺延 1 个学习日
         </button>
         <button
           type="button"
-          className="danger-button"
+          className="ui-button ui-button-danger ui-button-md"
           disabled={busy}
           onClick={onAskArchive}
         >
+          <span className="material-symbols-rounded" aria-hidden="true">
+            archive
+          </span>
           归档计划
         </button>
       </div>
