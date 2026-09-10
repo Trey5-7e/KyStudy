@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { Button } from "../../shared/ui/Button";
 import {
   listTrashedTasks,
   normalizeScheduleCommandError,
@@ -82,9 +83,12 @@ export function RecycleBinPanel() {
       <div className="error-detail" role="alert">
         <p>{state.error.message}</p>
         <p>{state.error.action}</p>
-        <button type="button" onClick={() => void load()}>
+        <Button variant="secondary" size="sm" onClick={() => void load()}>
+          <span className="material-symbols-rounded" aria-hidden="true">
+            refresh
+          </span>
           重新加载
-        </button>
+        </Button>
       </div>
     );
   }
@@ -96,13 +100,12 @@ export function RecycleBinPanel() {
           <h3>任务回收站</h3>
           <p>这里是软删除，不会清除任务历史或学习记录关联。</p>
         </div>
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => void load()}
-        >
+        <Button variant="secondary" size="sm" onClick={() => void load()}>
+          <span className="material-symbols-rounded" aria-hidden="true">
+            refresh
+          </span>
           刷新
-        </button>
+        </Button>
       </div>
       {notice === undefined ? null : (
         <p className="success-detail" role="status">
@@ -122,13 +125,17 @@ export function RecycleBinPanel() {
                   {new Date(task.deletedAt).toLocaleString("zh-CN")}
                 </span>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="sm"
                 disabled={restoringId !== undefined}
                 onClick={() => void restore(task)}
               >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  restore_from_trash
+                </span>
                 {restoringId === task.id ? "正在恢复…" : "恢复到计划"}
-              </button>
+              </Button>
             </li>
           ))}
         </ul>

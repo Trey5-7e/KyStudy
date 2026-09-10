@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { Button } from "../../shared/ui/Button";
 import {
   listOverdueTasks,
   listSubjects,
@@ -131,9 +132,12 @@ export function WeekSchedulePanel() {
       <div className="error-detail" role="alert">
         <p>{state.error.message}</p>
         <p>{state.error.action}</p>
-        <button type="button" onClick={() => void initialize()}>
+        <Button variant="secondary" size="sm" onClick={() => void initialize()}>
+          <span className="material-symbols-rounded" aria-hidden="true">
+            refresh
+          </span>
           重新加载
-        </button>
+        </Button>
       </div>
     );
   }
@@ -151,27 +155,36 @@ export function WeekSchedulePanel() {
     <div className="week-panel">
       <div className="week-toolbar">
         <div className="week-navigation">
-          <button
-            type="button"
-            className="secondary-button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => void loadWeek(addLocalDays(state.weekStart, -7))}
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              chevron_left
+            </span>
             上一周
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => void loadWeek(startOfLocalWeek(state.today))}
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              today
+            </span>
             回到今天
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => void loadWeek(addLocalDays(state.weekStart, 7))}
           >
             下一周
-          </button>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              chevron_right
+            </span>
+          </Button>
         </div>
         <label>
           按科目筛选

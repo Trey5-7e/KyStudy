@@ -2517,6 +2517,14 @@ button:disabled {
 /* Complete active and focus treatments for the three roving tablists. */
 .planning-tabs [role="tab"] {
   min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.planning-tabs [role="tab"] .material-symbols-rounded {
+  font-size: 1.125rem;
+  line-height: 1;
 }
 
 .planning-tabs [role="tab"][aria-selected="true"] {

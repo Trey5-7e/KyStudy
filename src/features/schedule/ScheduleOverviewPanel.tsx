@@ -4,6 +4,7 @@ import {
   PageHeader,
   PageSurface,
 } from "../../shared/components/PagePrimitives";
+import { Button } from "../../shared/ui/Button";
 
 import { RecycleBinPanel } from "./RecycleBinPanel";
 import { StudySessionPanel } from "./StudySessionPanel";
@@ -29,12 +30,13 @@ export function scheduleOverviewTabIndexAfterKey(
   return undefined;
 }
 
-const VIEWS: ReadonlyArray<{ id: OverviewView; label: string }> = [
-  { id: "week", label: "周日程与逾期" },
-  { id: "sessions", label: "实际学习记录" },
-  { id: "statistics", label: "学习统计" },
-  { id: "trash", label: "回收站" },
-];
+const VIEWS: ReadonlyArray<{ id: OverviewView; label: string; icon: string }> =
+  [
+    { id: "week", label: "周日程与逾期", icon: "view_week" },
+    { id: "sessions", label: "实际学习记录", icon: "history_edu" },
+    { id: "statistics", label: "学习统计", icon: "bar_chart" },
+    { id: "trash", label: "回收站", icon: "delete_outline" },
+  ];
 
 export function ScheduleOverviewPanel({
   onBackToPlanning,
@@ -68,13 +70,12 @@ export function ScheduleOverviewPanel({
         id="schedule-overview-title"
         title="已有日程"
         backAction={
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={onBackToPlanning}
-          >
+          <Button variant="secondary" onClick={onBackToPlanning}>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              arrow_back
+            </span>
             返回计划
-          </button>
+          </Button>
         }
       />
       <PageSurface as="div" className="planning-card schedule-overview-surface">
@@ -106,6 +107,9 @@ export function ScheduleOverviewPanel({
               onClick={() => setView(item.id)}
               onKeyDown={(event) => handleTabKeyDown(event, index)}
             >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                {item.icon}
+              </span>
               {item.label}
             </button>
           ))}
