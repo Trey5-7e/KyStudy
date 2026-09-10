@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { EditorDialog } from "../../shared/components/EditorDialog";
+import { Button } from "../../shared/ui/Button";
 import {
   cancelOcr,
   downloadOcrComponent,
@@ -273,55 +274,66 @@ export function OcrComponentManagementDialog({
           </div>
         ) : null}
         <div className="question-form-actions">
-          <button
-            type="button"
-            className="secondary-button"
+          <Button
+            variant="secondary"
             disabled={loading || busy !== undefined}
             onClick={() => void reload()}
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              refresh
+            </span>
             重新检测
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="primary"
             disabled={loading || busy !== undefined}
             onClick={() => void manage("install")}
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              download
+            </span>
             {actionLabel}
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
+          </Button>
+          <Button
+            variant="secondary"
             disabled={
               loading || busy !== undefined || downloadInfo?.available !== true
             }
             onClick={() => void download()}
           >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              cloud_download
+            </span>
             {busy === "download"
               ? `正在下载 (${selectedVersion})`
               : `在线下载 OCR 组件 (${selectedVersion})`}
-          </button>
+          </Button>
           {busy === "download" ? (
-            <button
-              type="button"
-              className="secondary-button"
+            <Button
+              variant="secondary"
               onClick={() => {
                 if (downloadOperationId !== undefined) {
                   void cancelOcr(downloadOperationId);
                 }
               }}
             >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                cancel
+              </span>
               取消
-            </button>
+            </Button>
           ) : null}
           {available ? (
-            <button
-              type="button"
-              className="danger-button"
+            <Button
+              variant="danger"
               disabled={loading || busy !== undefined}
               onClick={() => void manage("remove")}
             >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                delete
+              </span>
               {busy === "remove" ? "正在移除" : "移除组件"}
-            </button>
+            </Button>
           ) : null}
         </div>
         {downloadInfo?.available !== true ? (

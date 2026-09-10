@@ -5,6 +5,7 @@ import {
   EditorDialogCloseButton,
   EditorDialogFooter,
 } from "../../shared/components/EditorDialog";
+import { Button } from "../../shared/ui/Button";
 import {
   createWorkbookCategory,
   normalizeQuestionBankError,
@@ -78,17 +79,20 @@ export function SegmentTrashDialog({
             <p>题目区域、作答记录和复习历史会随可恢复题目保留。</p>
           </div>
           <div className="question-bank-segment-trash-actions">
-            <button
-              type="button"
-              className="secondary-button"
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={loading || busy}
               onClick={onRefresh}
             >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                refresh
+              </span>
               刷新列表
-            </button>
-            <button
-              type="button"
-              className="danger-button"
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
               disabled={loading || busy || segments.length === 0}
               onClick={(event) => {
                 const count = segments.reduce(
@@ -105,10 +109,13 @@ export function SegmentTrashDialog({
                 onDeleteAll(event.currentTarget);
               }}
             >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                delete_forever
+              </span>
               {busyId === SEGMENT_TRASH_PURGE_BUSY_ID
                 ? "正在清空…"
                 : "一键清空"}
-            </button>
+            </Button>
           </div>
         </header>
         {error === undefined ? null : (
@@ -140,7 +147,7 @@ export function SegmentTrashDialog({
                         <span>{segment.documentTitle}</span>
                       </div>
                       <div className="question-bank-segment-trash-card-actions">
-                        <button
+                        <Button
                           ref={(button) => {
                             if (button === null) {
                               restoreButtonRefs.current.delete(segment.id);
@@ -148,8 +155,8 @@ export function SegmentTrashDialog({
                               restoreButtonRefs.current.set(segment.id, button);
                             }
                           }}
-                          type="button"
-                          className="secondary-button"
+                          variant="secondary"
+                          size="sm"
                           disabled={busy || conflict !== undefined}
                           aria-describedby={
                             conflict === undefined
@@ -160,11 +167,17 @@ export function SegmentTrashDialog({
                             onRestore(segment, event.currentTarget)
                           }
                         >
+                          <span
+                            className="material-symbols-rounded"
+                            aria-hidden="true"
+                          >
+                            restore_from_trash
+                          </span>
                           {busyId === segment.id ? "正在恢复…" : "恢复分段"}
-                        </button>
-                        <button
-                          type="button"
-                          className="danger-button"
+                        </Button>
+                        <Button
+                          variant="danger"
+                          size="sm"
                           disabled={busy}
                           onClick={(event) => {
                             if (
@@ -177,10 +190,16 @@ export function SegmentTrashDialog({
                             onDelete(segment, event.currentTarget);
                           }}
                         >
+                          <span
+                            className="material-symbols-rounded"
+                            aria-hidden="true"
+                          >
+                            delete
+                          </span>
                           {busyId === segmentTrashDeleteBusyId(segment.id)
                             ? "正在删除…"
                             : "彻底删除"}
-                        </button>
+                        </Button>
                       </div>
                     </header>
                     <dl className="question-bank-segment-trash-details">
@@ -314,9 +333,12 @@ export function CreateSubjectDialog({
           <EditorDialogCloseButton className="secondary-button" disabled={busy}>
             取消
           </EditorDialogCloseButton>
-          <button type="submit" className="primary-button" disabled={busy}>
+          <Button type="submit" variant="primary" disabled={busy}>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              add
+            </span>
             {busy ? "正在保存…" : "创建科目"}
-          </button>
+          </Button>
         </EditorDialogFooter>
       </form>
     </EditorDialog>
@@ -386,9 +408,12 @@ export function CreateWorkbookDialog({
           <EditorDialogCloseButton className="secondary-button" disabled={busy}>
             取消
           </EditorDialogCloseButton>
-          <button type="submit" className="primary-button" disabled={busy}>
+          <Button type="submit" variant="primary" disabled={busy}>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              add
+            </span>
             {busy ? "正在保存…" : "创建练习册"}
-          </button>
+          </Button>
         </EditorDialogFooter>
       </form>
     </EditorDialog>
