@@ -3597,7 +3597,8 @@ button:disabled {
   color: var(--color-text-title);
 }
 
-.paper-summary-stat-card.is-correct .paper-summary-stat-value {
+.paper-summary-stat-card.is-correct .paper-summary-stat-value,
+.paper-summary-stat-card.is-mastered .paper-summary-stat-value {
   color: #1c7a58;
 }
 
@@ -3605,7 +3606,8 @@ button:disabled {
   color: #b7791f;
 }
 
-.paper-summary-stat-card.is-incorrect .paper-summary-stat-value {
+.paper-summary-stat-card.is-incorrect .paper-summary-stat-value,
+.paper-summary-stat-card.is-failed .paper-summary-stat-value {
   color: #c53030;
 }
 
@@ -3671,7 +3673,8 @@ button:disabled {
   border-radius: var(--radius-sm);
 }
 
-.paper-summary-error-tag.is-incorrect {
+.paper-summary-error-tag.is-incorrect,
+.paper-summary-error-tag.is-failed {
   background: #fed7d7;
   color: #9b2c2c;
 }
