@@ -92,10 +92,58 @@ export function paperQuestionPosition(
   };
 }
 
+export interface PaperSubmissionSummary {
+  totalCount: number;
+  attemptedCount: number;
+  correctCount: number;
+  uncertainCount: number;
+  incorrectCount: number;
+  accuracyPercent: number;
+  incorrectQuestions: IndexedQuestion[];
+}
+
+export function calculatePaperSubmissionSummary(
+  questions: readonly IndexedQuestion[],
+  results: Readonly<Record<string, AttemptResult>>,
+): PaperSubmissionSummary {
+  let correctCount = 0;
+  let uncertainCount = 0;
+  let incorrectCount = 0;
+  const incorrectQuestions: IndexedQuestion[] = [];
+
+  for (const question of questions) {
+    const result = results[question.id];
+    if (result === "correct") {
+      correctCount += 1;
+    } else if (result === "uncertain") {
+      uncertainCount += 1;
+      incorrectQuestions.push(question);
+    } else if (result === "incorrect") {
+      incorrectCount += 1;
+      incorrectQuestions.push(question);
+    }
+  }
+
+  const attemptedCount = correctCount + uncertainCount + incorrectCount;
+  const accuracyPercent =
+    attemptedCount === 0
+      ? 0
+      : Math.round((correctCount / attemptedCount) * 100);
+
+  return {
+    totalCount: questions.length,
+    attemptedCount,
+    correctCount,
+    uncertainCount,
+    incorrectCount,
+    accuracyPercent,
+    incorrectQuestions,
+  };
+}
+
 export function isPaperNavigationTarget(target: EventTarget | null): boolean {
   if (typeof Element === "undefined") return false;
-  if (!(target instanceof Element)) return true;
-  if (target.closest('[role="dialog"]') !== null) return true;
+  if (!(target instanceof Element)) return false;
   if (
     target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement
@@ -105,6 +153,13 @@ export function isPaperNavigationTarget(target: EventTarget | null): boolean {
   if (
     target instanceof HTMLSelectElement ||
     (target instanceof HTMLElement && target.isContentEditable)
+  ) {
+    return true;
+  }
+  if (
+    target.closest(
+      ".paper-ai-analysis-dialog, .manual-index-dialog, .editor-dialog:not(.generated-paper-dialog)",
+    ) !== null
   ) {
     return true;
   }
@@ -121,4 +176,19 @@ export function shouldHandlePaperNavigationKey(
   if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
     return false;
   return !isPaperNavigationTarget(event.target);
+}
+
+export function paperResultFromKey(
+  event: Pick<
+    KeyboardEvent,
+    "key" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey" | "target"
+  >,
+): AttemptResult | undefined {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
+    return undefined;
+  if (isPaperNavigationTarget(event.target)) return undefined;
+  if (event.key === "1") return "correct";
+  if (event.key === "2") return "uncertain";
+  if (event.key === "3") return "incorrect";
+  return undefined;
 }

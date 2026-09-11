@@ -3535,6 +3535,193 @@ button:disabled {
   background: #f8d5d0;
 }
 
+/* Paper Practice Settlement / Summary */
+.paper-summary-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 8px 4px;
+}
+
+.paper-summary-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.paper-summary-icon {
+  font-size: 2.4rem;
+  color: var(--color-primary);
+}
+
+.paper-summary-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text-title);
+}
+
+.paper-summary-desc {
+  margin: 4px 0 0;
+  font-size: 0.88rem;
+  color: var(--color-text-subtle);
+}
+
+.paper-summary-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.paper-summary-stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-surface);
+  gap: 4px;
+}
+
+.paper-summary-stat-label {
+  font-size: 0.8rem;
+  color: var(--color-text-subtle);
+}
+
+.paper-summary-stat-value {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--color-text-title);
+}
+
+.paper-summary-stat-card.is-correct .paper-summary-stat-value {
+  color: #1c7a58;
+}
+
+.paper-summary-stat-card.is-uncertain .paper-summary-stat-value {
+  color: #b7791f;
+}
+
+.paper-summary-stat-card.is-incorrect .paper-summary-stat-value {
+  color: #c53030;
+}
+
+.paper-summary-stat-card.is-accuracy .paper-summary-stat-value {
+  color: var(--color-primary);
+}
+
+.paper-summary-actions-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.paper-summary-error-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.paper-summary-error-heading {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text-title);
+}
+
+.paper-summary-error-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.paper-summary-error-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-surface);
+}
+
+.paper-summary-error-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.paper-summary-error-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+}
+
+.paper-summary-error-tag.is-incorrect {
+  background: #fed7d7;
+  color: #9b2c2c;
+}
+
+.paper-summary-error-tag.is-uncertain {
+  background: #feebc8;
+  color: #975a16;
+}
+
+.paper-summary-error-title {
+  font-size: 0.88rem;
+  color: var(--color-text-title);
+}
+
+.paper-summary-error-meta {
+  font-size: 0.78rem;
+  color: var(--color-text-subtle);
+}
+
+.paper-summary-error-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.paper-summary-perfect {
+  padding: 20px;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1c7a58;
+  border-radius: var(--radius-md);
+  background: #edf7ed;
+  border: 1px solid #c8e6c9;
+}
+
+.paper-result-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 5px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.08);
+  margin-left: 4px;
+  line-height: 1.2;
+}
+
 .pdf-index-progress {
   margin: 0;
   padding: 10px 12px;
@@ -5579,6 +5766,13 @@ button:disabled {
   }
   .generated-paper-toolbar-actions button {
     width: 100%;
+  }
+  .paper-summary-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .paper-summary-error-item {
+    flex-direction: column;
+    align-items: flex-start;
   }
   .form-grid.two-columns {
     grid-template-columns: 1fr;

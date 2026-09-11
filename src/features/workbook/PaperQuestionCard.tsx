@@ -101,7 +101,7 @@ export function PaperQuestionCard({
         role="group"
         aria-label={`第 ${paperIndex + 1} 题结果`}
       >
-        {(["correct", "uncertain", "incorrect"] as const).map((option) => (
+        {(["correct", "uncertain", "incorrect"] as const).map((option, idx) => (
           <button
             key={option}
             type="button"
@@ -121,6 +121,7 @@ export function PaperQuestionCard({
                   : "cancel"}
             </span>
             <span>{attemptLabel(option)}</span>
+            <kbd className="paper-result-kbd">{idx + 1}</kbd>
           </button>
         ))}
       </div>

@@ -63,13 +63,16 @@ import {
   type PaperDraftRecipe,
 } from "./paperSetupPreferences";
 import {
+  calculatePaperSubmissionSummary,
   filterPaperQuestions,
   firstUnansweredPaperQuestionId,
   navigatePaperQuestion,
   paperQuestionPosition,
+  paperResultFromKey,
   selectPaperQuestionId,
   shouldHandlePaperNavigationKey,
   type PaperQuestionFilter,
+  type PaperSubmissionSummary,
   type PaperViewMode,
 } from "./paperNavigationModel";
 
@@ -472,6 +475,8 @@ export function PaperDialog({
   const [exporting, setExporting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [submittedSummary, setSubmittedSummary] =
+    useState<PaperSubmissionSummary>();
   const [draftStatus, setDraftStatus] = useState<
     "idle" | "saving" | "saved" | "failed"
   >("idle");
@@ -585,8 +590,28 @@ export function PaperDialog({
   };
 
   useEffect(() => {
-    if (mode !== "single" || busy) return;
+    if (mode !== "single" || busy || submittedSummary !== undefined) return;
     const handleKeyDown = (event: KeyboardEvent) => {
+      const attemptResult = paperResultFromKey(event);
+      if (attemptResult !== undefined && currentQuestionId !== "") {
+        event.preventDefault();
+        event.stopPropagation();
+        markDraftPending();
+        setResults((current) => ({
+          ...current,
+          [currentQuestionId]: attemptResult,
+        }));
+        const nextId = navigatePaperQuestion(
+          visiblePaperQuestions,
+          currentQuestionId,
+          "next",
+        );
+        if (nextId !== undefined) {
+          setActiveQuestionId(nextId);
+        }
+        return;
+      }
+
       if (!shouldHandlePaperNavigationKey(event)) return;
       const direction = event.key === "ArrowRight" ? "next" : "previous";
       const nextQuestionId = navigatePaperQuestion(
@@ -602,7 +627,14 @@ export function PaperDialog({
     };
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [busy, currentQuestionId, markDraftPending, mode, visiblePaperQuestions]);
+  }, [
+    busy,
+    currentQuestionId,
+    markDraftPending,
+    mode,
+    submittedSummary,
+    visiblePaperQuestions,
+  ]);
 
   useEffect(() => {
     if (mode !== "single" || currentQuestionId === "") return;
@@ -792,13 +824,49 @@ export function PaperDialog({
               pendingEntries,
             );
       clearPaperDraft();
-      onSaved(nextSnapshot);
+      onSnapshotChanged(nextSnapshot);
+      const nextRecordedResults = { ...results };
+      setRecordedResults(nextRecordedResults);
+      const summary = calculatePaperSubmissionSummary(paperQuestions, results);
+      setSubmittedSummary(summary);
+      setMessage("");
     } catch (error: unknown) {
       const normalized = normalizeQuestionBankError(error);
       setMessage(`${normalized.message} ${normalized.action}`.trim());
     } finally {
       setBusy(false);
     }
+  };
+
+  const retryIncorrectQuestions = () => {
+    if (
+      submittedSummary === undefined ||
+      submittedSummary.incorrectQuestions.length === 0
+    ) {
+      return;
+    }
+    const retryList = submittedSummary.incorrectQuestions;
+    markDraftPending();
+    setPaperQuestions(retryList);
+    setResults({});
+    setRecordedResults({});
+    setSelectedQuestionType("all");
+    setActiveQuestionId(retryList[0]?.id ?? "");
+    setSubmittedSummary(undefined);
+    setMessage(`已提取本卷 ${retryList.length} 道错题开始重做。`);
+  };
+
+  const doAnotherBatch = () => {
+    setSubmittedSummary(undefined);
+    refreshGeneratedPaper();
+  };
+
+  const reviewSubmittedPaper = () => {
+    setSubmittedSummary(undefined);
+  };
+
+  const finishAndClose = () => {
+    onSaved(snapshot);
   };
   const refreshGeneratedPaper = () => {
     if (recipe === undefined) {
@@ -844,142 +912,324 @@ export function PaperDialog({
   return (
     <>
       <EditorDialog
-        title="本次练习卷"
-        description={`${paperQuestions.length} 道题；做题时可以直接校正卡片，保存结果后会更新题库状态和错题队列。`}
+        title={submittedSummary !== undefined ? "作答完成结算" : "本次练习卷"}
+        description={
+          submittedSummary !== undefined
+            ? `本次共作答 ${submittedSummary.totalCount} 题，正确率 ${submittedSummary.accuracyPercent}%；记录已同步，可直接重练错题或进入下一组。`
+            : `${paperQuestions.length} 道题；做题时可以直接校正卡片，保存结果后会更新题库状态和错题队列。`
+        }
         dirty={draftStatus === "failed"}
         onRequestClose={onClose}
         onRequestBack={onRequestBack}
         backLabel={backLabel}
         closeDisabled={busy || draftStatus === "saving"}
         size="review"
+        className="generated-paper-dialog"
       >
         <div className="generated-paper">
-          <div className="generated-paper-toolbar">
-            <div>
-              <strong>
-                {draftStatus === "saving"
-                  ? "正在自动暂存…"
-                  : draftStatus === "failed"
-                    ? "自动暂存失败"
-                    : "本卷已自动暂存"}
-              </strong>
-              <span>
-                已登记 {Object.keys(results).length} / {paperQuestions.length}{" "}
-                道；
-                {draftStatus === "saved" && draftSavedAt !== undefined
-                  ? `最近保存于 ${new Date(draftSavedAt).toLocaleTimeString()}`
-                  : "请保持窗口打开并在需要时保存记录"}
-              </span>
+          {submittedSummary !== undefined ? (
+            <div className="paper-summary-container">
+              <div className="paper-summary-header">
+                <span
+                  className="material-symbols-rounded paper-summary-icon"
+                  aria-hidden="true"
+                >
+                  {submittedSummary.incorrectQuestions.length === 0
+                    ? "task_alt"
+                    : "fact_check"}
+                </span>
+                <div>
+                  <h3 className="paper-summary-title">练习卷作答结算</h3>
+                  <p className="paper-summary-desc">
+                    本卷所有答题记录已同步至题库与错题队列。
+                  </p>
+                </div>
+              </div>
+
+              <div className="paper-summary-stats-grid">
+                <div className="paper-summary-stat-card">
+                  <span className="paper-summary-stat-label">总题数</span>
+                  <strong className="paper-summary-stat-value">
+                    {submittedSummary.totalCount}
+                  </strong>
+                </div>
+                <div className="paper-summary-stat-card is-correct">
+                  <span className="paper-summary-stat-label">做对</span>
+                  <strong className="paper-summary-stat-value">
+                    {submittedSummary.correctCount}
+                  </strong>
+                </div>
+                <div className="paper-summary-stat-card is-uncertain">
+                  <span className="paper-summary-stat-label">不全对</span>
+                  <strong className="paper-summary-stat-value">
+                    {submittedSummary.uncertainCount}
+                  </strong>
+                </div>
+                <div className="paper-summary-stat-card is-incorrect">
+                  <span className="paper-summary-stat-label">做错</span>
+                  <strong className="paper-summary-stat-value">
+                    {submittedSummary.incorrectCount}
+                  </strong>
+                </div>
+                <div className="paper-summary-stat-card is-accuracy">
+                  <span className="paper-summary-stat-label">正确率</span>
+                  <strong className="paper-summary-stat-value">
+                    {submittedSummary.accuracyPercent}%
+                  </strong>
+                </div>
+              </div>
+
+              <div className="paper-summary-actions-strip">
+                {submittedSummary.incorrectQuestions.length > 0 ? (
+                  <Button variant="primary" onClick={retryIncorrectQuestions}>
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      replay
+                    </span>
+                    重练本卷错题（{submittedSummary.incorrectQuestions.length}{" "}
+                    题）
+                  </Button>
+                ) : null}
+                {recipe !== undefined ? (
+                  <Button variant="secondary" onClick={doAnotherBatch}>
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      autorenew
+                    </span>
+                    再来一组（同规则练习）
+                  </Button>
+                ) : null}
+                <Button variant="secondary" onClick={reviewSubmittedPaper}>
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    visibility
+                  </span>
+                  回顾本卷答卷
+                </Button>
+                <Button variant="ghost" onClick={finishAndClose}>
+                  完成并返回
+                </Button>
+              </div>
+
+              {submittedSummary.incorrectQuestions.length > 0 ? (
+                <div className="paper-summary-error-list-section">
+                  <h4 className="paper-summary-error-heading">
+                    待巩固题目清单（
+                    {submittedSummary.incorrectQuestions.length} 题）
+                  </h4>
+                  <div className="paper-summary-error-list">
+                    {submittedSummary.incorrectQuestions.map((q) => {
+                      const result = results[q.id];
+                      return (
+                        <div key={q.id} className="paper-summary-error-item">
+                          <div className="paper-summary-error-info">
+                            <span
+                              className={`paper-summary-error-tag is-${result}`}
+                            >
+                              {result === "uncertain" ? "不全对" : "做错"}
+                            </span>
+                            <strong className="paper-summary-error-title">
+                              第 {paperQuestions.indexOf(q) + 1} 题 ·{" "}
+                              {q.subjectName} · {q.chapter}
+                            </strong>
+                            <small className="paper-summary-error-meta">
+                              {q.workbookName} / 原题号 {q.questionNumber}
+                            </small>
+                          </div>
+                          <div className="paper-summary-error-item-actions">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setAiAnalysisQuestionId(q.id)}
+                            >
+                              <span
+                                className="material-symbols-rounded"
+                                aria-hidden="true"
+                              >
+                                psychology
+                              </span>
+                              辅助解析
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSubmittedSummary(undefined);
+                                selectOverviewQuestion(q.id);
+                              }}
+                            >
+                              查看题目
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="paper-summary-perfect">
+                  <p>恭喜！本卷题目全部掌握，继续保持！</p>
+                </div>
+              )}
             </div>
-            <div className="generated-paper-toolbar-actions">
-              <Button variant="secondary" size="sm" onClick={persistPaperDraft}>
-                <span className="material-symbols-rounded" aria-hidden="true">
-                  save_as
-                </span>
-                暂存本卷
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={recipe === undefined}
-                onClick={refreshGeneratedPaper}
-              >
-                <span className="material-symbols-rounded" aria-hidden="true">
-                  refresh
-                </span>
-                刷新组卷
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={paperQuestions.length === 0 || busy}
-                onClick={() => setExporting(true)}
-              >
-                <span className="material-symbols-rounded" aria-hidden="true">
-                  picture_as_pdf
-                </span>
-                导出 PDF（{paperQuestions.length} 题）
-              </Button>
-            </div>
-          </div>
-          <PaperQuestionNavigator
-            mode={mode}
-            selectedQuestionType={selectedQuestionType}
-            counts={questionTypeCounts}
-            filteredIndex={currentPosition?.filteredIndex}
-            filteredTotal={visiblePaperQuestions.length}
-            paperIndex={currentPosition?.paperIndex}
-            canGoPrevious={
-              currentPosition !== undefined && currentPosition.filteredIndex > 0
-            }
-            canGoNext={
-              currentPosition !== undefined &&
-              currentPosition.filteredIndex < currentPosition.filteredTotal - 1
-            }
-            questionOverview={questionOverview}
-            onModeChange={(nextMode) => {
-              markDraftPending();
-              savePaperViewMode(nextMode);
-              setMode(nextMode);
-            }}
-            onFilterChange={(filter) => {
-              markDraftPending();
-              setSelectedQuestionType(filter);
-              setActiveQuestionId(
-                selectPaperQuestionId(
-                  filterPaperQuestions(paperQuestions, filter),
-                  activeQuestionId,
-                  results,
-                ) ?? "",
-              );
-            }}
-            onPrevious={() => {
-              const next = navigatePaperQuestion(
-                visiblePaperQuestions,
-                currentQuestionId,
-                "previous",
-              );
-              if (next !== undefined) {
-                markDraftPending();
-                setActiveQuestionId(next);
-              }
-            }}
-            onNext={() => {
-              const next = navigatePaperQuestion(
-                visiblePaperQuestions,
-                currentQuestionId,
-                "next",
-              );
-              if (next !== undefined) {
-                markDraftPending();
-                setActiveQuestionId(next);
-              }
-            }}
-            onQuestionSelect={selectOverviewQuestion}
-            onNextUnanswered={selectNextUnanswered}
-          />
-          <div
-            id="generated-paper-list"
-            role="tabpanel"
-            aria-label={
-              selectedQuestionType === "all"
-                ? "全部题目"
-                : typeLabel(selectedQuestionType)
-            }
-          >
-            {visiblePaperQuestions.length === 0 ? (
-              <div className="generated-paper-empty">当前题型暂无题目。</div>
-            ) : (
-              <div className="generated-paper-list">
-                {(mode === "single"
-                  ? visiblePaperQuestions.filter(
-                      (question) => question.id === currentQuestionId,
-                    )
-                  : visiblePaperQuestions
-                ).map((question) => {
-                  const paperIndex = paperQuestions.findIndex(
-                    (item) => item.id === question.id,
+          ) : (
+            <>
+              <div className="generated-paper-toolbar">
+                <div>
+                  <strong>
+                    {draftStatus === "saving"
+                      ? "正在自动暂存…"
+                      : draftStatus === "failed"
+                        ? "自动暂存失败"
+                        : "本卷已自动暂存"}
+                  </strong>
+                  <span>
+                    已登记 {Object.keys(results).length} /{" "}
+                    {paperQuestions.length} 道；
+                    {draftStatus === "saved" && draftSavedAt !== undefined
+                      ? `最近保存于 ${new Date(draftSavedAt).toLocaleTimeString()}`
+                      : "请保持窗口打开并在需要时保存记录"}
+                  </span>
+                </div>
+                <div className="generated-paper-toolbar-actions">
+                  {Object.keys(results).length === paperQuestions.length ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() =>
+                        setSubmittedSummary(
+                          calculatePaperSubmissionSummary(
+                            paperQuestions,
+                            results,
+                          ),
+                        )
+                      }
+                    >
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        fact_check
+                      </span>
+                      查看作答结算
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={persistPaperDraft}
+                  >
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      save_as
+                    </span>
+                    暂存本卷
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={recipe === undefined}
+                    onClick={refreshGeneratedPaper}
+                  >
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      refresh
+                    </span>
+                    刷新组卷
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={paperQuestions.length === 0 || busy}
+                    onClick={() => setExporting(true)}
+                  >
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      picture_as_pdf
+                    </span>
+                    导出 PDF（{paperQuestions.length} 题）
+                  </Button>
+                </div>
+              </div>
+              <PaperQuestionNavigator
+                mode={mode}
+                selectedQuestionType={selectedQuestionType}
+                counts={questionTypeCounts}
+                filteredIndex={currentPosition?.filteredIndex}
+                filteredTotal={visiblePaperQuestions.length}
+                paperIndex={currentPosition?.paperIndex}
+                canGoPrevious={
+                  currentPosition !== undefined &&
+                  currentPosition.filteredIndex > 0
+                }
+                canGoNext={
+                  currentPosition !== undefined &&
+                  currentPosition.filteredIndex <
+                    currentPosition.filteredTotal - 1
+                }
+                questionOverview={questionOverview}
+                onModeChange={(nextMode) => {
+                  markDraftPending();
+                  savePaperViewMode(nextMode);
+                  setMode(nextMode);
+                }}
+                onFilterChange={(filter) => {
+                  markDraftPending();
+                  setSelectedQuestionType(filter);
+                  setActiveQuestionId(
+                    selectPaperQuestionId(
+                      filterPaperQuestions(paperQuestions, filter),
+                      activeQuestionId,
+                      results,
+                    ) ?? "",
                   );
+                }}
+                onPrevious={() => {
+                  const next = navigatePaperQuestion(
+                    visiblePaperQuestions,
+                    currentQuestionId,
+                    "previous",
+                  );
+                  if (next !== undefined) {
+                    markDraftPending();
+                    setActiveQuestionId(next);
+                  }
+                }}
+                onNext={() => {
+                  const next = navigatePaperQuestion(
+                    visiblePaperQuestions,
+                    currentQuestionId,
+                    "next",
+                  );
+                  if (next !== undefined) {
+                    markDraftPending();
+                    setActiveQuestionId(next);
+                  }
+                }}
+                onQuestionSelect={selectOverviewQuestion}
+                onNextUnanswered={selectNextUnanswered}
+              />
+              <div
+                className={`generated-paper-questions ${
+                  mode === "single"
+                    ? "is-single-question"
+                    : "is-continuous-list"
+                }`}
+              >
+                {visiblePaperQuestions.map((question) => {
+                  const paperIndex = paperQuestions.indexOf(question);
+                  if (mode === "single" && question.id !== currentQuestionId) {
+                    return null;
+                  }
                   return (
                     <div key={question.id}>
                       {mode === "continuous" &&
@@ -1016,8 +1266,8 @@ export function PaperDialog({
                   );
                 })}
               </div>
-            )}
-          </div>
+            </>
+          )}
           {message === "" ? null : (
             <p
               className="form-error"
@@ -1026,28 +1276,54 @@ export function PaperDialog({
               {message}
             </p>
           )}
-          <EditorDialogFooter className="editor-actions question-bank-dialog-footer">
-            <Button
-              variant="secondary"
-              disabled={busy}
-              onClick={() => void saveProgress()}
-            >
-              <span className="material-symbols-rounded" aria-hidden="true">
-                save
-              </span>
-              {busy ? "正在保存…" : "保存记录"}
-            </Button>
-            <Button
-              variant="primary"
-              disabled={busy}
-              onClick={() => void submitPaper()}
-            >
-              <span className="material-symbols-rounded" aria-hidden="true">
-                check_circle
-              </span>
-              {busy ? "正在提交…" : "提交组卷"}
-            </Button>
-          </EditorDialogFooter>
+          {submittedSummary !== undefined ? (
+            <EditorDialogFooter className="editor-actions question-bank-dialog-footer">
+              <Button variant="secondary" onClick={finishAndClose}>
+                完成并返回习题册
+              </Button>
+            </EditorDialogFooter>
+          ) : (
+            <EditorDialogFooter className="editor-actions question-bank-dialog-footer">
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => void saveProgress()}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  save
+                </span>
+                {busy ? "正在保存…" : "保存记录"}
+              </Button>
+              {pendingEntries.length === 0 &&
+              Object.keys(results).length === paperQuestions.length ? (
+                <Button
+                  variant="primary"
+                  disabled={busy}
+                  onClick={() =>
+                    setSubmittedSummary(
+                      calculatePaperSubmissionSummary(paperQuestions, results),
+                    )
+                  }
+                >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    fact_check
+                  </span>
+                  查看作答结算
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  disabled={busy}
+                  onClick={() => void submitPaper()}
+                >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    check_circle
+                  </span>
+                  {busy ? "正在提交…" : "提交组卷"}
+                </Button>
+              )}
+            </EditorDialogFooter>
+          )}
         </div>
       </EditorDialog>
       {aiAnalysisQuestion === undefined ? null : (
