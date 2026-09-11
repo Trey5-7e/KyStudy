@@ -1,4 +1,4 @@
-﻿import type { RefObject } from "react";
+import type { RefObject } from "react";
 
 import {
   type IndexedQuestion,
@@ -313,9 +313,11 @@ export function QuestionBankWindowPresenter({
           onClose={() => onCloseDialog("record")}
           onRequestBack={childBackLabel === undefined ? undefined : onBack}
           backLabel={childBackLabel}
-          onSaved={(next) => {
+          onSaved={(next, options) => {
             onSnapshotChanged(next);
-            onCloseDialog("record");
+            if (options?.close !== false) {
+              onCloseDialog("record");
+            }
           }}
         />
       ) : null}

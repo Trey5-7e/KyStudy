@@ -4343,6 +4343,13 @@ button:disabled {
   color: #9a382f;
 }
 
+.form-success {
+  margin: 0;
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
 .danger-text-button {
   border: 1px solid rgb(163 57 46 / 20%);
   color: #a3392e;

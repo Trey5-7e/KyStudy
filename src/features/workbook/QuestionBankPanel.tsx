@@ -826,6 +826,17 @@ export function QuestionBankPanel({
 
   const pageActions: ReactNode = (
     <>
+      {snapshot.questions.length > 0 ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            openExclusiveWindow(toolDialogWindow("record", "practice"));
+          }}
+        >
+          快速登记
+        </Button>
+      ) : null}
       <Button
         ref={importTriggerRef}
         variant="primary"
