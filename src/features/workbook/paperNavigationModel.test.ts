@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { IndexedQuestion } from "../../shared/tauri/questionBankClient";
 import {
+  calculatePaperSubmissionSummary,
   filterPaperQuestions,
   navigatePaperQuestion,
   paperQuestionPosition,
+  paperResultFromKey,
   selectPaperQuestionId,
   shouldHandlePaperNavigationKey,
 } from "./paperNavigationModel";
@@ -86,5 +88,67 @@ describe("paper navigation model", () => {
         target: null,
       }),
     ).toBe(false);
+  });
+
+  it("calculates paper submission summary accurately with incorrect question list", () => {
+    const summary = calculatePaperSubmissionSummary(questions, {
+      q1: "correct",
+      q2: "uncertain",
+      q3: "incorrect",
+    });
+
+    expect(summary.totalCount).toBe(3);
+    expect(summary.attemptedCount).toBe(3);
+    expect(summary.correctCount).toBe(1);
+    expect(summary.uncertainCount).toBe(1);
+    expect(summary.incorrectCount).toBe(1);
+    expect(summary.accuracyPercent).toBe(33);
+    expect(summary.incorrectQuestions.map((q) => q.id)).toEqual(["q2", "q3"]);
+  });
+
+  it("maps numeric keys 1, 2, 3 to attempt results when target is not a form element", () => {
+    expect(
+      paperResultFromKey({
+        key: "1",
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+        target: null,
+      }),
+    ).toBe("correct");
+
+    expect(
+      paperResultFromKey({
+        key: "2",
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+        target: null,
+      }),
+    ).toBe("uncertain");
+
+    expect(
+      paperResultFromKey({
+        key: "3",
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+        target: null,
+      }),
+    ).toBe("incorrect");
+
+    expect(
+      paperResultFromKey({
+        key: "4",
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+        target: null,
+      }),
+    ).toBeUndefined();
   });
 });
