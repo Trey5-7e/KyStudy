@@ -51,6 +51,7 @@ export function ReviewPanel({
   const [managementOpen, setManagementOpen] = useState(false);
   const [dismissedReviewRequest, setDismissedReviewRequest] =
     useState<number>();
+  const [internalOpenRequest, setInternalOpenRequest] = useState<number>();
   const [draft, setDraft] = useState<SchemeDraft>();
   const [initial, setInitial] = useState<SchemeDraft>();
   const version = useRef(0);
@@ -304,15 +305,17 @@ export function ReviewPanel({
         <ContinuousReviewPanel
           session={session}
           openRequest={
-            openRequest !== undefined && openRequest !== dismissedReviewRequest
+            (openRequest !== undefined && openRequest !== dismissedReviewRequest
               ? openRequest
-              : undefined
+              : undefined) ?? internalOpenRequest
           }
           onClose={() => {
             if (openRequest !== undefined) {
               setDismissedReviewRequest(openRequest);
             }
+            setInternalOpenRequest(undefined);
           }}
+          onStartReview={() => setInternalOpenRequest(Date.now())}
           busy={busy}
           onPrepare={() =>
             run(

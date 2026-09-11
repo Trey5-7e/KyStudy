@@ -70,3 +70,60 @@ export function buildContinuousReviewSession(
     latestCompletedQueueId,
   };
 }
+
+export interface ReviewSessionSummary {
+  totalCount: number;
+  completedCount: number;
+  masteredCount: number;
+  uncertainCount: number;
+  failedCount: number;
+  masteryPercent: number;
+  completedItems: ReviewSchemeQueueItem[];
+  uncertainOrFailedItems: ReviewSchemeQueueItem[];
+}
+
+export function calculateReviewSessionSummary(
+  queuedSchemes: readonly ReviewSchemeToday[],
+): ReviewSessionSummary {
+  const completedItems: ReviewSchemeQueueItem[] = [];
+  const uncertainOrFailedItems: ReviewSchemeQueueItem[] = [];
+  let masteredCount = 0;
+  let uncertainCount = 0;
+  let failedCount = 0;
+
+  for (const item of queuedSchemes) {
+    const queue = item.queue;
+    if (queue === undefined) continue;
+    for (const entry of queue.items) {
+      if (entry.state === "completed") {
+        completedItems.push(entry);
+        if (entry.rating === "mastered") {
+          masteredCount += 1;
+        } else if (entry.rating === "uncertain") {
+          uncertainCount += 1;
+          uncertainOrFailedItems.push(entry);
+        } else if (entry.rating === "failed") {
+          failedCount += 1;
+          uncertainOrFailedItems.push(entry);
+        }
+      }
+    }
+  }
+
+  const completedCount = completedItems.length;
+  const masteryPercent =
+    completedCount === 0
+      ? 0
+      : Math.round((masteredCount / completedCount) * 100);
+
+  return {
+    totalCount: completedCount,
+    completedCount,
+    masteredCount,
+    uncertainCount,
+    failedCount,
+    masteryPercent,
+    completedItems,
+    uncertainOrFailedItems,
+  };
+}
