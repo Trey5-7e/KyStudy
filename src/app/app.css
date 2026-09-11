@@ -3722,6 +3722,20 @@ button:disabled {
   box-shadow: 0 3px 9px rgb(39 124 88 / 20%);
 }
 
+.quick-record-matrix-mode-incorrect.is-active {
+  border-color: #ce786d;
+  color: #ffffff;
+  background: #a83e34;
+  box-shadow: 0 3px 9px rgb(168 62 52 / 20%);
+}
+
+.quick-record-matrix-mode-uncertain.is-active {
+  border-color: #d4a344;
+  color: #ffffff;
+  background: #b58117;
+  box-shadow: 0 3px 9px rgb(181 129 23 / 20%);
+}
+
 .quick-record-number-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
@@ -3750,7 +3764,8 @@ button:disabled {
     color 120ms ease,
     border-color 120ms ease,
     background-color 120ms ease,
-    transform 120ms ease;
+    transform 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .quick-record-number-cell:hover {
@@ -3771,6 +3786,11 @@ button:disabled {
   background: #e5f5ea;
 }
 
+.quick-record-number-cell.is-correct:hover {
+  border-color: #277c58;
+  background: #d4edd9;
+}
+
 .quick-record-number-cell.is-incorrect {
   border-style: solid;
   border-color: #ce786d;
@@ -3778,11 +3798,27 @@ button:disabled {
   background: #fff0ed;
 }
 
+.quick-record-number-cell.is-incorrect:hover {
+  border-color: #a83e34;
+  background: #ffe3de;
+}
+
 .quick-record-number-cell.is-uncertain {
   border-style: solid;
   border-color: #d4a344;
   color: #805a0c;
   background: #fff7de;
+}
+
+.quick-record-number-cell.is-uncertain:hover {
+  border-color: #b58117;
+  background: #ffefc4;
+}
+
+.quick-record-number-cell.is-staged {
+  box-shadow: 0 0 0 2px currentColor;
+  transform: translateY(-1px);
+  font-weight: 800;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -26,94 +26,16 @@ import {
   type QuestionScope,
 } from "./questionBankModel";
 import { completeScope, QuestionScopeFilters } from "./QuestionIndexDialogs";
-
-type MatrixMode = AttemptResult;
-type MatrixAction = MatrixMode | "clear";
-
-interface QuickRecordFields {
-  completed: string;
-  incorrect: string;
-  partial: string;
-}
-
-const MATRIX_MODE_OPTIONS: ReadonlyArray<{
-  value: MatrixMode;
-  label: string;
-}> = [
-  { value: "correct", label: "做对" },
-  { value: "incorrect", label: "做错" },
-  { value: "uncertain", label: "不全对" },
-];
-
-function parseMatrixNumbers(value: string): Set<string> {
-  try {
-    return new Set(parseQuestionNumberSelection(value));
-  } catch {
-    return new Set();
-  }
-}
-
-function formatMatrixNumbers(numbers: Set<string>): string {
-  return [...numbers]
-    .sort((left, right) => Number(left) - Number(right))
-    .join(",");
-}
-
-function updateMatrixFields(
-  fields: QuickRecordFields,
-  questionNumber: string,
-  action: MatrixAction,
-): QuickRecordFields {
-  const next = {
-    completed: parseMatrixNumbers(fields.completed),
-    incorrect: parseMatrixNumbers(fields.incorrect),
-    partial: parseMatrixNumbers(fields.partial),
-  };
-  next.completed.delete(questionNumber);
-  next.incorrect.delete(questionNumber);
-  next.partial.delete(questionNumber);
-  if (action !== "clear") {
-    const target =
-      action === "correct"
-        ? next.completed
-        : action === "incorrect"
-          ? next.incorrect
-          : next.partial;
-    target.add(questionNumber);
-  }
-  return {
-    completed: formatMatrixNumbers(next.completed),
-    incorrect: formatMatrixNumbers(next.incorrect),
-    partial: formatMatrixNumbers(next.partial),
-  };
-}
-
-function matrixStatusByNumber(
-  fields: QuickRecordFields,
-): ReadonlyMap<string, AttemptResult> {
-  const next = new Map<string, AttemptResult>();
-  for (const number of parseMatrixNumbers(fields.completed))
-    next.set(number, "correct");
-  for (const number of parseMatrixNumbers(fields.partial))
-    next.set(number, "uncertain");
-  for (const number of parseMatrixNumbers(fields.incorrect))
-    next.set(number, "incorrect");
-  return next;
-}
-
-function compareMatrixQuestions(
-  left: IndexedQuestion,
-  right: IndexedQuestion,
-): number {
-  const leftNumber = Number(left.questionNumber.trim());
-  const rightNumber = Number(right.questionNumber.trim());
-  const leftNumeric = Number.isSafeInteger(leftNumber);
-  const rightNumeric = Number.isSafeInteger(rightNumber);
-  if (leftNumeric && rightNumeric && leftNumber !== rightNumber)
-    return leftNumber - rightNumber;
-  if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
-  return left.questionNumber.localeCompare(right.questionNumber, "zh-CN");
-}
+import {
+  compareMatrixQuestions,
+  matrixCellStatus,
+  matrixStatusByNumber,
+  updateMatrixFields,
+  MATRIX_MODE_OPTIONS,
+  type MatrixAction,
+  type MatrixMode,
+  type QuickRecordFields,
+} from "./quickRecordModel";
 
 export interface QuickRecordSaveOptions {
   close?: boolean;
@@ -163,6 +85,10 @@ export function QuickRecordDialog({
   const matrixStatus = useMemo(
     () => matrixStatusByNumber(recordFields),
     [recordFields],
+  );
+  const savedCountInScope = useMemo(
+    () => matrixQuestions.filter((q) => q.currentResult !== undefined).length,
+    [matrixQuestions],
   );
 
   useEffect(() => {
@@ -320,8 +246,11 @@ export function QuickRecordDialog({
               <div>
                 <h3 id="quick-record-matrix-title">题号矩阵</h3>
                 <p aria-live="polite">
-                  已标记 {matrixStatus.size} / {matrixQuestions.length}{" "}
-                  题。选择标记后，可点击或按住鼠标左键拖动；再次点击同一题号可清除。
+                  本次标记 {matrixStatus.size} 题
+                  {savedCountInScope > 0
+                    ? `（已有记录 ${savedCountInScope} / ${matrixQuestions.length} 题）`
+                    : `（共 ${matrixQuestions.length} 题）`}
+                  。选择标记后，可点击或按住鼠标左键拖动；再次点击同一题号可清除本次标记。
                 </p>
               </div>
               <div
@@ -352,27 +281,26 @@ export function QuickRecordDialog({
               aria-label="可登记题号"
             >
               {matrixQuestions.map((question) => {
-                const status = matrixStatus.get(question.questionNumber);
+                const { effectiveStatus, isStaged, hasSavedStatus, label } =
+                  matrixCellStatus(
+                    question,
+                    matrixStatus.get(question.questionNumber),
+                  );
                 return (
                   <button
                     key={question.id}
                     type="button"
                     className={
                       "quick-record-number-cell" +
-                      (status === undefined ? "" : " is-" + status)
+                      (effectiveStatus === undefined
+                        ? ""
+                        : " is-" + effectiveStatus) +
+                      (isStaged ? " is-staged" : "") +
+                      (hasSavedStatus && !isStaged ? " has-saved-status" : "")
                     }
-                    aria-pressed={status !== undefined}
-                    aria-label={
-                      question.questionNumber +
-                      "题" +
-                      (status === undefined
-                        ? "未标记"
-                        : status === "correct"
-                          ? "做对"
-                          : status === "incorrect"
-                            ? "做错"
-                            : "不全对")
-                    }
+                    aria-pressed={isStaged}
+                    aria-label={label}
+                    title={label}
                     onPointerDown={(event) =>
                       handleMatrixPointerDown(event, question.questionNumber)
                     }
@@ -394,7 +322,7 @@ export function QuickRecordDialog({
               })}
             </div>
             <p className="quick-record-matrix-hint">
-              选择一种标记后点击题号即可登记，再次点击同一题号即可清除标记；按住鼠标左键可批量选择。
+              未做题目显示灰色，已有做题记录默认显示最新状态颜色。选择上方标记即可进行本次登记，再次点击同一题号可清除本次标记；按住鼠标左键可批量选择。
             </p>
           </section>
         )}
