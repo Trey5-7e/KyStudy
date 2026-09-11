@@ -30,6 +30,7 @@ export function ContinuousReviewPanel({
   onUndo,
   onManage,
   onStartReview,
+  onOpenInstantMistake,
 }: {
   session: ContinuousReviewSession;
   openRequest?: number;
@@ -44,6 +45,7 @@ export function ContinuousReviewPanel({
   onUndo(queueId: string): Promise<boolean>;
   onManage(): void;
   onStartReview?(): void;
+  onOpenInstantMistake?(): void;
 }) {
   const active = session.activeItem;
   const [retryQueue, setRetryQueue] = useState<ReviewSchemeQueueItem[]>();
@@ -155,8 +157,20 @@ export function ContinuousReviewPanel({
           <h3>今天没有到期题</h3>
           <p>错题库中当前没有到期需要复习的题目。</p>
           <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+            {onOpenInstantMistake && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={onOpenInstantMistake}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  bolt
+                </span>
+                立即刷错题
+              </Button>
+            )}
             <Button
-              variant="primary"
+              variant="secondary"
               size="sm"
               disabled={busy}
               onClick={() => void onPrepare()}
@@ -184,8 +198,20 @@ export function ContinuousReviewPanel({
             {summary.masteryPercent}%。
           </p>
           <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+            {onOpenInstantMistake && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={onOpenInstantMistake}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  bolt
+                </span>
+                立即刷错题
+              </Button>
+            )}
             <Button
-              variant="primary"
+              variant="secondary"
               size="sm"
               onClick={() => onStartReview?.()}
             >
@@ -232,6 +258,18 @@ export function ContinuousReviewPanel({
             </span>
             {session.completedCount > 0 ? "继续连续复习" : "开始连续复习"}
           </Button>
+          {onOpenInstantMistake && (
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={onOpenInstantMistake}
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                bolt
+              </span>
+              立即刷错题
+            </Button>
+          )}
           <Button
             variant="secondary"
             size="md"
@@ -354,6 +392,23 @@ export function ContinuousReviewPanel({
                     {summary.uncertainOrFailedItems.length} 题）
                   </Button>
                 ) : null}
+                {onOpenInstantMistake && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      onClose();
+                      onOpenInstantMistake();
+                    }}
+                  >
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      bolt
+                    </span>
+                    立即刷更多错题
+                  </Button>
+                )}
                 <Button variant="secondary" onClick={onManage}>
                   <span className="material-symbols-rounded" aria-hidden="true">
                     tune
