@@ -2,6 +2,7 @@ import type { IndexedQuestion } from "../../shared/tauri/questionBankClient";
 import type { AttemptResult } from "../../shared/tauri/questionClient";
 import type { PaperDraftRecipe } from "./paperSetupPreferences";
 import type { PaperViewState } from "./paperNavigationModel";
+import type { QuestionScope } from "./questionBankModel";
 
 export type QuestionBankTool =
   | "subject"
@@ -51,6 +52,9 @@ export type QuestionBankWindow =
       kind: "dialog";
       dialog: DialogKind;
       segmentId?: string;
+      initialScope?: Partial<QuestionScope>;
+      initialSubjectId?: string;
+      initialWorkbookId?: string;
       origin: QuestionBankWindowOrigin;
     }
   | {
@@ -89,14 +93,42 @@ export function toolDialogWindow(
   };
 }
 
+export function recordDialogWindow(
+  initialScope?: Partial<QuestionScope>,
+  origin: QuestionBankWindowOrigin = ROOT_WINDOW_ORIGIN,
+): Extract<QuestionBankWindow, { kind: "dialog" }> {
+  return {
+    kind: "dialog",
+    dialog: "record",
+    initialScope,
+    origin,
+  };
+}
+
+export function paperDialogWindow(
+  initialSubjectId?: string,
+  initialWorkbookId?: string,
+  origin: QuestionBankWindowOrigin = ROOT_WINDOW_ORIGIN,
+): Extract<QuestionBankWindow, { kind: "dialog" }> {
+  return {
+    kind: "dialog",
+    dialog: "paper",
+    initialSubjectId,
+    initialWorkbookId,
+    origin,
+  };
+}
+
 export function managerDialogWindow(
-  dialog: Extract<DialogKind, "browse" | "manual">,
+  dialog: Extract<DialogKind, "browse" | "manual" | "record">,
   segmentId: string,
+  initialScope?: Partial<QuestionScope>,
 ): Extract<QuestionBankWindow, { kind: "dialog" }> {
   return {
     kind: "dialog",
     dialog,
     segmentId,
+    initialScope,
     origin: { kind: "segment-manager", segmentId },
   };
 }

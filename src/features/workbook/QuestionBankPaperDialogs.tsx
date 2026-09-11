@@ -75,12 +75,16 @@ import {
 
 export function PaperSetupDialog({
   questions,
+  initialSubjectId,
+  initialWorkbookId,
   onClose,
   onRequestBack,
   backLabel,
   onGenerated,
 }: {
   questions: IndexedQuestion[];
+  initialSubjectId?: string;
+  initialWorkbookId?: string;
   onClose(): void;
   onRequestBack?(): void;
   backLabel?: string;
@@ -105,6 +109,11 @@ export function PaperSetupDialog({
     const availableSubjectIds = new Set(
       subjects.map((subject) => subject.subjectId),
     );
+    const targetSubjectId =
+      initialSubjectId !== undefined &&
+      availableSubjectIds.has(initialSubjectId)
+        ? initialSubjectId
+        : undefined;
     const rememberedSubjectIds = new Set(
       rememberedSpec === undefined
         ? []
@@ -113,17 +122,22 @@ export function PaperSetupDialog({
           ),
     );
     const subjectIds =
-      rememberedSubjectIds.size > 0
-        ? rememberedSubjectIds
-        : availableSubjectIds;
+      targetSubjectId !== undefined
+        ? new Set([targetSubjectId])
+        : rememberedSubjectIds.size > 0
+          ? rememberedSubjectIds
+          : availableSubjectIds;
     const rememberedSubjectQuotas =
       rememberedSpec?.subjectQuotas ?? rememberedQuotas;
+    const initialGroups =
+      initialWorkbookId !== undefined
+        ? [{ ...createPaperScopeGroup(1), workbookId: initialWorkbookId }]
+        : rememberedSpec === undefined
+          ? [createPaperScopeGroup(1)]
+          : clonePaperScopeGroups(rememberedSpec.scopeGroups ?? []);
     return {
       subjectIds,
-      scopeGroups:
-        rememberedSpec === undefined
-          ? [createPaperScopeGroup(1)]
-          : clonePaperScopeGroups(rememberedSpec.scopeGroups ?? []),
+      scopeGroups: initialGroups,
       subjectQuotas: new Map<string, PaperTypeQuotas>(
         subjects.map((subject) => [
           subject.subjectId,
@@ -133,7 +147,7 @@ export function PaperSetupDialog({
       ),
       statuses:
         rememberedSpec === undefined
-          ? new Set(STATUS_OPTIONS.map((value) => value.value))
+          ? new Set<PracticeStatus>(["unattempted", "incorrect"])
           : new Set(rememberedSpec.statuses),
     };
   });

@@ -33,6 +33,7 @@ export function SegmentManagerDialog({
   onRefresh,
   onBrowse,
   onContinueIndex,
+  onRecord,
 }: {
   snapshot: QuestionBankSnapshot;
   segment: WorkbookDocumentSegment;
@@ -45,6 +46,7 @@ export function SegmentManagerDialog({
   onRefresh(): Promise<QuestionBankSnapshot | undefined>;
   onBrowse(): void;
   onContinueIndex(): void;
+  onRecord?(): void;
 }) {
   const [mode, setMode] = useState<SegmentManagerMode>("overview");
   const [targetWorkbookId, setTargetWorkbookId] = useState(segment.workbookId);
@@ -276,6 +278,11 @@ export function SegmentManagerDialog({
                   {visibility === "browsable" ? "浏览题目" : "继续索引"}
                 </span>
               </Button>
+              {visibility === "browsable" && onRecord !== undefined ? (
+                <Button variant="secondary" disabled={busy} onClick={onRecord}>
+                  <span>登记做题</span>
+                </Button>
+              ) : null}
               <Button
                 variant="secondary"
                 disabled={busy}

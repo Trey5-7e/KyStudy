@@ -43,6 +43,7 @@ export interface QuickRecordSaveOptions {
 
 export function QuickRecordDialog({
   questions,
+  initialScope,
   timezone,
   onClose,
   onRequestBack,
@@ -50,6 +51,7 @@ export function QuickRecordDialog({
   onSaved,
 }: {
   questions: IndexedQuestion[];
+  initialScope?: Partial<QuestionScope>;
   timezone: string;
   onClose(): void;
   onRequestBack?(): void;
@@ -60,7 +62,7 @@ export function QuickRecordDialog({
   ): void;
 }) {
   const [scope, setScope] = useState<QuestionScope>(() =>
-    completeScope(questions, {}),
+    completeScope(questions, initialScope ?? {}),
   );
   const [recordFields, setRecordFields] = useState<QuickRecordFields>({
     completed: "",

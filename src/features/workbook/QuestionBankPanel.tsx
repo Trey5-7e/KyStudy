@@ -45,7 +45,9 @@ import { getWorkspaceStatus } from "../../shared/tauri/workspaceClient";
 import { type QuestionBankToolsStatus } from "./QuestionBankToolsDialog";
 import {
   managerDialogWindow,
+  paperDialogWindow,
   paperWindow,
+  recordDialogWindow,
   ROOT_WINDOW_ORIGIN,
   questionBankBackTarget,
   questionBankCloseTarget,
@@ -612,6 +614,21 @@ export function QuestionBankPanel({
     setActiveWindow(managerDialogWindow(kind, activeWindow.segmentId));
   };
 
+  const openManagerRecord = () => {
+    if (activeWindow?.kind !== "segment-manager") return;
+    const segment = snapshot.segments.find(
+      (item) => item.id === activeWindow.segmentId,
+    );
+    if (segment === undefined) return;
+    setSegmentManagerNotice("");
+    setActiveWindow(
+      managerDialogWindow("record", segment.id, {
+        subjectId: segment.subjectId,
+        workbookId: segment.workbookId,
+      }),
+    );
+  };
+
   const refreshTools = async (): Promise<void> => {
     setToolsRefreshBusy(true);
     setToolsRefreshStatus({ message: "正在刷新题库…", tone: "info" });
@@ -827,15 +844,26 @@ export function QuestionBankPanel({
   const pageActions: ReactNode = (
     <>
       {snapshot.questions.length > 0 ? (
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            openExclusiveWindow(toolDialogWindow("record", "practice"));
-          }}
-        >
-          快速登记
-        </Button>
+        <>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              openExclusiveWindow(recordDialogWindow());
+            }}
+          >
+            快速登记
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              openExclusiveWindow(paperDialogWindow());
+            }}
+          >
+            组卷做题
+          </Button>
+        </>
       ) : null}
       <Button
         ref={importTriggerRef}
@@ -1079,6 +1107,12 @@ export function QuestionBankPanel({
         <QuestionBankTree
           snapshot={snapshot}
           onManageSegment={openSegmentManager}
+          onQuickRecord={(subjectId, workbookId) => {
+            openExclusiveWindow(recordDialogWindow({ subjectId, workbookId }));
+          }}
+          onStartPaper={(subjectId, workbookId) => {
+            openExclusiveWindow(paperDialogWindow(subjectId, workbookId));
+          }}
         />
       ) : null}
 
@@ -1168,6 +1202,7 @@ export function QuestionBankPanel({
         }}
         onBrowseSegment={() => openManagerTool("browse")}
         onContinueIndex={() => openManagerTool("manual")}
+        onRecordSegment={openManagerRecord}
         onSnapshotChanged={applySnapshot}
         onPaperGenerated={(
           questions,

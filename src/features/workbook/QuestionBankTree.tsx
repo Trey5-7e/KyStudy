@@ -11,12 +11,16 @@ import { groupQuestionBankSnapshot } from "./questionBankHomeModel";
 export function QuestionBankTree({
   snapshot,
   onManageSegment,
+  onQuickRecord,
+  onStartPaper,
 }: {
   snapshot: QuestionBankSnapshot;
   onManageSegment(
     segment: WorkbookDocumentSegment,
     trigger: HTMLButtonElement,
   ): void;
+  onQuickRecord?(subjectId: string, workbookId: string): void;
+  onStartPaper?(subjectId: string, workbookId: string): void;
 }) {
   const subjects = useMemo(
     () => groupQuestionBankSnapshot(snapshot),
@@ -142,9 +146,45 @@ export function QuestionBankTree({
                             {workbook.workbookName}
                           </h4>
                         </div>
-                        <span>
-                          {completed}/{questions.length} 已做
-                        </span>
+                        <div className="question-bank-workbook-meta">
+                          <span>
+                            {completed}/{questions.length} 已做
+                          </span>
+                          {questions.length > 0 ? (
+                            <div className="question-bank-workbook-actions">
+                              {onQuickRecord !== undefined ? (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() =>
+                                    onQuickRecord(
+                                      subject.subjectId,
+                                      workbook.workbookId,
+                                    )
+                                  }
+                                >
+                                  快速登记
+                                </Button>
+                              ) : null}
+                              {onStartPaper !== undefined ? (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() =>
+                                    onStartPaper(
+                                      subject.subjectId,
+                                      workbook.workbookId,
+                                    )
+                                  }
+                                >
+                                  组卷
+                                </Button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
                       </header>
                       <div
                         className="question-bank-progress"
