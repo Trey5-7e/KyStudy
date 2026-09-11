@@ -3,7 +3,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type FormEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
@@ -116,6 +115,10 @@ function compareMatrixQuestions(
   return left.questionNumber.localeCompare(right.questionNumber, "zh-CN");
 }
 
+export interface QuickRecordSaveOptions {
+  close?: boolean;
+}
+
 export function QuickRecordDialog({
   questions,
   timezone,
@@ -129,7 +132,10 @@ export function QuickRecordDialog({
   onClose(): void;
   onRequestBack?(): void;
   backLabel?: string;
-  onSaved(snapshot: QuestionBankSnapshot): void;
+  onSaved(
+    snapshot: QuestionBankSnapshot,
+    options?: QuickRecordSaveOptions,
+  ): void;
 }) {
   const [scope, setScope] = useState<QuestionScope>(() =>
     completeScope(questions, {}),
@@ -141,11 +147,15 @@ export function QuickRecordDialog({
   });
   const [matrixMode, setMatrixMode] = useState<MatrixMode>("correct");
   const [message, setMessage] = useState("");
+  const [successNotice, setSuccessNotice] = useState("");
+  const [savedCount, setSavedCount] = useState(0);
   const [busy, setBusy] = useState(false);
   const draggingRef = useRef(false);
   const draggingActionRef = useRef<MatrixAction | null>(null);
   const scoped = questionsInScope(questions, scope);
   const { completed, incorrect, partial } = recordFields;
+  const hasUnsavedChanges =
+    completed !== "" || incorrect !== "" || partial !== "";
   const matrixQuestions = useMemo(
     () => [...scoped].sort(compareMatrixQuestions),
     [scoped],
@@ -169,12 +179,14 @@ export function QuickRecordDialog({
   }, []);
 
   const applyMatrixAction = (questionNumber: string, action: MatrixAction) => {
+    setSuccessNotice("");
     setRecordFields((current) =>
       updateMatrixFields(current, questionNumber, action),
     );
   };
 
   const toggleMatrixSelection = (questionNumber: string) => {
+    setSuccessNotice("");
     setRecordFields((current) => {
       const currentStatus = matrixStatusByNumber(current).get(questionNumber);
       const action: MatrixAction =
@@ -197,9 +209,9 @@ export function QuickRecordDialog({
     applyMatrixAction(questionNumber, action);
   };
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
+  const executeSave = async (continueRecording: boolean) => {
     setMessage("");
+    setSuccessNotice("");
     try {
       const completedNumbers = parseQuestionNumberSelection(completed);
       const incorrectNumbers = parseQuestionNumberSelection(incorrect);
@@ -238,7 +250,21 @@ export function QuickRecordDialog({
           result,
         })),
       );
-      onSaved(next);
+      const thisBatchCount = done.size;
+      setSavedCount((prev) => prev + thisBatchCount);
+      if (continueRecording) {
+        onSaved(next, { close: false });
+        setRecordFields({
+          completed: "",
+          incorrect: "",
+          partial: "",
+        });
+        setSuccessNotice(
+          `已成功保存 ${thisBatchCount} 道题的练习记录！可继续选择题号或切换范围继续登记。`,
+        );
+      } else {
+        onSaved(next, { close: true });
+      }
     } catch (error: unknown) {
       setMessage(
         error instanceof Error &&
@@ -258,7 +284,7 @@ export function QuickRecordDialog({
     <EditorDialog
       title="快速登记做题"
       description="只输入少量题号；“本次完成”中未列为做错或不全对的题会记为做对。"
-      dirty={completed !== "" || incorrect !== "" || partial !== ""}
+      dirty={hasUnsavedChanges}
       onRequestClose={onClose}
       onRequestBack={onRequestBack}
       backLabel={backLabel}
@@ -267,12 +293,18 @@ export function QuickRecordDialog({
     >
       <form
         className="editor-form quick-record-form"
-        onSubmit={(event) => void submit(event)}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void executeSave(false);
+        }}
       >
         <QuestionScopeFilters
           questions={questions}
           value={scope}
-          onChange={(value) => setScope(completeScope(questions, value))}
+          onChange={(value) => {
+            setScope(completeScope(questions, value));
+            setSuccessNotice("");
+          }}
           requireExact
         />
         <p className="form-hint" id="quick-record-save-reason">
@@ -374,12 +406,13 @@ export function QuickRecordDialog({
             autoComplete="off"
             placeholder="例如：1-20"
             value={completed}
-            onChange={(event) =>
+            onChange={(event) => {
+              setSuccessNotice("");
               setRecordFields((current) => ({
                 ...current,
                 completed: event.target.value,
-              }))
-            }
+              }));
+            }}
           />
           <small>这些题默认记为做对，下面两栏会覆盖对应题号。</small>
         </label>
@@ -391,12 +424,13 @@ export function QuickRecordDialog({
               autoComplete="off"
               placeholder="例如：2,7,15"
               value={incorrect}
-              onChange={(event) =>
+              onChange={(event) => {
+                setSuccessNotice("");
                 setRecordFields((current) => ({
                   ...current,
                   incorrect: event.target.value,
-                }))
-              }
+                }));
+              }}
             />
           </label>
           <label>
@@ -406,12 +440,13 @@ export function QuickRecordDialog({
               autoComplete="off"
               placeholder="例如：4,11"
               value={partial}
-              onChange={(event) =>
+              onChange={(event) => {
+                setSuccessNotice("");
                 setRecordFields((current) => ({
                   ...current,
                   partial: event.target.value,
-                }))
-              }
+                }));
+              }}
             />
           </label>
         </div>
@@ -420,20 +455,30 @@ export function QuickRecordDialog({
             {message}
           </p>
         )}
+        {successNotice === "" ? null : (
+          <p className="form-success" role="status">
+            {successNotice}
+          </p>
+        )}
         <EditorDialogFooter className="editor-actions question-bank-dialog-footer">
           <EditorDialogCloseButton className="secondary-button" disabled={busy}>
-            取消
+            {savedCount > 0 && !hasUnsavedChanges ? "完成" : "取消"}
           </EditorDialogCloseButton>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={busy || scoped.length === 0 || !hasUnsavedChanges}
+            onClick={() => void executeSave(true)}
+          >
+            {busy ? "正在保存…" : "保存并继续登记"}
+          </Button>
           <Button
             type="submit"
             variant="primary"
             aria-describedby="quick-record-save-reason"
-            disabled={busy || scoped.length === 0}
+            disabled={busy || scoped.length === 0 || !hasUnsavedChanges}
           >
-            <span className="material-symbols-rounded" aria-hidden="true">
-              save
-            </span>
-            {busy ? "正在保存…" : "保存本次练习"}
+            {busy ? "正在保存…" : "保存并退出"}
           </Button>
         </EditorDialogFooter>
       </form>
