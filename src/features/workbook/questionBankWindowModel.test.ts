@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { IndexedQuestion } from "../../shared/tauri/questionBankClient";
 import {
   managerDialogWindow,
+  paperDialogWindow,
   paperWindow,
   questionBankBackTarget,
   questionBankCloseTarget,
   questionBankWindowSegmentId,
+  recordDialogWindow,
   toolDialogWindow,
   toolWindow,
   type QuestionBankWindow,
@@ -106,5 +108,50 @@ describe("question bank window navigation", () => {
     expect(questionBankWindowSegmentId(dialog)).toBe("segment-2");
     expect(questionBankWindowSegmentId(paper)).toBe("segment-2");
     expect(questionBankWindowSegmentId(toolWindow("practice"))).toBeUndefined();
+  });
+
+  it("constructs root practice dialogs with pre-selected scopes", () => {
+    const record = recordDialogWindow({
+      subjectId: "math",
+      workbookId: "wb-1000",
+    });
+    expect(record).toEqual({
+      kind: "dialog",
+      dialog: "record",
+      initialScope: { subjectId: "math", workbookId: "wb-1000" },
+      origin: { kind: "root" },
+    });
+    expect(questionBankBackTarget(record)).toBeUndefined();
+
+    const paper = paperDialogWindow("math", "wb-1000");
+    expect(paper).toEqual({
+      kind: "dialog",
+      dialog: "paper",
+      initialSubjectId: "math",
+      initialWorkbookId: "wb-1000",
+      origin: { kind: "root" },
+    });
+    expect(questionBankBackTarget(paper)).toBeUndefined();
+  });
+
+  it("constructs segment manager record dialog and routes back to manager", () => {
+    const managerRecord = managerDialogWindow("record", "seg-880", {
+      subjectId: "math",
+      workbookId: "wb-880",
+    });
+
+    expect(managerRecord).toEqual({
+      kind: "dialog",
+      dialog: "record",
+      segmentId: "seg-880",
+      initialScope: { subjectId: "math", workbookId: "wb-880" },
+      origin: { kind: "segment-manager", segmentId: "seg-880" },
+    });
+    expect(questionBankBackTarget(managerRecord, new Set(["seg-880"]))).toEqual(
+      {
+        kind: "segment-manager",
+        segmentId: "seg-880",
+      },
+    );
   });
 });

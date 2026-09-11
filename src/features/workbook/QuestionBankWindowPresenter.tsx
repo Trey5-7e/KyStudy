@@ -88,6 +88,7 @@ export interface QuestionBankWindowPresenterProps {
   onSegmentRefresh: () => Promise<QuestionBankSnapshot | undefined>;
   onBrowseSegment: () => void;
   onContinueIndex: () => void;
+  onRecordSegment?: () => void;
   onSnapshotChanged: (next: QuestionBankSnapshot) => void;
   onPaperGenerated: (
     questions: IndexedQuestion[],
@@ -137,6 +138,7 @@ export function QuestionBankWindowPresenter({
   onSegmentRefresh,
   onBrowseSegment,
   onContinueIndex,
+  onRecordSegment,
   onSnapshotChanged,
   onPaperGenerated,
 }: QuestionBankWindowPresenterProps) {
@@ -215,6 +217,7 @@ export function QuestionBankWindowPresenter({
           onRefresh={onSegmentRefresh}
           onBrowse={onBrowseSegment}
           onContinueIndex={onContinueIndex}
+          onRecord={onRecordSegment}
         />
       )}
 
@@ -309,6 +312,11 @@ export function QuestionBankWindowPresenter({
       {dialog === "record" ? (
         <QuickRecordDialog
           questions={snapshot.questions}
+          initialScope={
+            activeWindow?.kind === "dialog"
+              ? activeWindow.initialScope
+              : undefined
+          }
           timezone={timezone}
           onClose={() => onCloseDialog("record")}
           onRequestBack={childBackLabel === undefined ? undefined : onBack}
@@ -324,6 +332,16 @@ export function QuestionBankWindowPresenter({
       {dialog === "paper" ? (
         <PaperSetupDialog
           questions={snapshot.questions}
+          initialSubjectId={
+            activeWindow?.kind === "dialog"
+              ? activeWindow.initialSubjectId
+              : undefined
+          }
+          initialWorkbookId={
+            activeWindow?.kind === "dialog"
+              ? activeWindow.initialWorkbookId
+              : undefined
+          }
           onClose={() => onCloseDialog("paper")}
           onRequestBack={childBackLabel === undefined ? undefined : onBack}
           backLabel={childBackLabel}
