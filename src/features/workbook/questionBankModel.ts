@@ -508,6 +508,7 @@ export function generateWeightedPaper(
   questions: readonly IndexedQuestion[],
   spec: PaperSpec,
   random: () => number = Math.random,
+  avoidQuestionIds?: ReadonlySet<string>,
 ): IndexedQuestion[] {
   const scopedQuestions =
     spec.scopeGroups === undefined
@@ -531,6 +532,7 @@ export function generateWeightedPaper(
         solution: spec.solutionCount,
       },
       random,
+      avoidQuestionIds,
     );
   }
   const subjectIds = [
@@ -547,6 +549,7 @@ export function generateWeightedPaper(
           solution: spec.solutionCount,
         },
         random,
+        avoidQuestionIds,
       ),
     ]),
   );
@@ -569,6 +572,7 @@ function samplePaperQuotas(
   candidates: readonly IndexedQuestion[],
   quotas: PaperTypeQuotas,
   random: () => number,
+  avoidQuestionIds?: ReadonlySet<string>,
 ): IndexedQuestion[] {
   const entries: ReadonlyArray<[QuestionType, number]> = [
     ["choice", quotas.choice],
@@ -580,6 +584,7 @@ function samplePaperQuotas(
       candidates.filter((question) => question.questionType === questionType),
       count,
       random,
+      avoidQuestionIds,
     ),
   );
 }
@@ -588,13 +593,20 @@ function weightedSampleWithoutReplacement(
   candidates: readonly IndexedQuestion[],
   requestedCount: number,
   random: () => number,
+  avoidQuestionIds?: ReadonlySet<string>,
 ): IndexedQuestion[] {
   const available = [...candidates];
   const selected: IndexedQuestion[] = [];
   const count = Math.min(Math.max(0, requestedCount), available.length);
   while (selected.length < count) {
-    const weights = available.map(questionWeight);
+    const weights = available.map((question) => {
+      const base = questionWeight(question);
+      return avoidQuestionIds !== undefined && avoidQuestionIds.has(question.id)
+        ? base * 0.05
+        : base;
+    });
     const total = weights.reduce((sum, value) => sum + value, 0);
+    if (total <= 0) break;
     let cursor = random() * total;
     let selectedIndex = available.length - 1;
     for (const [index, weight] of weights.entries()) {

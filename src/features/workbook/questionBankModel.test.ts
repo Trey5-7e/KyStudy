@@ -704,6 +704,38 @@ describe("question bank model", () => {
     ).toEqual(["choice", "choice", "blank"]);
   });
 
+  it("prioritizes questions not in avoidQuestionIds when generating weighted paper", () => {
+    const questions = [question("1", "choice"), question("2", "choice")];
+    const avoidIds = new Set(["1"]);
+    const result = generateWeightedPaper(
+      questions,
+      {
+        subjectId: "math",
+        statuses: new Set(["unattempted"]),
+        choiceCount: 1,
+        blankCount: 0,
+        solutionCount: 0,
+      },
+      () => 0.5,
+      avoidIds,
+    );
+    expect(result.map((q) => q.id)).toEqual(["2"]);
+
+    const fullResult = generateWeightedPaper(
+      questions,
+      {
+        subjectId: "math",
+        statuses: new Set(["unattempted"]),
+        choiceCount: 2,
+        blankCount: 0,
+        solutionCount: 0,
+      },
+      () => 0.5,
+      avoidIds,
+    );
+    expect(fullResult.map((q) => q.id)).toEqual(["2", "1"]);
+  });
+
   it("intersects fields inside one composable paper scope", () => {
     const questions = [
       {
