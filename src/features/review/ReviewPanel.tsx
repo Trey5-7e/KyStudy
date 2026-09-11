@@ -19,8 +19,15 @@ import {
   type ReviewSchemeCommandError,
   type ReviewSchemeDashboard,
 } from "../../shared/tauri/reviewSchemeClient";
+import {
+  getQuestionBank,
+  type IndexedQuestion,
+  type QuestionBankSnapshot,
+} from "../../shared/tauri/questionBankClient";
 import { buildContinuousReviewSession } from "./continuousReview";
 import { ContinuousReviewPanel } from "./ContinuousReviewPanel";
+import { InstantMistakeDialog } from "./InstantMistakeDialog";
+import { InstantMistakeDrillDialog } from "./InstantMistakeDrillDialog";
 import {
   RestDaySettings,
   SchemeCard,
@@ -54,12 +61,33 @@ export function ReviewPanel({
   const [internalOpenRequest, setInternalOpenRequest] = useState<number>();
   const [draft, setDraft] = useState<SchemeDraft>();
   const [initial, setInitial] = useState<SchemeDraft>();
+  const [instantMistakeSetupOpen, setInstantMistakeSetupOpen] = useState(false);
+  const [drillSession, setDrillSession] = useState<{
+    questions: IndexedQuestion[];
+    targetCount: number;
+    subjectId?: string;
+  }>();
+  const [questionBankSnapshot, setQuestionBankSnapshot] =
+    useState<QuestionBankSnapshot>();
   const version = useRef(0);
   const refresh = async () => {
     const v = ++version.current;
     setState({ kind: "loading" });
     const next = await loadReviewPage();
     if (v === version.current) setState(next);
+  };
+  const openInstantMistake = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const snapshot = await getQuestionBank();
+      setQuestionBankSnapshot(snapshot);
+      setInstantMistakeSetupOpen(true);
+    } catch (e) {
+      setError(normalizeReviewSchemeError(e));
+    } finally {
+      setBusy(false);
+    }
   };
   useEffect(() => {
     const v = ++version.current;
@@ -171,6 +199,17 @@ export function ReviewPanel({
               <span>返回今日复习</span>
             </Button>
           ) : null}
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={busy}
+            onClick={() => void openInstantMistake()}
+          >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              bolt
+            </span>
+            <span>立即刷错题</span>
+          </Button>
           <Button
             variant={showManagement ? "primary" : "secondary"}
             size="sm"
@@ -342,6 +381,37 @@ export function ReviewPanel({
             )
           }
           onManage={() => setManagementOpen(true)}
+          onOpenInstantMistake={() => void openInstantMistake()}
+        />
+      )}
+      {instantMistakeSetupOpen && questionBankSnapshot && (
+        <InstantMistakeDialog
+          questions={questionBankSnapshot.questions}
+          subjects={subjects}
+          onClose={() => setInstantMistakeSetupOpen(false)}
+          onStartDrill={(selectedQuestions, targetCount, subjectId) => {
+            setInstantMistakeSetupOpen(false);
+            setDrillSession({
+              questions: selectedQuestions,
+              targetCount,
+              subjectId,
+            });
+          }}
+        />
+      )}
+      {drillSession && questionBankSnapshot && (
+        <InstantMistakeDrillDialog
+          questions={drillSession.questions}
+          allQuestions={questionBankSnapshot.questions}
+          today={today}
+          targetCount={drillSession.targetCount}
+          subjectId={drillSession.subjectId}
+          onSnapshotUpdated={(next) => setQuestionBankSnapshot(next)}
+          onClose={() => setDrillSession(undefined)}
+          onComplete={() => {
+            setDrillSession(undefined);
+            void refresh();
+          }}
         />
       )}
     </PageSurface>

@@ -848,6 +848,140 @@
   margin-top: 0;
 }
 
+/* Instant Mistake Drill Dialog & Config */
+.instant-mistake-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5, 1.25rem);
+  padding: var(--space-2, 0.5rem) 0;
+}
+
+.instant-mistake-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 0.5rem);
+}
+
+.instant-mistake-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.instant-mistake-select {
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.instant-mistake-select:focus {
+  border-color: var(--color-accent);
+}
+
+.instant-mistake-pool-card {
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-subtle);
+}
+
+.instant-mistake-pool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.instant-mistake-pool-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.instant-mistake-pool-desc {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.instant-mistake-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.instant-mistake-pill {
+  padding: 0.45rem 0.85rem;
+  border-radius: 9999px;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.instant-mistake-pill:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  background: var(--color-bg-subtle);
+}
+
+.instant-mistake-pill.is-selected {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast, #ffffff);
+  font-weight: 600;
+}
+
+.instant-mistake-pill:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.instant-mistake-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.88rem;
+}
+
+.instant-mistake-custom-label {
+  color: var(--color-text-muted);
+}
+
+.instant-mistake-number-input {
+  width: 72px;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.instant-mistake-number-input:focus {
+  border-color: var(--color-accent);
+  outline: none;
+}
+
+.instant-mistake-custom-unit {
+  color: var(--color-text-muted);
+}
+
+.instant-mistake-custom-hint {
+  color: var(--color-warning, #d97706);
+  font-size: 0.8rem;
+}
+
 @media (max-width: 680px) {
   .workbook-classification-bar,
   .review-scheme-heading,
