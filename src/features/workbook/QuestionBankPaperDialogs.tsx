@@ -482,10 +482,15 @@ export function PaperDialog({
   >("idle");
   const [draftSavedAt, setDraftSavedAt] = useState<number>();
   const activeQuestionRef = useRef<HTMLElement>(null);
+  const latestSnapshotRef = useRef(snapshot);
+  useEffect(() => {
+    latestSnapshotRef.current = snapshot;
+  }, [snapshot]);
   const markDraftPending = useCallback(() => {
     if (recipe !== undefined) setDraftStatus("saving");
   }, [recipe]);
   const applySnapshot = (next: QuestionBankSnapshot) => {
+    latestSnapshotRef.current = next;
     markDraftPending();
     onSnapshotChanged(next);
     const nextPaperQuestions = paperQuestions.flatMap((question) => {
@@ -788,6 +793,7 @@ export function PaperDialog({
         localDateForTimezone(new Date(), timezone),
         pendingEntries,
       );
+      latestSnapshotRef.current = nextSnapshot;
       onSnapshotChanged(nextSnapshot);
       const nextRecordedResults = { ...results };
       setRecordedResults(nextRecordedResults);
@@ -818,11 +824,12 @@ export function PaperDialog({
     try {
       const nextSnapshot =
         pendingEntries.length === 0
-          ? snapshot
+          ? latestSnapshotRef.current
           : await recordBulkQuestionAttempts(
               localDateForTimezone(new Date(), timezone),
               pendingEntries,
             );
+      latestSnapshotRef.current = nextSnapshot;
       clearPaperDraft();
       onSnapshotChanged(nextSnapshot);
       const nextRecordedResults = { ...results };
@@ -857,35 +864,18 @@ export function PaperDialog({
   };
 
   const doAnotherBatch = () => {
-    setSubmittedSummary(undefined);
-    refreshGeneratedPaper();
-  };
-
-  const reviewSubmittedPaper = () => {
-    setSubmittedSummary(undefined);
-  };
-
-  const finishAndClose = () => {
-    onSaved(snapshot);
-  };
-  const refreshGeneratedPaper = () => {
     if (recipe === undefined) {
       setMessage("当前练习卷没有可刷新的组卷规则。");
       return;
     }
-    if (Object.keys(results).length > 0 && pendingEntries.length === 0) {
-      setMessage("本卷已有已保存记录，请提交本卷或返回后新建组卷。");
-      return;
-    }
-    if (
-      Object.keys(results).length > 0 &&
-      !window.confirm("刷新将放弃尚未提交的当前作答标记，确定继续吗？")
-    ) {
-      return;
-    }
+    const avoidIds = new Set(paperQuestions.map((q) => q.id));
+    const currentSnapshot = latestSnapshotRef.current;
+    const spec = paperSpecFromDraftRecipe(recipe);
     const refreshed = generateWeightedPaper(
-      snapshot.questions,
-      paperSpecFromDraftRecipe(recipe),
+      currentSnapshot.questions,
+      spec,
+      Math.random,
+      avoidIds,
     );
     if (refreshed.length === 0) {
       setMessage("当前题库和原组卷条件下没有可用题目，暂未刷新。");
@@ -897,6 +887,7 @@ export function PaperDialog({
     setRecordedResults({});
     setSelectedQuestionType("all");
     setActiveQuestionId(refreshed[0]?.id ?? "");
+    setSubmittedSummary(undefined);
     savePaperDraft({
       questionIds: refreshed.map((question) => question.id),
       recipe,
@@ -907,7 +898,56 @@ export function PaperDialog({
       },
       savedAt: Date.now(),
     });
-    setMessage("已按上次组卷规则刷新题目。");
+    setMessage("已为您重新抽取新一套练习卷，请开始作答。");
+  };
+
+  const reviewSubmittedPaper = () => {
+    setSubmittedSummary(undefined);
+  };
+
+  const finishAndClose = () => {
+    onSaved(latestSnapshotRef.current);
+  };
+  const refreshGeneratedPaper = () => {
+    if (recipe === undefined) {
+      setMessage("当前练习卷没有可刷新的组卷规则。");
+      return;
+    }
+    if (
+      pendingEntries.length > 0 &&
+      !window.confirm("刷新将放弃尚未保存的当前作答标记，确定继续吗？")
+    ) {
+      return;
+    }
+    const avoidIds = new Set(paperQuestions.map((q) => q.id));
+    const refreshed = generateWeightedPaper(
+      latestSnapshotRef.current.questions,
+      paperSpecFromDraftRecipe(recipe),
+      Math.random,
+      avoidIds,
+    );
+    if (refreshed.length === 0) {
+      setMessage("当前题库和原组卷条件下没有可用题目，暂未刷新。");
+      return;
+    }
+    markDraftPending();
+    setPaperQuestions(refreshed);
+    setResults({});
+    setRecordedResults({});
+    setSelectedQuestionType("all");
+    setActiveQuestionId(refreshed[0]?.id ?? "");
+    setSubmittedSummary(undefined);
+    savePaperDraft({
+      questionIds: refreshed.map((question) => question.id),
+      recipe,
+      view: {
+        mode,
+        selectedQuestionType: "all",
+        activeQuestionId: refreshed[0]?.id,
+      },
+      savedAt: Date.now(),
+    });
+    setMessage("已按上次组卷规则重新抽取新一组题目。");
   };
   return (
     <>
