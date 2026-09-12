@@ -7,6 +7,7 @@ import {
   type AppView,
   type PrimaryAppView,
 } from "./navigation";
+import { PAGE_META } from "./AppPageContent";
 
 export const PRIMARY_NAVIGATION: ReadonlyArray<{
   id: PrimaryAppView;
@@ -51,6 +52,18 @@ export const PRIMARY_NAVIGATION: ReadonlyArray<{
     caption: "Provider、模型与预算",
     icon: "tune",
   },
+];
+
+export const MOBILE_PRIMARY_NAVIGATION: ReadonlyArray<{
+  id: PrimaryAppView;
+  label: string;
+  icon: string;
+}> = [
+  { id: "today", label: "今日", icon: "wb_sunny" },
+  { id: "planning", label: "计划", icon: "calendar_month" },
+  { id: "workbook", label: "习题册", icon: "menu_book" },
+  { id: "review", label: "错题", icon: "rate_review" },
+  { id: "library", label: "资料", icon: "local_library" },
 ];
 
 export interface AppNavigationProps {
@@ -119,54 +132,131 @@ export function AppNavigation({
   onOpenCommandPalette,
 }: AppNavigationProps) {
   const activePrimaryView = primaryViewFor(activeView);
+  const currentMeta = PAGE_META[activeView] ?? PAGE_META["today"];
+
   return (
-    <aside className="app-sidebar">
-      <AppBrand />
+    <>
+      {/* 桌面端垂直侧边栏 */}
+      <aside className="app-sidebar">
+        <AppBrand />
 
-      {onOpenCommandPalette && (
-        <button
-          type="button"
-          className="command-palette-trigger"
-          onClick={onOpenCommandPalette}
-          aria-label="打开快捷动作面板 (Ctrl+K)"
-        >
-          <span className="command-palette-trigger-left">
-            <span className="material-symbols-rounded" aria-hidden="true">
-              search
+        {onOpenCommandPalette && (
+          <button
+            type="button"
+            className="command-palette-trigger"
+            onClick={onOpenCommandPalette}
+            aria-label="打开快捷动作面板 (Ctrl+K)"
+          >
+            <span className="command-palette-trigger-left">
+              <span className="material-symbols-rounded" aria-hidden="true">
+                search
+              </span>
+              <span>快捷命令…</span>
             </span>
-            <span>快捷命令…</span>
-          </span>
-          <kbd>Ctrl K</kbd>
-        </button>
-      )}
+            <kbd>Ctrl K</kbd>
+          </button>
+        )}
 
-      <nav className="app-navigation" aria-label="主菜单">
-        {PRIMARY_NAVIGATION.map((item) => {
+        <nav className="app-navigation" aria-label="主菜单">
+          {PRIMARY_NAVIGATION.map((item) => {
+            const isActive = item.id === activePrimaryView;
+            return (
+              <a
+                key={item.id}
+                href={`#${item.id}`}
+                className={isActive ? "app-nav-active" : undefined}
+                aria-current={isActive ? "page" : undefined}
+                onClick={(event) =>
+                  handleNavigationClick(event, item.id, onNavigate)
+                }
+              >
+                <span
+                  className="material-symbols-rounded app-nav-icon"
+                  aria-hidden="true"
+                >
+                  {item.icon}
+                </span>
+                <strong>{item.label}</strong>
+                <small className="app-nav-caption">{item.caption}</small>
+              </a>
+            );
+          })}
+        </nav>
+
+        <SettingsLink activeView={activeView} onNavigate={onNavigate} />
+      </aside>
+
+      {/* 移动端/窄屏顶部极简状态栏 */}
+      <header className="app-mobile-top-bar" aria-label="移动端顶部栏">
+        <div className="app-mobile-brand">
+          <img
+            className="app-mobile-brand-icon"
+            src={kystudyIcon}
+            alt=""
+            aria-hidden="true"
+          />
+          <div className="app-mobile-title-group">
+            <strong className="app-mobile-title">KyStudy</strong>
+            <span className="app-mobile-page-badge">{currentMeta.label}</span>
+          </div>
+        </div>
+
+        <div className="app-mobile-top-actions">
+          {onOpenCommandPalette && (
+            <button
+              type="button"
+              className="app-mobile-action-btn"
+              onClick={onOpenCommandPalette}
+              aria-label="打开快捷动作面板"
+              title="快捷搜索与命令"
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                search
+              </span>
+            </button>
+          )}
+          <a
+            href="#settings"
+            className={`app-mobile-action-btn ${activeView === "settings" ? "is-active" : ""}`}
+            aria-current={activeView === "settings" ? "page" : undefined}
+            onClick={(event) =>
+              handleNavigationClick(event, "settings", onNavigate)
+            }
+            aria-label="前往设置"
+            title="设置"
+          >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              settings
+            </span>
+          </a>
+        </div>
+      </header>
+
+      {/* 移动端/窄屏底部五项主导航 */}
+      <nav className="app-mobile-bottom-nav" aria-label="移动端底部导航">
+        {MOBILE_PRIMARY_NAVIGATION.map((item) => {
           const isActive = item.id === activePrimaryView;
           return (
             <a
               key={item.id}
               href={`#${item.id}`}
-              className={isActive ? "app-nav-active" : undefined}
+              className={`app-mobile-nav-item ${isActive ? "app-mobile-nav-active" : ""}`}
               aria-current={isActive ? "page" : undefined}
               onClick={(event) =>
                 handleNavigationClick(event, item.id, onNavigate)
               }
             >
               <span
-                className="material-symbols-rounded app-nav-icon"
+                className="material-symbols-rounded app-mobile-nav-icon"
                 aria-hidden="true"
               >
                 {item.icon}
               </span>
-              <strong>{item.label}</strong>
-              <small className="app-nav-caption">{item.caption}</small>
+              <span className="app-mobile-nav-label">{item.label}</span>
             </a>
           );
         })}
       </nav>
-
-      <SettingsLink activeView={activeView} onNavigate={onNavigate} />
-    </aside>
+    </>
   );
 }
