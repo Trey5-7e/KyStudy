@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   recordBulkQuestionAttempts,
   type IndexedQuestion,
@@ -11,6 +11,7 @@ import type {
 } from "../../shared/tauri/questionClient";
 import { Badge } from "../../shared/ui/Badge";
 import { Button } from "../../shared/ui/Button";
+import { EditorDialog } from "../../shared/components/EditorDialog";
 import { QuestionRegionCard } from "./QuestionRegionCard";
 import { QuestionAiAnalysis } from "./QuestionAiAnalysis";
 import { PaperExportDialog } from "../workbook/PaperExportDialog";
@@ -56,7 +57,7 @@ export function MistakeNotebookView({
     sortBy: "priority",
   });
 
-  const [expandedQuestionId, setExpandedQuestionId] = useState<string>();
+  const [previewQuestionId, setPreviewQuestionId] = useState<string>();
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportNotice, setExportNotice] = useState<string>();
   const [markingId, setMarkingId] = useState<string>();
@@ -78,6 +79,51 @@ export function MistakeNotebookView({
     () => filterMistakeNotebook(questions, filter),
     [questions, filter],
   );
+
+  const previewIndex = useMemo(
+    () =>
+      previewQuestionId === undefined
+        ? -1
+        : filteredQuestions.findIndex((q) => q.id === previewQuestionId),
+    [filteredQuestions, previewQuestionId],
+  );
+
+  const previewQuestion = useMemo(
+    () =>
+      previewIndex >= 0
+        ? filteredQuestions[previewIndex]
+        : previewQuestionId === undefined
+          ? undefined
+          : questions.find((q) => q.id === previewQuestionId),
+    [filteredQuestions, previewIndex, previewQuestionId, questions],
+  );
+
+  useEffect(() => {
+    if (!previewQuestionId) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        if (previewIndex > 0) {
+          const prev = filteredQuestions[previewIndex - 1];
+          if (prev) setPreviewQuestionId(prev.id);
+        }
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        if (previewIndex >= 0 && previewIndex < filteredQuestions.length - 1) {
+          const next = filteredQuestions[previewIndex + 1];
+          if (next) setPreviewQuestionId(next.id);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [previewQuestionId, previewIndex, filteredQuestions]);
 
   const handleStatusChange = (status: MistakeStatusFilter) => {
     setFilter((prev) => ({ ...prev, status }));
@@ -345,7 +391,6 @@ export function MistakeNotebookView({
           {filteredQuestions.map((q, index) => {
             const isPending = isMistakePending(q);
             const isMastered = isMistakeMastered(q);
-            const isExpanded = expandedQuestionId === q.id;
             const subjectName =
               subjectsById.get(q.subjectId) ??
               workbooksById.get(q.workbookId) ??
@@ -466,35 +511,18 @@ export function MistakeNotebookView({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() =>
-                        setExpandedQuestionId(isExpanded ? undefined : q.id)
-                      }
+                      onClick={() => setPreviewQuestionId(q.id)}
                     >
                       <span
                         className="material-symbols-rounded"
                         aria-hidden="true"
                       >
-                        {isExpanded ? "expand_less" : "expand_more"}
+                        visibility
                       </span>
-                      <span>{isExpanded ? "收起题目" : "查看题目切片"}</span>
+                      <span>查看题目切片</span>
                     </Button>
                   </div>
                 </footer>
-
-                {isExpanded ? (
-                  <div className="mistake-card-preview-drawer">
-                    <QuestionRegionCard
-                      documentId={q.documentId}
-                      regions={q.regions}
-                      title={q.title}
-                    />
-                    <QuestionAiAnalysis
-                      key={q.id}
-                      question={q}
-                      regions={q.regions}
-                    />
-                  </div>
-                ) : null}
               </article>
             );
           })}
@@ -509,6 +537,135 @@ export function MistakeNotebookView({
             setExportNotice(msg);
           }}
         />
+      ) : null}
+      {previewQuestion !== undefined ? (
+        <EditorDialog
+          title={`题目切片与解析 · 第 ${previewIndex >= 0 ? previewIndex + 1 : 1} 题`}
+          description={`${previewQuestion.title} · ${subjectsById.get(previewQuestion.subjectId) ?? previewQuestion.subjectName ?? "通用科目"} / ${workbooksById.get(previewQuestion.workbookId) ?? previewQuestion.workbookName ?? "习题册"} · 累计做错 ${previewQuestion.incorrectCount} 次`}
+          dirty={false}
+          onRequestClose={() => setPreviewQuestionId(undefined)}
+          size="review"
+        >
+          <div className="mistake-preview-dialog-body">
+            <div className="mistake-preview-dialog-toolbar">
+              <div className="mistake-preview-dialog-nav">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={previewIndex <= 0}
+                  onClick={() => {
+                    if (previewIndex > 0) {
+                      const prev = filteredQuestions[previewIndex - 1];
+                      if (prev) setPreviewQuestionId(prev.id);
+                    }
+                  }}
+                >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    navigate_before
+                  </span>
+                  <span>上一题</span>
+                </Button>
+                <strong>
+                  {previewIndex >= 0 ? previewIndex + 1 : 1} /{" "}
+                  {filteredQuestions.length}
+                </strong>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={
+                    previewIndex < 0 ||
+                    previewIndex >= filteredQuestions.length - 1
+                  }
+                  onClick={() => {
+                    if (
+                      previewIndex >= 0 &&
+                      previewIndex < filteredQuestions.length - 1
+                    ) {
+                      const next = filteredQuestions[previewIndex + 1];
+                      if (next) setPreviewQuestionId(next.id);
+                    }
+                  }}
+                >
+                  <span>下一题</span>
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    navigate_next
+                  </span>
+                </Button>
+              </div>
+
+              <div className="mistake-preview-dialog-actions">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => {
+                    onStartDrill(
+                      [previewQuestion],
+                      1,
+                      previewQuestion.subjectId,
+                    );
+                    setPreviewQuestionId(undefined);
+                  }}
+                >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    bolt
+                  </span>
+                  <span>特训此题</span>
+                </Button>
+                {onSnapshotUpdated !== undefined ? (
+                  isMistakePending(previewQuestion) ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={busy || markingId === previewQuestion.id}
+                      onClick={() =>
+                        void handleQuickMark(previewQuestion.id, "correct")
+                      }
+                    >
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        check_circle
+                      </span>
+                      <span>标为已攻克</span>
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={busy || markingId === previewQuestion.id}
+                      onClick={() =>
+                        void handleQuickMark(previewQuestion.id, "incorrect")
+                      }
+                    >
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        restart_alt
+                      </span>
+                      <span>移回待攻克</span>
+                    </Button>
+                  )
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mistake-preview-dialog-content">
+              <QuestionRegionCard
+                documentId={previewQuestion.documentId}
+                regions={previewQuestion.regions}
+                title={previewQuestion.title}
+              />
+              <QuestionAiAnalysis
+                key={previewQuestion.id}
+                question={previewQuestion}
+                regions={previewQuestion.regions}
+              />
+            </div>
+          </div>
+        </EditorDialog>
       ) : null}
     </div>
   );
