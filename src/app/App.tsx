@@ -127,7 +127,7 @@ export function App() {
     () => [
       {
         id: "action-instant-drill",
-        title: "⚡ 立即刷错题",
+        title: "立即刷错题",
         description: "自选错题数量或科目，即刻按照错题优先级算法推送刷题",
         category: "action",
         icon: "bolt",
@@ -140,7 +140,7 @@ export function App() {
       },
       {
         id: "action-quick-record",
-        title: "📝 快速登记做题",
+        title: "快速登记做题",
         description: "打开习题册矩阵打标，快速录入近期练习正确/错误结果",
         category: "action",
         icon: "edit_note",
@@ -155,7 +155,7 @@ export function App() {
       },
       {
         id: "action-smart-paper",
-        title: "📑 智能组卷练习",
+        title: "智能组卷练习",
         description: "从习题册自选或恢复草稿，按题型与分段开启模拟卷",
         category: "action",
         icon: "assignment",
@@ -170,7 +170,7 @@ export function App() {
       },
       {
         id: "action-today-review",
-        title: "🔄 开始今日连续复习",
+        title: "开始今日连续复习",
         description: "进入错题复习队列，按顺延算法与记忆曲线连续答题",
         category: "action",
         icon: "rate_review",

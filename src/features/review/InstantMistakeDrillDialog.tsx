@@ -200,7 +200,7 @@ export function InstantMistakeDrillDialog({
   const dialogTitle = inRetry
     ? `待巩固错题重练（${retryIndex + 1} / ${retryQueue?.length} 题）`
     : !isFinished
-      ? `⚡ 错题即时特训（${currentIndex + 1} / ${currentBatch.length} 题）`
+      ? `错题即时特训（${currentIndex + 1} / ${currentBatch.length} 题）`
       : "错题即时特训完成结算";
 
   const dialogDesc = inRetry
