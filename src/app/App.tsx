@@ -92,7 +92,7 @@ export function App() {
       setReviewOpenRequest(undefined);
       setWorkbookOpenRequest(undefined);
       setResourceOpenRequest(undefined);
-      setAiChatOpenMode(undefined);
+      setAiChatOpenMode("chat");
       setActiveView("ai-chat");
       storeView("ai-chat");
       if (window.location.hash !== "#ai-chat") {

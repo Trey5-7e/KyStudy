@@ -14,6 +14,7 @@ import {
 } from "../../shared/tauri/aiClient";
 import type { IndexedQuestion } from "../../shared/tauri/questionBankClient";
 import { AiChatPanel } from "./AiChatPanel";
+import { AI_CHAT_OPEN_EVENT } from "./aiChatContext";
 import { AgentStudyPanel } from "../agent/AgentStudyPanel";
 import "./ai-workspace.css";
 
@@ -66,6 +67,15 @@ export function AiChatWorkspace({
       setMode(initialMode);
     }
   }
+
+  useEffect(() => {
+    const handleAiChatOpen = () => {
+      setMode("chat");
+    };
+    window.addEventListener(AI_CHAT_OPEN_EVENT, handleAiChatOpen);
+    return () =>
+      window.removeEventListener(AI_CHAT_OPEN_EVENT, handleAiChatOpen);
+  }, []);
 
   useEffect(() => {
     let active = true;

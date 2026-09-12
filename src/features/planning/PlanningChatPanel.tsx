@@ -828,6 +828,7 @@ export function PlanningChatPanel({
     if (request === undefined) return;
     setComposerImages([]);
     setComposerLocalFiles([]);
+    setQuestionContext(undefined);
     if (conversationKind === "chat") {
       executeDirect(request);
       return;
@@ -1133,6 +1134,7 @@ export function PlanningChatPanel({
                       <span>
                         {questionContext.title} ·{" "}
                         {questionContext.imageDataUrls.length} 张题图
+                        {questionContext.analysis ? " · 含已有辅助解析" : ""}
                       </span>
                     </div>
                     <button
