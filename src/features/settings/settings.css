@@ -580,6 +580,72 @@
   padding: var(--space-2) var(--space-3);
 }
 
+/* Display density settings */
+.settings-density-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.settings-density-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  background: var(--color-bg-surface);
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.settings-density-option:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-bg-hover);
+}
+
+.settings-density-option.active {
+  border-color: var(--color-primary);
+  background: var(--color-bg-subtle);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+.settings-density-option input[type="radio"] {
+  margin-top: 0.2rem;
+  accent-color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.settings-density-option-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.settings-density-option-content .density-icon {
+  font-size: 1.35rem;
+  color: var(--color-primary);
+  margin-bottom: var(--space-1);
+}
+
+.settings-density-option-content strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: var(--line-height-tight);
+}
+
+.settings-density-option-content small {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-body);
+}
+
 @media (max-width: 56.25rem) {
   .settings-layout {
     grid-template-columns: minmax(0, 1fr);
