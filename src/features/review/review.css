@@ -1259,6 +1259,58 @@
   gap: var(--space-4, 1rem);
 }
 
+.mistake-batch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3, 0.75rem);
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  background: var(--color-bg-surface);
+  border: 1.5px solid var(--color-primary-500, #3b82f6);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.mistake-batch-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 0.75rem);
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.mistake-batch-info .material-symbols-rounded {
+  color: var(--color-primary-500, #3b82f6);
+  font-size: 1.25rem;
+}
+
+.mistake-batch-info strong {
+  color: var(--color-primary-600, #2563eb);
+}
+
+.mistake-batch-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-primary-600, #2563eb);
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.mistake-batch-link:hover {
+  color: var(--color-primary-700, #1d4ed8);
+}
+
+.mistake-batch-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2, 0.5rem);
+}
+
 .mistake-question-card {
   display: flex;
   flex-direction: column;
@@ -1277,11 +1329,33 @@
   border-color: var(--color-border-default);
 }
 
+.mistake-question-card.is-selected {
+  border-color: var(--color-primary-500, #3b82f6);
+  background: var(--color-bg-subtle);
+  box-shadow: 0 0 0 1px var(--color-primary-500, #3b82f6);
+}
+
 .mistake-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3, 0.75rem);
+}
+
+.mistake-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 0.75rem);
+  min-width: 0;
+  flex: 1;
+}
+
+.mistake-card-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--color-primary-500, #3b82f6);
+  flex-shrink: 0;
 }
 
 .mistake-card-meta {
@@ -1395,6 +1469,29 @@
   gap: var(--space-4, 1rem);
 }
 
+.mistake-preview-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3, 0.75rem);
+  padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.mistake-preview-stat-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 0.25rem);
+}
+
+.mistake-preview-stat-item strong {
+  color: var(--color-text);
+}
+
 @media (max-width: 680px) {
   .mistake-notebook-summary {
     flex-direction: column;
@@ -1413,6 +1510,17 @@
   }
   .mistake-notebook-search {
     max-width: none;
+  }
+  .mistake-batch-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .mistake-batch-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .mistake-batch-actions button {
+    width: 100%;
   }
 }
 
