@@ -79,7 +79,7 @@ export function InstantMistakeDialog({
 
   return (
     <EditorDialog
-      title="⚡ 立即刷错题"
+      title="立即刷错题"
       description="无需等待次日排期，系统将根据错题顽固程度与艾宾浩斯复习算法直接为您推送高优先级错题。"
       dirty={false}
       onRequestClose={onClose}
