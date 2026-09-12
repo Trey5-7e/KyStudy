@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EditorDialog } from "../../shared/components/EditorDialog";
 import {
   PageEmpty,
@@ -146,6 +146,14 @@ export function ReviewPanel({
   useEffect(() => {
     if (!draft || !initial || sameSchemeDraft(draft, initial)) return;
   }, [draft, initial]);
+  const pendingMistakesCount = useMemo(() => {
+    if (!questionBankSnapshot) return 0;
+    return questionBankSnapshot.questions.filter(
+      (q) =>
+        (q.incorrectCount > 0 || q.partialCount > 0) &&
+        (q.currentResult === "incorrect" || q.currentResult === "uncertain"),
+    ).length;
+  }, [questionBankSnapshot]);
   const run = async (
     op: () => Promise<ReviewSchemeDashboard>,
     message: string,
@@ -303,6 +311,11 @@ export function ReviewPanel({
             calendar_today
           </span>
           <span>今日复习</span>
+          {session.totalCount - session.completedCount > 0 ? (
+            <span className="review-tab-badge is-attention">
+              {session.totalCount - session.completedCount}
+            </span>
+          ) : null}
         </button>
         <button
           type="button"
@@ -315,6 +328,9 @@ export function ReviewPanel({
             menu_book
           </span>
           <span>错题本</span>
+          {pendingMistakesCount > 0 ? (
+            <span className="review-tab-badge">{pendingMistakesCount}</span>
+          ) : null}
         </button>
         <button
           type="button"
@@ -509,6 +525,7 @@ export function ReviewPanel({
           }
           onManage={() => setActiveTab("schemes")}
           onOpenInstantMistake={() => void openInstantMistake()}
+          onOpenMistakeNotebook={() => setActiveTab("notebook")}
         />
       )}
       {instantMistakeSetupOpen && questionBankSnapshot && (

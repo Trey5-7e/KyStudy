@@ -493,6 +493,7 @@ export function TodayOverviewPanel({
         onOpenPlan={onOpenPlan}
         onOpenWorkbook={onOpenWorkbook}
         onOpenInstantMistake={onOpenInstantMistake}
+        onOpenMistakeNotebook={onOpenMistakeNotebook}
       />
 
       <TodayProgressSection

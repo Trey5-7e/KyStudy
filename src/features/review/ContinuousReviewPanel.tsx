@@ -31,6 +31,7 @@ export function ContinuousReviewPanel({
   onManage,
   onStartReview,
   onOpenInstantMistake,
+  onOpenMistakeNotebook,
 }: {
   session: ContinuousReviewSession;
   openRequest?: number;
@@ -46,6 +47,7 @@ export function ContinuousReviewPanel({
   onManage(): void;
   onStartReview?(): void;
   onOpenInstantMistake?(): void;
+  onOpenMistakeNotebook?(): void;
 }) {
   const active = session.activeItem;
   const [retryQueue, setRetryQueue] = useState<ReviewSchemeQueueItem[]>();
@@ -157,16 +159,28 @@ export function ContinuousReviewPanel({
           <h3>今天没有到期题</h3>
           <p>错题库中当前没有到期需要复习的题目。</p>
           <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-            {onOpenInstantMistake && (
+            {onOpenMistakeNotebook && (
               <Button
                 variant="primary"
+                size="sm"
+                onClick={onOpenMistakeNotebook}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  menu_book
+                </span>
+                <span>查看错题本</span>
+              </Button>
+            )}
+            {onOpenInstantMistake && (
+              <Button
+                variant={onOpenMistakeNotebook ? "secondary" : "primary"}
                 size="sm"
                 onClick={onOpenInstantMistake}
               >
                 <span className="material-symbols-rounded" aria-hidden="true">
                   bolt
                 </span>
-                立即刷错题
+                <span>立即刷错题</span>
               </Button>
             )}
             <Button
@@ -178,7 +192,7 @@ export function ContinuousReviewPanel({
               <span className="material-symbols-rounded" aria-hidden="true">
                 refresh
               </span>
-              检查与准备队列
+              <span>检查与准备队列</span>
             </Button>
             <Button variant="text" size="sm" onClick={onManage}>
               查看方案
@@ -198,6 +212,18 @@ export function ContinuousReviewPanel({
             {summary.masteryPercent}%。
           </p>
           <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+            {onOpenMistakeNotebook && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onOpenMistakeNotebook}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  menu_book
+                </span>
+                <span>前往错题本巩固</span>
+              </Button>
+            )}
             {onOpenInstantMistake && (
               <Button
                 variant="primary"
@@ -207,7 +233,7 @@ export function ContinuousReviewPanel({
                 <span className="material-symbols-rounded" aria-hidden="true">
                   bolt
                 </span>
-                立即刷错题
+                <span>立即刷错题</span>
               </Button>
             )}
             <Button
@@ -218,7 +244,7 @@ export function ContinuousReviewPanel({
               <span className="material-symbols-rounded" aria-hidden="true">
                 analytics
               </span>
-              查看本次复习结算
+              <span>查看本次复习结算</span>
             </Button>
             <Button
               variant="secondary"
@@ -229,7 +255,7 @@ export function ContinuousReviewPanel({
                 void onUndo(session.latestCompletedQueueId)
               }
             >
-              撤销上一题
+              <span>撤销上一题</span>
             </Button>
             <Button variant="text" size="sm" onClick={onManage}>
               查看方案

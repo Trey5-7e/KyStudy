@@ -29,6 +29,7 @@ interface TodayNextActionProps {
   onOpenPlan(): void;
   onOpenWorkbook(): void;
   onOpenInstantMistake?(): void;
+  onOpenMistakeNotebook?(): void;
 }
 
 export function TodayNextAction({
@@ -48,6 +49,7 @@ export function TodayNextAction({
   onOpenPlan,
   onOpenWorkbook,
   onOpenInstantMistake,
+  onOpenMistakeNotebook,
 }: TodayNextActionProps) {
   return (
     <section
@@ -138,8 +140,24 @@ export function TodayNextAction({
                 <span>立即刷错题</span>
               </Button>
             ) : null}
+            {onOpenMistakeNotebook ? (
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={onOpenMistakeNotebook}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  menu_book
+                </span>
+                <span>错题本</span>
+              </Button>
+            ) : null}
             <Button
-              variant={onOpenInstantMistake ? "secondary" : "primary"}
+              variant={
+                onOpenInstantMistake || onOpenMistakeNotebook
+                  ? "secondary"
+                  : "primary"
+              }
               size="md"
               onClick={onOpenPlan}
             >
