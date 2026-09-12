@@ -91,3 +91,36 @@
   --app-safe-bottom: var(--safe-bottom);
   --app-safe-left: var(--safe-left);
 }
+
+/* Display density preferences: adjusts spacing, control heights, and line heights */
+:root[data-density="compact"],
+[data-density="compact"] {
+  --space-1: 0.2rem;
+  --space-2: 0.4rem;
+  --space-3: 0.625rem;
+  --space-4: 0.85rem;
+  --space-5: 1.05rem;
+  --space-6: 1.25rem;
+  --space-8: 1.7rem;
+  --line-height-tight: 1.25;
+  --line-height-body: 1.45;
+  --control-height-sm: 1.75rem;
+  --control-height-md: 2rem;
+  --control-height-lg: 2.25rem;
+}
+
+:root[data-density="comfortable"],
+[data-density="comfortable"] {
+  --space-1: 0.3rem;
+  --space-2: 0.6rem;
+  --space-3: 0.875rem;
+  --space-4: 1.15rem;
+  --space-5: 1.45rem;
+  --space-6: 1.75rem;
+  --space-8: 2.3rem;
+  --line-height-tight: 1.35;
+  --line-height-body: 1.65;
+  --control-height-sm: 2.25rem;
+  --control-height-md: 2.5rem;
+  --control-height-lg: 2.75rem;
+}

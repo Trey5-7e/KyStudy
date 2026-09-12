@@ -291,9 +291,11 @@ export function QuestionBankWindowPresenter({
           onClose={() => onCloseDialog("manual")}
           onRequestBack={childBackLabel === undefined ? undefined : onBack}
           backLabel={childBackLabel}
-          onSaved={(next) => {
+          onSaved={(next, options) => {
             onSnapshotChanged(next);
-            onCloseDialog("manual");
+            if (options?.close !== false) {
+              onCloseDialog("manual");
+            }
           }}
         />
       ) : null}

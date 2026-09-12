@@ -27,7 +27,11 @@ import {
   TYPE_OPTIONS,
   type RelativeQuestionInsert,
 } from "./QuestionIndexDialogs";
-import { manualIndexDialogInitialSegmentId } from "./manualIndexDialogModel";
+import {
+  manualIndexDialogInitialSegmentId,
+  nextSuggestedQuestionNumber,
+  nextSuggestedQuestionTitle,
+} from "./manualIndexDialogModel";
 
 const PdfReader = lazy(() =>
   import("../library/pdf/PdfReader").then((module) => ({
@@ -43,7 +47,7 @@ export interface ManualIndexDialogProps {
   onClose(): void;
   onRequestBack?(): void;
   backLabel?: string;
-  onSaved(snapshot: QuestionBankSnapshot): void;
+  onSaved(snapshot: QuestionBankSnapshot, options?: { close?: boolean }): void;
 }
 
 export type ManualIndexDialogComponent = ComponentType<ManualIndexDialogProps>;
@@ -76,16 +80,7 @@ export function ManualIndexDialog({
   onRequestBack,
   backLabel,
   onSaved,
-}: {
-  snapshot: QuestionBankSnapshot;
-  existingQuestion?: IndexedQuestion;
-  relativeInsert?: RelativeQuestionInsert;
-  initialSegmentId?: string;
-  onClose(): void;
-  onRequestBack?(): void;
-  backLabel?: string;
-  onSaved(snapshot: QuestionBankSnapshot): void;
-}) {
+}: ManualIndexDialogProps) {
   const anchorQuestion = relativeInsert?.anchorQuestion;
   const initialSegmentId = manualIndexDialogInitialSegmentId(
     snapshot,
@@ -114,19 +109,26 @@ export function ManualIndexDialog({
     useState<SectionPart>(initialSectionPart);
   const [questionType, setQuestionType] =
     useState<QuestionType>(initialQuestionType);
-  const [questionNumber, setQuestionNumber] = useState(
+  const initialQuestionNumberVal =
     existingQuestion?.questionNumber ??
-      relativeInsert?.suggestedQuestionNumber ??
-      "",
-  );
-  const [title, setTitle] = useState(
+    relativeInsert?.suggestedQuestionNumber ??
+    "";
+  const initialTitleVal =
     existingQuestion?.title ??
-      (relativeInsert?.suggestedQuestionNumber === undefined
-        ? ""
-        : `第 ${relativeInsert.suggestedQuestionNumber} 题`),
+    (relativeInsert?.suggestedQuestionNumber === undefined
+      ? ""
+      : `第 ${relativeInsert.suggestedQuestionNumber} 题`);
+  const [questionNumber, setQuestionNumber] = useState(
+    initialQuestionNumberVal,
   );
+  const [title, setTitle] = useState(initialTitleVal);
+  const [baseQuestionNumber, setBaseQuestionNumber] = useState(
+    initialQuestionNumberVal,
+  );
+  const [baseTitle, setBaseTitle] = useState(initialTitleVal);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [successNotice, setSuccessNotice] = useState("");
   const originalRegionSignature = regionSignature(
     existingQuestion?.regions.map(toRegionOverlay) ?? [],
   );
@@ -160,6 +162,7 @@ export function ManualIndexDialog({
     if (segment === undefined || workingRegions.length === 0) return;
     setBusy(true);
     setMessage("");
+    setSuccessNotice("");
     try {
       if (existingQuestion !== undefined) {
         const originalIds = new Set(
@@ -211,6 +214,44 @@ export function ManualIndexDialog({
     }
   };
 
+  const saveAndContinue = async () => {
+    if (segment === undefined || workingRegions.length === 0) return;
+    setBusy(true);
+    setMessage("");
+    setSuccessNotice("");
+    try {
+      const nextSnapshot = await importQuestionIndex(segment.id, [
+        {
+          sourceKey: `manual|${crypto.randomUUID()}`,
+          title,
+          chapter,
+          sectionPart,
+          questionType,
+          questionNumber,
+          indexConfidence: 1,
+          regions: workingRegions.map(toRegionInput),
+        },
+      ]);
+      onSaved(nextSnapshot, { close: false });
+      const savedNumber = questionNumber;
+      const nextNumber = nextSuggestedQuestionNumber(questionNumber);
+      const nextTitle = nextSuggestedQuestionTitle(nextNumber);
+      setQuestionNumber(nextNumber);
+      setTitle(nextTitle);
+      setBaseQuestionNumber(nextNumber);
+      setBaseTitle(nextTitle);
+      setWorkingRegions([]);
+      setSuccessNotice(
+        `第 ${savedNumber} 题已保存入库。题号已递增为第 ${nextNumber} 题，请直接在右侧 PDF 框选下一题。`,
+      );
+    } catch (saveError: unknown) {
+      const normalized = normalizeQuestionBankError(saveError);
+      setMessage(`${normalized.message} ${normalized.action}`.trim());
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <EditorDialog
       title={
@@ -234,7 +275,9 @@ export function ManualIndexDialog({
         metadataDirty ||
         segmentId !== initialSegmentId ||
         (existingQuestion === undefined &&
-          (questionNumber.trim() !== "" || title.trim() !== ""))
+          (workingRegions.length > 0 ||
+            questionNumber.trim() !== baseQuestionNumber.trim() ||
+            title.trim() !== baseTitle.trim()))
       }
       onRequestClose={onClose}
       onRequestBack={onRequestBack}
@@ -407,6 +450,22 @@ export function ManualIndexDialog({
               </div>
             ))}
           </div>
+          {successNotice === "" ? null : (
+            <p
+              className="form-success"
+              role="status"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+              }}
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                check_circle
+              </span>
+              <span>{successNotice}</span>
+            </p>
+          )}
           {message === "" ? null : (
             <p className="form-error" role="alert">
               {message}
@@ -424,6 +483,24 @@ export function ManualIndexDialog({
               useBack={onRequestBack !== undefined}
               disabled={busy}
             />
+            {existingQuestion === undefined && relativeInsert === undefined ? (
+              <Button
+                variant="secondary"
+                disabled={
+                  busy ||
+                  workingRegions.length === 0 ||
+                  chapter.trim() === "" ||
+                  questionNumber.trim() === "" ||
+                  title.trim() === ""
+                }
+                onClick={() => void saveAndContinue()}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  playlist_add
+                </span>
+                <span>保存并继续框下一题</span>
+              </Button>
+            ) : null}
             <Button
               variant="primary"
               aria-describedby="manual-index-save-reason"
@@ -450,7 +527,7 @@ export function ManualIndexDialog({
                   ? "正在保存…"
                   : existingQuestion === undefined
                     ? relativeInsert === undefined
-                      ? "创建题目卡片"
+                      ? "保存并完成"
                       : "插入题目卡片"
                     : "保存区域调整"}
               </span>
@@ -483,12 +560,13 @@ export function ManualIndexDialog({
                 regions={workingRegions}
                 captureMode
                 editableRegions
-                onRegionCapture={(region) =>
+                onRegionCapture={(region) => {
+                  setMessage("");
                   setWorkingRegions((current) => [
                     ...current,
                     { id: `pending-${crypto.randomUUID()}`, ...region },
-                  ])
-                }
+                  ]);
+                }}
                 onRegionChange={(region) =>
                   setWorkingRegions((current) =>
                     current.map((item) =>

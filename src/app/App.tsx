@@ -13,6 +13,11 @@ import type { ReviewOpenRequest } from "../features/review/ReviewPanel";
 import { AI_CHAT_OPEN_EVENT } from "../features/ai-chat/aiChatContext";
 import { CommandPaletteDialog } from "../features/command-palette/CommandPaletteDialog";
 import type { CommandItem } from "../features/command-palette/commandPaletteModel";
+import { applyDensity, getStoredDensity } from "../shared/theme/displayDensity";
+
+if (typeof window !== "undefined") {
+  applyDensity(getStoredDensity());
+}
 
 const VIEW_STORAGE_KEY = "kystudy:last-view:v1";
 

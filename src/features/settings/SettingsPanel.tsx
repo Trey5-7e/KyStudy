@@ -27,6 +27,11 @@ import {
   serializeDiagnosticReport,
   type DiagnosticReport,
 } from "./diagnosticReport";
+import {
+  getStoredDensity,
+  setStoredDensity,
+  type DisplayDensity,
+} from "../../shared/theme/displayDensity";
 
 import "./settings.css";
 
@@ -355,6 +360,102 @@ function ApplicationSettings() {
   );
 }
 
+function DisplayDensitySettings() {
+  const [density, setDensity] = useState<DisplayDensity>(getStoredDensity);
+
+  const handleSelect = (next: DisplayDensity) => {
+    setDensity(next);
+    setStoredDensity(next);
+  };
+
+  return (
+    <section
+      className="settings-section settings-density"
+      aria-labelledby="density-title"
+    >
+      <SectionHeader
+        id="density-title"
+        level={3}
+        title="界面显示密度"
+        description="调整界面排版间距与元素高度。大屏桌面推荐紧凑模式以呈现更多内容，触控设备推荐舒适模式。"
+      />
+      <div
+        className="settings-density-options"
+        role="radiogroup"
+        aria-labelledby="density-title"
+      >
+        <label
+          className={`settings-density-option ${density === "compact" ? "active" : ""}`}
+        >
+          <input
+            type="radio"
+            name="display-density"
+            value="compact"
+            checked={density === "compact"}
+            onChange={() => handleSelect("compact")}
+          />
+          <div className="settings-density-option-content">
+            <span
+              className="material-symbols-rounded density-icon"
+              aria-hidden="true"
+            >
+              density_small
+            </span>
+            <strong>紧凑模式 (Compact)</strong>
+            <small>
+              行高与间距适度收紧，适合大屏桌面，同屏展示更多题目与知识点
+            </small>
+          </div>
+        </label>
+        <label
+          className={`settings-density-option ${density === "comfortable" ? "active" : ""}`}
+        >
+          <input
+            type="radio"
+            name="display-density"
+            value="comfortable"
+            checked={density === "comfortable"}
+            onChange={() => handleSelect("comfortable")}
+          />
+          <div className="settings-density-option-content">
+            <span
+              className="material-symbols-rounded density-icon"
+              aria-hidden="true"
+            >
+              density_medium
+            </span>
+            <strong>舒适模式 (Comfortable)</strong>
+            <small>
+              行高与间距宽松，适合移动端、触控屏或长时间舒适专注阅读
+            </small>
+          </div>
+        </label>
+        <label
+          className={`settings-density-option ${density === "auto" ? "active" : ""}`}
+        >
+          <input
+            type="radio"
+            name="display-density"
+            value="auto"
+            checked={density === "auto"}
+            onChange={() => handleSelect("auto")}
+          />
+          <div className="settings-density-option-content">
+            <span
+              className="material-symbols-rounded density-icon"
+              aria-hidden="true"
+            >
+              auto_awesome
+            </span>
+            <strong>自适应模式 (Auto)</strong>
+            <small>系统桌面环境默认紧凑，触控或移动设备自动启用舒适模式</small>
+          </div>
+        </label>
+      </div>
+    </section>
+  );
+}
+
 export function SettingsPanel() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("study");
   const active = SETTINGS_TABS.find((tab) => tab.id === activeTab)!;
@@ -440,13 +541,16 @@ export function SettingsPanel() {
             />
 
             {activeTab === "study" ? (
-              <Suspense
-                fallback={
-                  <StatusBanner tone="info" title="正在加载学习设置…" />
-                }
-              >
-                <WorkspacePanel />
-              </Suspense>
+              <div className="settings-section-stack">
+                <DisplayDensitySettings />
+                <Suspense
+                  fallback={
+                    <StatusBanner tone="info" title="正在加载学习设置…" />
+                  }
+                >
+                  <WorkspacePanel />
+                </Suspense>
+              </div>
             ) : activeTab === "ai" ? (
               <Suspense
                 fallback={

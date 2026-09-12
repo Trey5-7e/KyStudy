@@ -5,7 +5,11 @@ import type {
   QuestionBankSnapshot,
 } from "../../shared/tauri/questionBankClient";
 import type { RelativeQuestionInsert } from "./QuestionIndexDialogs";
-import { manualIndexDialogInitialSegmentId } from "./manualIndexDialogModel";
+import {
+  manualIndexDialogInitialSegmentId,
+  nextSuggestedQuestionNumber,
+  nextSuggestedQuestionTitle,
+} from "./manualIndexDialogModel";
 
 const snapshot = (segmentIds: string[]): QuestionBankSnapshot => ({
   workbooks: [],
@@ -64,5 +68,34 @@ describe("manual index dialog segment selection", () => {
       "first",
     );
     expect(manualIndexDialogInitialSegmentId(snapshot([]))).toBe("");
+  });
+});
+
+describe("nextSuggestedQuestionNumber and title", () => {
+  it("increments simple integer question numbers", () => {
+    expect(nextSuggestedQuestionNumber("1")).toBe("2");
+    expect(nextSuggestedQuestionNumber("9")).toBe("10");
+    expect(nextSuggestedQuestionNumber("15")).toBe("16");
+  });
+
+  it("preserves leading zeros if padded", () => {
+    expect(nextSuggestedQuestionNumber("01")).toBe("02");
+    expect(nextSuggestedQuestionNumber("09")).toBe("10");
+  });
+
+  it("handles sub-question numbering like 1.1 or Q1", () => {
+    expect(nextSuggestedQuestionNumber("1.1")).toBe("1.2");
+    expect(nextSuggestedQuestionNumber("Q5")).toBe("Q6");
+    expect(nextSuggestedQuestionNumber("第3题")).toBe("第4题");
+  });
+
+  it("handles empty or non-numeric strings safely", () => {
+    expect(nextSuggestedQuestionNumber("")).toBe("");
+    expect(nextSuggestedQuestionNumber("abc")).toBe("abc");
+  });
+
+  it("generates natural question titles", () => {
+    expect(nextSuggestedQuestionTitle("2")).toBe("第 2 题");
+    expect(nextSuggestedQuestionTitle("", "自定义标题")).toBe("自定义标题");
   });
 });
