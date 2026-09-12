@@ -16,6 +16,7 @@ import { QuestionRegionCard } from "./QuestionRegionCard";
 import { QuestionAiAnalysis } from "./QuestionAiAnalysis";
 import { PaperExportDialog } from "../workbook/PaperExportDialog";
 import {
+  createBatchAttempts,
   filterMistakeNotebook,
   isMistakeMastered,
   isMistakePending,
@@ -58,9 +59,12 @@ export function MistakeNotebookView({
   });
 
   const [previewQuestionId, setPreviewQuestionId] = useState<string>();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportTarget, setExportTarget] = useState<"all" | "selected">("all");
   const [exportNotice, setExportNotice] = useState<string>();
   const [markingId, setMarkingId] = useState<string>();
+  const [batchMarking, setBatchMarking] = useState(false);
 
   const subjectsById = useMemo(
     () => new Map(subjects.map((s) => [s.id, s.name])),
@@ -78,6 +82,11 @@ export function MistakeNotebookView({
   const filteredQuestions = useMemo(
     () => filterMistakeNotebook(questions, filter),
     [questions, filter],
+  );
+
+  const selectedQuestions = useMemo(
+    () => filteredQuestions.filter((q) => selectedIds.has(q.id)),
+    [filteredQuestions, selectedIds],
   );
 
   const previewIndex = useMemo(
@@ -138,6 +147,62 @@ export function MistakeNotebookView({
       query: "",
       sortBy: "priority",
     });
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelect = (questionId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) {
+        next.delete(questionId);
+      } else {
+        next.add(questionId);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    setSelectedIds(new Set(filteredQuestions.map((q) => q.id)));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const handleBatchDrill = () => {
+    if (selectedQuestions.length === 0) return;
+    onStartDrill(selectedQuestions, selectedQuestions.length, filter.subjectId);
+  };
+
+  const handleBatchExport = () => {
+    if (selectedQuestions.length === 0) return;
+    setExportTarget("selected");
+    setExportDialogOpen(true);
+  };
+
+  const handleBatchMark = async (result: AttemptResult) => {
+    if (busy || batchMarking || selectedQuestions.length === 0) return;
+    const targetDate = today ?? new Date().toISOString().slice(0, 10);
+    setBatchMarking(true);
+    try {
+      const attempts = createBatchAttempts(
+        selectedQuestions.map((q) => q.id),
+        result,
+      );
+      const updated = await recordBulkQuestionAttempts(targetDate, attempts);
+      onSnapshotUpdated?.(updated);
+      setExportNotice(
+        result === "correct"
+          ? `已成功将 ${selectedQuestions.length} 道错题标为已攻克掌握！`
+          : `已成功将 ${selectedQuestions.length} 道错题移回待攻克列表。`,
+      );
+      setSelectedIds(new Set());
+    } catch (err) {
+      console.error("Failed to batch update question status:", err);
+    } finally {
+      setBatchMarking(false);
+    }
   };
 
   const handleQuickMark = async (questionId: string, result: AttemptResult) => {
@@ -213,7 +278,10 @@ export function MistakeNotebookView({
                 variant="secondary"
                 size="sm"
                 disabled={busy}
-                onClick={() => setExportDialogOpen(true)}
+                onClick={() => {
+                  setExportTarget("all");
+                  setExportDialogOpen(true);
+                }}
               >
                 <span className="material-symbols-rounded" aria-hidden="true">
                   print
@@ -360,6 +428,98 @@ export function MistakeNotebookView({
         </div>
       </div>
 
+      {/* 批量操作工具条 */}
+      {selectedQuestions.length > 0 ? (
+        <div
+          className="mistake-batch-bar"
+          role="region"
+          aria-label="错题批量操作工具栏"
+        >
+          <div className="mistake-batch-info">
+            <span className="material-symbols-rounded" aria-hidden="true">
+              check_box
+            </span>
+            <span>
+              已选择 <strong>{selectedQuestions.length}</strong> /{" "}
+              {filteredQuestions.length} 道错题
+            </span>
+            <button
+              type="button"
+              className="mistake-batch-link"
+              onClick={
+                selectedQuestions.length === filteredQuestions.length
+                  ? handleClearSelection
+                  : handleSelectAll
+              }
+            >
+              {selectedQuestions.length === filteredQuestions.length
+                ? "取消全选"
+                : "全选当前"}
+            </button>
+            <button
+              type="button"
+              className="mistake-batch-link"
+              onClick={handleClearSelection}
+            >
+              清空
+            </button>
+          </div>
+
+          <div className="mistake-batch-actions">
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={busy || batchMarking}
+              onClick={handleBatchDrill}
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                bolt
+              </span>
+              <span>特训选中（{selectedQuestions.length}）</span>
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={busy || batchMarking}
+              onClick={handleBatchExport}
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                print
+              </span>
+              <span>导出选中（{selectedQuestions.length}）</span>
+            </Button>
+            {onSnapshotUpdated !== undefined ? (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={busy || batchMarking}
+                  onClick={() => void handleBatchMark("correct")}
+                  title="将选中的错题全部标为已攻克"
+                >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    check_circle
+                  </span>
+                  <span>批量标为已攻克</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={busy || batchMarking}
+                  onClick={() => void handleBatchMark("incorrect")}
+                  title="将选中的错题全部移回待攻克"
+                >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    restart_alt
+                  </span>
+                  <span>批量移回待攻克</span>
+                </Button>
+              </>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       {/* 错题列表展示 */}
       {summary.totalCount === 0 ? (
         <div className="mistake-notebook-empty">
@@ -404,17 +564,32 @@ export function MistakeNotebookView({
                   : "解答题";
 
             return (
-              <article key={q.id} className="mistake-question-card">
+              <article
+                key={q.id}
+                className={`mistake-question-card ${selectedIds.has(q.id) ? "is-selected" : ""}`}
+              >
                 <header className="mistake-card-header">
-                  <div className="mistake-card-meta">
-                    <span className="mistake-meta-tag">{subjectName}</span>
-                    <span className="mistake-meta-tag is-secondary">
-                      {q.documentTitle}
-                    </span>
-                    {q.chapter ? (
-                      <span className="mistake-meta-chapter">{q.chapter}</span>
-                    ) : null}
-                    <span className="mistake-meta-type">{typeLabel}</span>
+                  <div className="mistake-card-header-left">
+                    <input
+                      type="checkbox"
+                      id={`mistake-select-${q.id}`}
+                      className="mistake-card-checkbox"
+                      checked={selectedIds.has(q.id)}
+                      onChange={() => toggleSelect(q.id)}
+                      aria-label={`选择第 ${index + 1} 题 ${q.title}`}
+                    />
+                    <div className="mistake-card-meta">
+                      <span className="mistake-meta-tag">{subjectName}</span>
+                      <span className="mistake-meta-tag is-secondary">
+                        {q.documentTitle}
+                      </span>
+                      {q.chapter ? (
+                        <span className="mistake-meta-chapter">
+                          {q.chapter}
+                        </span>
+                      ) : null}
+                      <span className="mistake-meta-type">{typeLabel}</span>
+                    </div>
                   </div>
                   <div className="mistake-card-badge">
                     {isPending ? (
@@ -530,7 +705,11 @@ export function MistakeNotebookView({
       )}
       {exportDialogOpen ? (
         <PaperExportDialog
-          questions={filteredQuestions}
+          questions={
+            exportTarget === "selected" && selectedQuestions.length > 0
+              ? selectedQuestions
+              : filteredQuestions
+          }
           onClose={() => setExportDialogOpen(false)}
           onSaved={(msg) => {
             setExportDialogOpen(false);
@@ -595,6 +774,29 @@ export function MistakeNotebookView({
 
               <div className="mistake-preview-dialog-actions">
                 <Button
+                  variant={
+                    selectedIds.has(previewQuestion.id) ? "secondary" : "ghost"
+                  }
+                  size="sm"
+                  onClick={() => toggleSelect(previewQuestion.id)}
+                  title={
+                    selectedIds.has(previewQuestion.id)
+                      ? "从批量选择中移除"
+                      : "加入批量选择"
+                  }
+                >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    {selectedIds.has(previewQuestion.id)
+                      ? "check_box"
+                      : "check_box_outline_blank"}
+                  </span>
+                  <span>
+                    {selectedIds.has(previewQuestion.id)
+                      ? "已选中"
+                      : "勾选此题"}
+                  </span>
+                </Button>
+                <Button
                   variant="primary"
                   size="sm"
                   disabled={busy}
@@ -653,6 +855,43 @@ export function MistakeNotebookView({
             </div>
 
             <div className="mistake-preview-dialog-content">
+              <div className="mistake-preview-stats">
+                <span className="mistake-preview-stat-item">
+                  <strong>最新状态：</strong>
+                  {isMistakePending(previewQuestion) ? (
+                    previewQuestion.currentResult === "incorrect" ? (
+                      <Badge tone="danger">做错</Badge>
+                    ) : (
+                      <Badge tone="warning">模糊</Badge>
+                    )
+                  ) : isMistakeMastered(previewQuestion) ? (
+                    <Badge tone="success">已攻克</Badge>
+                  ) : (
+                    <Badge tone="neutral">未做</Badge>
+                  )}
+                </span>
+                <span className="mistake-preview-stat-item">
+                  累计做过 <strong>{previewQuestion.attemptCount}</strong> 次
+                </span>
+                <span className="mistake-preview-stat-item">
+                  做错 <strong>{previewQuestion.incorrectCount}</strong> 次
+                </span>
+                <span className="mistake-preview-stat-item">
+                  模糊 <strong>{previewQuestion.partialCount}</strong> 次
+                </span>
+                <span className="mistake-preview-stat-item">
+                  正确{" "}
+                  <strong>
+                    {Math.max(
+                      0,
+                      previewQuestion.attemptCount -
+                        previewQuestion.incorrectCount -
+                        previewQuestion.partialCount,
+                    )}
+                  </strong>{" "}
+                  次
+                </span>
+              </div>
               <QuestionRegionCard
                 documentId={previewQuestion.documentId}
                 regions={previewQuestion.regions}

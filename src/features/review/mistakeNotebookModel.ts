@@ -1,5 +1,11 @@
-import type { IndexedQuestion } from "../../shared/tauri/questionBankClient";
-import type { QuestionType } from "../../shared/tauri/questionClient";
+import type {
+  BulkQuestionAttempt,
+  IndexedQuestion,
+} from "../../shared/tauri/questionBankClient";
+import type {
+  AttemptResult,
+  QuestionType,
+} from "../../shared/tauri/questionClient";
 import { isMistakeQuestion } from "./instantMistakeModel";
 
 export type MistakeStatusFilter = "all" | "pending" | "mastered";
@@ -173,4 +179,17 @@ export function filterMistakeNotebook(
       })
     );
   });
+}
+
+/**
+ * 构造批量打标尝试记录请求对象
+ */
+export function createBatchAttempts(
+  questionIds: Iterable<string>,
+  result: AttemptResult,
+): BulkQuestionAttempt[] {
+  return Array.from(questionIds).map((id) => ({
+    questionId: id,
+    result,
+  }));
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { IndexedQuestion } from "../../shared/tauri/questionBankClient";
 import {
+  createBatchAttempts,
   filterMistakeNotebook,
   isMistakeMastered,
   isMistakePending,
@@ -164,5 +165,17 @@ describe("mistakeNotebookModel", () => {
       sortBy: "natural",
     });
     expect(byNatural.map((q) => q.id)).toEqual(["q1", "q2", "q3", "q4"]);
+  });
+
+  it("creates batch attempts mapping accurately", () => {
+    const attempts = createBatchAttempts(["q1", "q2", "q3"], "correct");
+    expect(attempts).toEqual([
+      { questionId: "q1", result: "correct" },
+      { questionId: "q2", result: "correct" },
+      { questionId: "q3", result: "correct" },
+    ]);
+
+    const setAttempts = createBatchAttempts(new Set(["q4"]), "incorrect");
+    expect(setAttempts).toEqual([{ questionId: "q4", result: "incorrect" }]);
   });
 });
