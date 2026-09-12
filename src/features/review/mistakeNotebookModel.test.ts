@@ -147,6 +147,25 @@ describe("mistakeNotebookModel", () => {
     expect(numberSearch.map((q) => q.id)).toEqual(["q4"]);
   });
 
+  it("filters by error frequency threshold correctly", () => {
+    const questions = [q1, q2, q3, q4];
+
+    // q1: 3, q2: 1+2=3, q3: 2, q4: 1
+    const gte2 = filterMistakeNotebook(questions, {
+      status: "all",
+      query: "",
+      errorThreshold: "gte2",
+    });
+    expect(gte2.map((q) => q.id)).toEqual(["q1", "q2", "q3"]);
+
+    const gte3 = filterMistakeNotebook(questions, {
+      status: "all",
+      query: "",
+      errorThreshold: "gte3",
+    });
+    expect(gte3.map((q) => q.id)).toEqual(["q1", "q2"]);
+  });
+
   it("sorts by frequency and natural order correctly", () => {
     const questions = [q1, q2, q3, q4];
 

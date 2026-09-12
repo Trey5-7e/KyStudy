@@ -21,6 +21,7 @@ import {
   isMistakeMastered,
   isMistakePending,
   summarizeMistakes,
+  type MistakeFrequencyFilter,
   type MistakeNotebookFilter,
   type MistakeSortOption,
   type MistakeStatusFilter,
@@ -54,6 +55,7 @@ export function MistakeNotebookView({
     workbookId: undefined,
     questionType: "all",
     status: "all",
+    errorThreshold: "all",
     query: "",
     sortBy: "priority",
   });
@@ -144,6 +146,7 @@ export function MistakeNotebookView({
       workbookId: undefined,
       questionType: "all",
       status: "all",
+      errorThreshold: "all",
       query: "",
       sortBy: "priority",
     });
@@ -376,6 +379,23 @@ export function MistakeNotebookView({
             <option value="choice">选择题</option>
             <option value="blank">填空题</option>
             <option value="solution">解答题</option>
+          </select>
+
+          {/* 错误频次过滤 */}
+          <select
+            className="mistake-notebook-select"
+            value={filter.errorThreshold ?? "all"}
+            aria-label="筛选错误频次"
+            onChange={(e) =>
+              setFilter((prev) => ({
+                ...prev,
+                errorThreshold: e.target.value as MistakeFrequencyFilter,
+              }))
+            }
+          >
+            <option value="all">全部频次</option>
+            <option value="gte2">反复失分 (≥ 2次)</option>
+            <option value="gte3">顽固错题 (≥ 3次)</option>
           </select>
 
           {/* 排序方式 */}
