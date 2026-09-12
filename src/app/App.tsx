@@ -49,6 +49,7 @@ export function App() {
     useState<QuestionBankOpenRequest>();
   const [resourceOpenRequest, setResourceOpenRequest] =
     useState<ResourceOpenRequest>();
+  const [aiChatOpenMode, setAiChatOpenMode] = useState<"chat" | "agent">();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
@@ -70,6 +71,9 @@ export function App() {
         if (view !== "library") {
           setResourceOpenRequest(undefined);
         }
+        if (view !== "ai-chat") {
+          setAiChatOpenMode(undefined);
+        }
         setActiveView(view);
         storeView(view);
       }
@@ -88,6 +92,7 @@ export function App() {
       setReviewOpenRequest(undefined);
       setWorkbookOpenRequest(undefined);
       setResourceOpenRequest(undefined);
+      setAiChatOpenMode(undefined);
       setActiveView("ai-chat");
       storeView("ai-chat");
       if (window.location.hash !== "#ai-chat") {
@@ -108,6 +113,9 @@ export function App() {
     }
     if (view !== "library") {
       setResourceOpenRequest(undefined);
+    }
+    if (view !== "ai-chat") {
+      setAiChatOpenMode(undefined);
     }
     setActiveView(view);
     storeView(view);
@@ -183,6 +191,31 @@ export function App() {
         perform: () => {
           setReviewOpenRequest({ kind: "continuous", nonce: Date.now() });
           navigate("review");
+        },
+      },
+      {
+        id: "action-mistake-notebook",
+        title: "错题本查漏补缺",
+        description:
+          "查看错题概览统计、按科目/题型筛选、单题特训与导出PDF错题卷",
+        category: "action",
+        icon: "auto_stories",
+        keywords: ["cuotiben", "cuoti", "notebook", "daochu", "mistake"],
+        perform: () => {
+          setReviewOpenRequest({ kind: "notebook", nonce: Date.now() });
+          navigate("review");
+        },
+      },
+      {
+        id: "action-agent-study",
+        title: "AI 智能资料研读",
+        description: "启动 Learning Agent，在指定教材或讲义页码范围内研读解析",
+        category: "action",
+        icon: "menu_book",
+        keywords: ["yandu", "agent", "ziliao", "study", "ai"],
+        perform: () => {
+          setAiChatOpenMode("agent");
+          navigate("ai-chat");
         },
       },
       {
@@ -273,6 +306,11 @@ export function App() {
           setReviewOpenRequest({ kind: "instant-mistake", nonce: Date.now() });
           navigate("review");
         }}
+        onOpenMistakeNotebook={() => {
+          setReviewOpenRequest({ kind: "notebook", nonce: Date.now() });
+          navigate("review");
+        }}
+        aiChatOpenMode={aiChatOpenMode}
         onOpenReviewWindow={() =>
           setReviewOpenRequest({ kind: "continuous", nonce: Date.now() })
         }

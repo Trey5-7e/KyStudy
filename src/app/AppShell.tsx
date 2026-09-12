@@ -22,6 +22,8 @@ export interface AppShellProps {
   onNavigate: (view: AppView) => void;
   onOpenCommandPalette?: () => void;
   onOpenInstantMistake?: () => void;
+  onOpenMistakeNotebook?: () => void;
+  aiChatOpenMode?: "chat" | "agent";
 }
 
 function BackToPlanningAction({
@@ -59,6 +61,8 @@ export function AppShell({
   onNavigate,
   onOpenCommandPalette,
   onOpenInstantMistake,
+  onOpenMistakeNotebook,
+  aiChatOpenMode,
 }: AppShellProps) {
   const isWideContentView =
     activeView === "workbook" ||
@@ -101,6 +105,8 @@ export function AppShell({
           onStartPaper={onStartPaper}
           onNavigate={onNavigate}
           onOpenInstantMistake={onOpenInstantMistake}
+          onOpenMistakeNotebook={onOpenMistakeNotebook}
+          aiChatOpenMode={aiChatOpenMode}
         />
       </main>
     </div>

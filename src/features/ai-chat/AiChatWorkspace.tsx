@@ -18,6 +18,7 @@ import { AgentStudyPanel } from "../agent/AgentStudyPanel";
 import "./ai-workspace.css";
 
 export interface AiChatWorkspaceProps {
+  initialMode?: "chat" | "agent";
   onOpenReference(documentId: string, page: number): void;
   onOpenSettings(): void;
   onStartPaper?(questions: IndexedQuestion[], title?: string): void;
@@ -46,6 +47,7 @@ function withCurrentModel(
 }
 
 export function AiChatWorkspace({
+  initialMode,
   onOpenReference,
   onStartPaper,
 }: AiChatWorkspaceProps) {
@@ -56,7 +58,14 @@ export function AiChatWorkspace({
   const [modelOptionsProviderId, setModelOptionsProviderId] =
     useState<string>();
   const [modelUpdating, setModelUpdating] = useState(false);
-  const [mode, setMode] = useState<"chat" | "agent">("chat");
+  const [mode, setMode] = useState<"chat" | "agent">(initialMode ?? "chat");
+  const [prevInitialMode, setPrevInitialMode] = useState(initialMode);
+  if (initialMode !== prevInitialMode) {
+    setPrevInitialMode(initialMode);
+    if (initialMode !== undefined) {
+      setMode(initialMode);
+    }
+  }
 
   useEffect(() => {
     let active = true;

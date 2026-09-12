@@ -51,6 +51,7 @@ const ReviewPanel = lazy<ComponentType<ReviewPanelProps>>(() =>
   })),
 );
 interface AiChatWorkspaceProps {
+  initialMode?: "chat" | "agent";
   onOpenReference(documentId: string, page: number): void;
   onOpenSettings(): void;
   onStartPaper?: (questions: IndexedQuestion[], title?: string) => void;
@@ -108,6 +109,8 @@ export interface AppPageContentProps {
   onStartPaper?: (questions: IndexedQuestion[], title?: string) => void;
   onNavigate: (view: AppView) => void;
   onOpenInstantMistake?: () => void;
+  onOpenMistakeNotebook?: () => void;
+  aiChatOpenMode?: "chat" | "agent";
 }
 
 function PageContent({
@@ -123,6 +126,8 @@ function PageContent({
   onStartPaper,
   onNavigate,
   onOpenInstantMistake,
+  onOpenMistakeNotebook,
+  aiChatOpenMode,
 }: AppPageContentProps) {
   switch (activeView) {
     case "today":
@@ -137,6 +142,7 @@ function PageContent({
           onOpenWorkbook={() => onNavigate("workbook")}
           onOpenPaper={onOpenPaperShortcut}
           onOpenInstantMistake={onOpenInstantMistake}
+          onOpenMistakeNotebook={onOpenMistakeNotebook}
         />
       );
     case "planning":
@@ -157,6 +163,7 @@ function PageContent({
     case "ai-chat":
       return (
         <AiChatWorkspace
+          initialMode={aiChatOpenMode}
           onOpenReference={onOpenReference}
           onOpenSettings={() => onNavigate("ai-settings")}
           onStartPaper={onStartPaper}
@@ -183,6 +190,8 @@ export function AppPageContent({
   onStartPaper,
   onNavigate,
   onOpenInstantMistake,
+  onOpenMistakeNotebook,
+  aiChatOpenMode,
 }: AppPageContentProps) {
   const currentPage = PAGE_META[activeView];
   return (
@@ -207,6 +216,8 @@ export function AppPageContent({
         onStartPaper={onStartPaper}
         onNavigate={onNavigate}
         onOpenInstantMistake={onOpenInstantMistake}
+        onOpenMistakeNotebook={onOpenMistakeNotebook}
+        aiChatOpenMode={aiChatOpenMode}
       />
     </Suspense>
   );
