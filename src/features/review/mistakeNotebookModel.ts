@@ -10,12 +10,14 @@ import { isMistakeQuestion } from "./instantMistakeModel";
 
 export type MistakeStatusFilter = "all" | "pending" | "mastered";
 export type MistakeSortOption = "priority" | "frequency" | "natural";
+export type MistakeFrequencyFilter = "all" | "gte2" | "gte3";
 
 export interface MistakeNotebookFilter {
   subjectId?: string;
   workbookId?: string;
   questionType?: QuestionType | "all";
   status: MistakeStatusFilter;
+  errorThreshold?: MistakeFrequencyFilter;
   query: string;
   sortBy?: MistakeSortOption;
 }
@@ -110,6 +112,13 @@ export function filterMistakeNotebook(
     }
     if (filter.status === "mastered" && !isMistakeMastered(q)) {
       return false;
+    }
+
+    // 错误频次过滤 (反复失分 / 顽固重灾区)
+    if (filter.errorThreshold === "gte2") {
+      if (q.incorrectCount + q.partialCount < 2) return false;
+    } else if (filter.errorThreshold === "gte3") {
+      if (q.incorrectCount + q.partialCount < 3) return false;
     }
 
     // 关键词搜索（题目标题、题号、章节、习题册名）

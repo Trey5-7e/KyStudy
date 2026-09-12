@@ -10,6 +10,8 @@ import type { AttemptResult } from "../../shared/tauri/questionClient";
 import type { ReviewSchemeRating } from "../../shared/tauri/reviewSchemeClient";
 import { QuestionReviewContent } from "./ContinuousReviewPanel";
 import { QuestionAiAnalysis } from "./QuestionAiAnalysis";
+import { QuestionRegionCard } from "./QuestionRegionCard";
+import { PaperExportDialog } from "../workbook/PaperExportDialog";
 import {
   indexedQuestionToReviewItem,
   selectInstantMistakeQuestions,
@@ -58,6 +60,7 @@ export function InstantMistakeDrillDialog({
   // AI analysis modal for review
   const [aiAnalysisQuestion, setAiAnalysisQuestion] =
     useState<IndexedQuestion>();
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
   const inRetry = retryQueue !== undefined && retryIndex < retryQueue.length;
   const activeRetryQuestion = inRetry ? retryQueue[retryIndex] : undefined;
@@ -303,12 +306,29 @@ export function InstantMistakeDrillDialog({
 
             <div className="paper-summary-actions-strip">
               {summary.uncertainOrFailed.length > 0 ? (
-                <Button variant="primary" onClick={startRetry}>
-                  <span className="material-symbols-rounded" aria-hidden="true">
-                    replay
-                  </span>
-                  重练本次待巩固题目（{summary.uncertainOrFailed.length} 题）
-                </Button>
+                <>
+                  <Button variant="primary" onClick={startRetry}>
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      replay
+                    </span>
+                    重练本次待巩固题目（{summary.uncertainOrFailed.length} 题）
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setExportDialogOpen(true)}
+                  >
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      print
+                    </span>
+                    导出待巩固错题 (PDF)
+                  </Button>
+                </>
               ) : null}
               <Button variant="secondary" onClick={handleAnotherBatch}>
                 <span className="material-symbols-rounded" aria-hidden="true">
@@ -390,6 +410,17 @@ export function InstantMistakeDrillDialog({
         )}
       </EditorDialog>
 
+      {exportDialogOpen && summary.uncertainOrFailed.length > 0 ? (
+        <PaperExportDialog
+          questions={summary.uncertainOrFailed}
+          onClose={() => setExportDialogOpen(false)}
+          onSaved={(msg) => {
+            setExportDialogOpen(false);
+            setBannerNotice(msg);
+          }}
+        />
+      ) : null}
+
       {aiAnalysisQuestion !== undefined ? (
         <EditorDialog
           title="辅助参考解析"
@@ -401,16 +432,23 @@ export function InstantMistakeDrillDialog({
           backRequiresConfirmation={false}
           size="review"
         >
-          <QuestionAiAnalysis
-            question={{
-              id: aiAnalysisQuestion.id,
-              documentId: aiAnalysisQuestion.documentId,
-              documentTitle: aiAnalysisQuestion.documentTitle,
-              title: aiAnalysisQuestion.title,
-              questionType: aiAnalysisQuestion.questionType,
-            }}
-            regions={aiAnalysisQuestion.regions}
-          />
+          <div className="mistake-preview-dialog-content">
+            <QuestionRegionCard
+              documentId={aiAnalysisQuestion.documentId}
+              regions={aiAnalysisQuestion.regions}
+              title={aiAnalysisQuestion.title}
+            />
+            <QuestionAiAnalysis
+              question={{
+                id: aiAnalysisQuestion.id,
+                documentId: aiAnalysisQuestion.documentId,
+                documentTitle: aiAnalysisQuestion.documentTitle,
+                title: aiAnalysisQuestion.title,
+                questionType: aiAnalysisQuestion.questionType,
+              }}
+              regions={aiAnalysisQuestion.regions}
+            />
+          </div>
         </EditorDialog>
       ) : null}
     </>

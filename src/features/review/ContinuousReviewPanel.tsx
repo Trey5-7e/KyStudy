@@ -418,6 +418,23 @@ export function ContinuousReviewPanel({
                     {summary.uncertainOrFailedItems.length} 题）
                   </Button>
                 ) : null}
+                {onOpenMistakeNotebook && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      onClose();
+                      onOpenMistakeNotebook();
+                    }}
+                  >
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      menu_book
+                    </span>
+                    前往错题本巩固（{summary.uncertainOrFailedItems.length} 题）
+                  </Button>
+                )}
                 {onOpenInstantMistake && (
                   <Button
                     variant="secondary"
@@ -530,10 +547,17 @@ export function ContinuousReviewPanel({
           backRequiresConfirmation={false}
           size="review"
         >
-          <QuestionAiAnalysis
-            question={aiAnalysisQuestion.question.question}
-            regions={aiAnalysisQuestion.question.regions}
-          />
+          <div className="mistake-preview-dialog-content">
+            <QuestionRegionCard
+              documentId={aiAnalysisQuestion.question.question.documentId}
+              regions={aiAnalysisQuestion.question.regions}
+              title={aiAnalysisQuestion.question.question.title}
+            />
+            <QuestionAiAnalysis
+              question={aiAnalysisQuestion.question.question}
+              regions={aiAnalysisQuestion.question.regions}
+            />
+          </div>
         </EditorDialog>
       ) : null}
     </>
