@@ -56,6 +56,7 @@ export const PRIMARY_NAVIGATION: ReadonlyArray<{
 export interface AppNavigationProps {
   activeView: AppView;
   onNavigate: (view: AppView) => void;
+  onOpenCommandPalette?: () => void;
 }
 
 function AppBrand() {
@@ -112,11 +113,32 @@ function SettingsLink({ activeView, onNavigate }: AppNavigationProps) {
   );
 }
 
-export function AppNavigation({ activeView, onNavigate }: AppNavigationProps) {
+export function AppNavigation({
+  activeView,
+  onNavigate,
+  onOpenCommandPalette,
+}: AppNavigationProps) {
   const activePrimaryView = primaryViewFor(activeView);
   return (
     <aside className="app-sidebar">
       <AppBrand />
+
+      {onOpenCommandPalette && (
+        <button
+          type="button"
+          className="command-palette-trigger"
+          onClick={onOpenCommandPalette}
+          aria-label="打开快捷动作面板 (Ctrl+K)"
+        >
+          <span className="command-palette-trigger-left">
+            <span className="material-symbols-rounded" aria-hidden="true">
+              search
+            </span>
+            <span>快捷命令…</span>
+          </span>
+          <kbd>Ctrl K</kbd>
+        </button>
+      )}
 
       <nav className="app-navigation" aria-label="主菜单">
         {PRIMARY_NAVIGATION.map((item) => {

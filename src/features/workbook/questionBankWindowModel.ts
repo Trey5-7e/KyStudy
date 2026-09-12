@@ -24,6 +24,10 @@ export type QuestionBankOpenRequest =
       questionIds: string[];
       title?: string;
       nonce: number;
+    }
+  | {
+      kind: "open-quick-record";
+      nonce: number;
     };
 
 export type QuestionBankToolsSection =
