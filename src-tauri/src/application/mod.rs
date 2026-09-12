@@ -85,9 +85,10 @@ pub(crate) use question::{
     ValidatedQuestionUpdate,
 };
 pub(crate) use question_bank::{
-    BulkQuestionAttemptInput, CreateWorkbookCategoryInput, DeleteTrashedWorkbookSegmentInput,
-    ImportQuestionIndexInput, IndexedQuestionDraftInput, IndexedQuestionRegionUpdateInput,
-    InsertIndexedQuestionInput, QuestionBankError, QuestionBankRepository, QuestionBankUseCases,
+    AppendIndexedQuestionInput, BulkQuestionAttemptInput, CreateWorkbookCategoryInput,
+    DeleteTrashedWorkbookSegmentInput, ImportQuestionIndexInput, IndexedQuestionDraftInput,
+    IndexedQuestionRegionUpdateInput, InsertIndexedQuestionInput, QuestionBankError,
+    QuestionBankRepository, QuestionBankUseCases,
     ReassignWorkbookSegmentInput, RecordBulkQuestionAttemptsInput, RenameWorkbookCategoryInput,
     ReplaceIndexedQuestionRegionsInput, RestoreWorkbookSegmentInput,
     SetQuestionGapAcknowledgementInput, TrashWorkbookSegmentInput, UpdateIndexedQuestionInput,

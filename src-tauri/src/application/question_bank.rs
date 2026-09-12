@@ -128,6 +128,17 @@ pub(crate) struct InsertIndexedQuestionInput {
     pub(crate) regions: Vec<QuestionRegionInput>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct AppendIndexedQuestionInput {
+    pub(crate) segment_id: String,
+    pub(crate) title: String,
+    pub(crate) chapter: String,
+    pub(crate) section_part: String,
+    pub(crate) question_type: String,
+    pub(crate) question_number: String,
+    pub(crate) regions: Vec<QuestionRegionInput>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ValidatedIndexedQuestionUpdate {
     pub(crate) question_id: String,
@@ -344,6 +355,17 @@ pub(crate) trait QuestionBankRepository: Clone + Send + Sync + 'static {
         question: &ValidatedIndexedQuestion,
         insert_before: bool,
         updated_at: i64,
+    ) -> Result<QuestionBankSnapshot, QuestionBankError>;
+    fn append_question(
+        &self,
+        segment_id: &str,
+        question: &ValidatedIndexedQuestion,
+        updated_at: i64,
+    ) -> Result<QuestionBankSnapshot, QuestionBankError>;
+    fn restore_segment_overwritten_questions(
+        &self,
+        segment_id: &str,
+        restored_at: i64,
     ) -> Result<QuestionBankSnapshot, QuestionBankError>;
     fn trash_question(
         &self,
@@ -788,6 +810,71 @@ impl<R: QuestionBankRepository> QuestionBankUseCases<R> {
             insert_before,
             now,
         )
+    }
+
+    pub(crate) fn append_question(
+        &self,
+        input: AppendIndexedQuestionInput,
+    ) -> Result<QuestionBankSnapshot, QuestionBankError> {
+        validate_id(&input.segment_id)?;
+        if input.regions.is_empty() || input.regions.len() > 12 {
+            return Err(QuestionBankError::InvalidInput);
+        }
+        let question_type =
+            QuestionType::parse(&input.question_type).ok_or(QuestionBankError::InvalidInput)?;
+        if !matches!(
+            input.section_part.as_str(),
+            "basic" | "comprehensive" | "extended" | "other"
+        ) {
+            return Err(QuestionBankError::InvalidInput);
+        }
+        let now = current_utc_millis()?;
+        let question_id = Uuid::now_v7().to_string();
+        let regions = input
+            .regions
+            .into_iter()
+            .enumerate()
+            .map(|(index, region)| {
+                validate_region(&region)?;
+                Ok(QuestionRegion {
+                    id: Uuid::now_v7().to_string(),
+                    question_id: question_id.clone(),
+                    document_id: String::new(),
+                    page_number: region.page_number,
+                    x: region.x,
+                    y: region.y,
+                    width: region.width,
+                    height: region.height,
+                    coordinate_version: 1,
+                    sort_order: u32::try_from(index)
+                        .map_err(|_| QuestionBankError::InvalidInput)?,
+                    created_at: now,
+                })
+            })
+            .collect::<Result<Vec<_>, QuestionBankError>>()?;
+        let question = ValidatedIndexedQuestion {
+            id: question_id.clone(),
+            source_key: format!("manual|{question_id}"),
+            title: required_text(&input.title, 200)?,
+            chapter: required_text(&input.chapter, 120)?,
+            section_part: input.section_part,
+            question_type,
+            question_number: required_text(&input.question_number, 60)?,
+            index_confidence: 1.0,
+            sort_order: 0,
+            regions,
+        };
+        self.repository
+            .append_question(&input.segment_id, &question, now)
+    }
+
+    pub(crate) fn restore_segment_overwritten_questions(
+        &self,
+        segment_id: &str,
+    ) -> Result<QuestionBankSnapshot, QuestionBankError> {
+        validate_id(segment_id)?;
+        self.repository
+            .restore_segment_overwritten_questions(segment_id, current_utc_millis()?)
     }
 }
 
