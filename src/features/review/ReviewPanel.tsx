@@ -28,6 +28,7 @@ import { buildContinuousReviewSession } from "./continuousReview";
 import { ContinuousReviewPanel } from "./ContinuousReviewPanel";
 import { InstantMistakeDialog } from "./InstantMistakeDialog";
 import { InstantMistakeDrillDialog } from "./InstantMistakeDrillDialog";
+import { MistakeNotebookView } from "./MistakeNotebookView";
 import {
   RestDaySettings,
   SchemeCard,
@@ -43,6 +44,8 @@ import {
   type SchemeDraft,
 } from "./reviewViewModel";
 import "./review.css";
+
+export type ReviewTab = "queue" | "notebook" | "schemes";
 
 export type ReviewOpenRequest =
   | {
@@ -62,7 +65,7 @@ export function ReviewPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReviewSchemeCommandError>();
   const [notice, setNotice] = useState("");
-  const [managementOpen, setManagementOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<ReviewTab>();
   const [dismissedReviewRequest, setDismissedReviewRequest] =
     useState<number>();
   const [internalOpenRequest, setInternalOpenRequest] = useState<number>();
@@ -81,8 +84,14 @@ export function ReviewPanel({
   const refresh = async () => {
     const v = ++version.current;
     setState({ kind: "loading" });
-    const next = await loadReviewPage();
-    if (v === version.current) setState(next);
+    const [next, snap] = await Promise.all([
+      loadReviewPage(),
+      getQuestionBank().catch(() => undefined),
+    ]);
+    if (v === version.current) {
+      setState(next);
+      if (snap) setQuestionBankSnapshot(snap);
+    }
   };
   const openInstantMistake = async () => {
     setBusy(true);
@@ -102,7 +111,17 @@ export function ReviewPanel({
     void loadReviewPage().then((next) => {
       if (v === version.current) setState(next);
     });
+    void getQuestionBank()
+      .then(setQuestionBankSnapshot)
+      .catch(() => {});
   }, []);
+  useEffect(() => {
+    if (activeTab === "notebook" && !questionBankSnapshot) {
+      void getQuestionBank()
+        .then(setQuestionBankSnapshot)
+        .catch(() => {});
+    }
+  }, [activeTab, questionBankSnapshot]);
   useEffect(() => {
     if (openRequest === undefined) return;
     if (
@@ -194,7 +213,8 @@ export function ReviewPanel({
     );
   const { today, dashboard, subjects, workbooks } = state.value;
   const session = buildContinuousReviewSession(dashboard.schemes);
-  const showManagement = managementOpen || dashboard.schemes.length === 0;
+  const currentTab: ReviewTab =
+    activeTab ?? (dashboard.schemes.length === 0 ? "schemes" : "queue");
   const open = (d: SchemeDraft) => {
     setDraft(d);
     setInitial(d);
@@ -207,18 +227,6 @@ export function ReviewPanel({
     <PageSurface className="review-scheme-page" labelledBy="review-title">
       {header(
         <>
-          {managementOpen && dashboard.schemes.length > 0 ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setManagementOpen(false)}
-            >
-              <span className="material-symbols-rounded" aria-hidden="true">
-                arrow_back
-              </span>
-              <span>返回今日复习</span>
-            </Button>
-          ) : null}
           <Button
             variant="secondary"
             size="sm"
@@ -230,20 +238,31 @@ export function ReviewPanel({
             </span>
             <span>立即刷错题</span>
           </Button>
-          <Button
-            variant={showManagement ? "primary" : "secondary"}
-            size="sm"
-            onClick={() =>
-              showManagement
-                ? open({ ...EMPTY_DRAFT, quotas: { ...EMPTY_DRAFT.quotas } })
-                : setManagementOpen(true)
-            }
-          >
-            <span className="material-symbols-rounded" aria-hidden="true">
-              {showManagement ? "add" : "tune"}
-            </span>
-            <span>{showManagement ? "新建复习方案" : "管理复习方案"}</span>
-          </Button>
+          {currentTab === "schemes" ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() =>
+                open({ ...EMPTY_DRAFT, quotas: { ...EMPTY_DRAFT.quotas } })
+              }
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                add
+              </span>
+              <span>新建复习方案</span>
+            </Button>
+          ) : currentTab === "queue" ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setActiveTab("schemes")}
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                tune
+              </span>
+              <span>管理复习方案</span>
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             size="sm"
@@ -257,13 +276,57 @@ export function ReviewPanel({
           </Button>
         </>,
       )}
+
+      {/* 视图切换器 */}
+      <div
+        className="review-tab-switcher"
+        role="tablist"
+        aria-label="错题模块导航"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={currentTab === "queue"}
+          className={`review-tab-button ${currentTab === "queue" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("queue")}
+        >
+          <span className="material-symbols-rounded" aria-hidden="true">
+            calendar_today
+          </span>
+          <span>今日复习</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={currentTab === "notebook"}
+          className={`review-tab-button ${currentTab === "notebook" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("notebook")}
+        >
+          <span className="material-symbols-rounded" aria-hidden="true">
+            menu_book
+          </span>
+          <span>错题本</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={currentTab === "schemes"}
+          className={`review-tab-button ${currentTab === "schemes" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("schemes")}
+        >
+          <span className="material-symbols-rounded" aria-hidden="true">
+            tune
+          </span>
+          <span>复习方案</span>
+        </button>
+      </div>
       {error && (
         <PageStatus tone="error" title={error.message}>
           {error.action}
         </PageStatus>
       )}
       {notice && <p className="review-scheme-notice">{notice}</p>}
-      {showManagement ? (
+      {currentTab === "schemes" ? (
         <>
           <RestDaySettings
             key={dashboard.restWeekdays.join(",")}
@@ -360,6 +423,25 @@ export function ReviewPanel({
             ))}
           </div>
         </>
+      ) : currentTab === "notebook" ? (
+        <MistakeNotebookView
+          questions={questionBankSnapshot?.questions ?? []}
+          subjects={subjects}
+          workbooks={workbooks}
+          busy={busy}
+          onStartDrill={async (selectedQuestions, count, subjectId) => {
+            let snap = questionBankSnapshot;
+            if (!snap) {
+              snap = await getQuestionBank();
+              setQuestionBankSnapshot(snap);
+            }
+            setDrillSession({
+              questions: selectedQuestions,
+              targetCount: count,
+              subjectId,
+            });
+          }}
+        />
       ) : (
         <ContinuousReviewPanel
           session={session}
@@ -414,7 +496,7 @@ export function ReviewPanel({
               "已撤销上一题",
             )
           }
-          onManage={() => setManagementOpen(true)}
+          onManage={() => setActiveTab("schemes")}
           onOpenInstantMistake={() => void openInstantMistake()}
         />
       )}
