@@ -3,6 +3,7 @@ import type { QuestionType } from "../../shared/tauri/questionClient";
 import { isMistakeQuestion } from "./instantMistakeModel";
 
 export type MistakeStatusFilter = "all" | "pending" | "mastered";
+export type MistakeSortOption = "priority" | "frequency" | "natural";
 
 export interface MistakeNotebookFilter {
   subjectId?: string;
@@ -10,6 +11,7 @@ export interface MistakeNotebookFilter {
   questionType?: QuestionType | "all";
   status: MistakeStatusFilter;
   query: string;
+  sortBy?: MistakeSortOption;
 }
 
 export interface MistakeSummary {
@@ -119,8 +121,35 @@ export function filterMistakeNotebook(
     return true;
   });
 
-  // 排序：待攻克优先于已攻克，做错优先于模糊，错误次数多者靠前
+  const sortBy = filter.sortBy ?? "priority";
+
   return filtered.sort((a, b) => {
+    if (sortBy === "natural") {
+      return (
+        a.sortOrder - b.sortOrder ||
+        a.questionNumber.localeCompare(b.questionNumber, undefined, {
+          numeric: true,
+        })
+      );
+    }
+
+    if (sortBy === "frequency") {
+      if (a.incorrectCount !== b.incorrectCount) {
+        return b.incorrectCount - a.incorrectCount;
+      }
+      if (a.partialCount !== b.partialCount) {
+        return b.partialCount - a.partialCount;
+      }
+      return (
+        a.sortOrder - b.sortOrder ||
+        a.questionNumber.localeCompare(b.questionNumber, undefined, {
+          numeric: true,
+        })
+      );
+    }
+
+    // sortBy === "priority" (默认)
+    // 待攻克优先于已攻克，做错优先于模糊，错误次数多者靠前
     const aPending = isMistakePending(a);
     const bPending = isMistakePending(b);
     if (aPending !== bPending) return aPending ? -1 : 1;
