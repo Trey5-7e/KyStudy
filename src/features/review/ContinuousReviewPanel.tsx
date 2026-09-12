@@ -519,6 +519,7 @@ export function QuestionReviewContent({
   queueId,
   busy,
   canUndo,
+  defaultRevealed = false,
   onFeedback,
   onUndo,
 }: {
@@ -526,6 +527,7 @@ export function QuestionReviewContent({
   queueId: string;
   busy: boolean;
   canUndo: boolean;
+  defaultRevealed?: boolean;
   onFeedback(
     queueId: string,
     questionId: string,
@@ -535,7 +537,7 @@ export function QuestionReviewContent({
 }) {
   const ref = useRef<HTMLElement>(null);
   const q = item.question.question;
-  const [revealed, setRevealed] = useState(false);
+  const [revealed, setRevealed] = useState(defaultRevealed);
 
   useEffect(() => {
     ref.current?.focus({ preventScroll: true });
