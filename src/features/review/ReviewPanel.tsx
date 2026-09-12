@@ -429,6 +429,8 @@ export function ReviewPanel({
           subjects={subjects}
           workbooks={workbooks}
           busy={busy}
+          today={today}
+          onSnapshotUpdated={(next) => setQuestionBankSnapshot(next)}
           onStartDrill={async (selectedQuestions, count, subjectId) => {
             let snap = questionBankSnapshot;
             if (!snap) {

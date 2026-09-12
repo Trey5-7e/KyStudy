@@ -1,16 +1,26 @@
 import { useMemo, useState } from "react";
-import type { IndexedQuestion } from "../../shared/tauri/questionBankClient";
+import {
+  recordBulkQuestionAttempts,
+  type IndexedQuestion,
+  type QuestionBankSnapshot,
+} from "../../shared/tauri/questionBankClient";
 import type { StudySubject } from "../../shared/tauri/scheduleClient";
-import type { QuestionType } from "../../shared/tauri/questionClient";
+import type {
+  AttemptResult,
+  QuestionType,
+} from "../../shared/tauri/questionClient";
 import { Badge } from "../../shared/ui/Badge";
 import { Button } from "../../shared/ui/Button";
 import { QuestionRegionCard } from "./QuestionRegionCard";
+import { QuestionAiAnalysis } from "./QuestionAiAnalysis";
+import { PaperExportDialog } from "../workbook/PaperExportDialog";
 import {
   filterMistakeNotebook,
   isMistakeMastered,
   isMistakePending,
   summarizeMistakes,
   type MistakeNotebookFilter,
+  type MistakeSortOption,
   type MistakeStatusFilter,
 } from "./mistakeNotebookModel";
 
@@ -19,6 +29,8 @@ export interface MistakeNotebookViewProps {
   subjects: readonly StudySubject[];
   workbooks?: readonly { id: string; name?: string; title?: string }[];
   busy?: boolean;
+  today?: string;
+  onSnapshotUpdated?(snapshot: QuestionBankSnapshot): void;
   onStartDrill(
     questions: IndexedQuestion[],
     count: number,
@@ -31,6 +43,8 @@ export function MistakeNotebookView({
   subjects,
   workbooks,
   busy,
+  today,
+  onSnapshotUpdated,
   onStartDrill,
 }: MistakeNotebookViewProps) {
   const [filter, setFilter] = useState<MistakeNotebookFilter>({
@@ -39,9 +53,13 @@ export function MistakeNotebookView({
     questionType: "all",
     status: "all",
     query: "",
+    sortBy: "priority",
   });
 
   const [expandedQuestionId, setExpandedQuestionId] = useState<string>();
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportNotice, setExportNotice] = useState<string>();
+  const [markingId, setMarkingId] = useState<string>();
 
   const subjectsById = useMemo(
     () => new Map(subjects.map((s) => [s.id, s.name])),
@@ -72,7 +90,24 @@ export function MistakeNotebookView({
       questionType: "all",
       status: "all",
       query: "",
+      sortBy: "priority",
     });
+  };
+
+  const handleQuickMark = async (questionId: string, result: AttemptResult) => {
+    if (busy || markingId !== undefined) return;
+    const targetDate = today ?? new Date().toISOString().slice(0, 10);
+    setMarkingId(questionId);
+    try {
+      const updated = await recordBulkQuestionAttempts(targetDate, [
+        { questionId, result },
+      ]);
+      onSnapshotUpdated?.(updated);
+    } catch (err) {
+      console.error("Failed to update question status:", err);
+    } finally {
+      setMarkingId(undefined);
+    }
   };
 
   return (
@@ -110,26 +145,58 @@ export function MistakeNotebookView({
 
         <div className="mistake-notebook-summary-actions">
           {filteredQuestions.length > 0 ? (
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={busy}
-              onClick={() =>
-                onStartDrill(
-                  filteredQuestions,
-                  filteredQuestions.length,
-                  filter.subjectId,
-                )
-              }
-            >
-              <span className="material-symbols-rounded" aria-hidden="true">
-                bolt
-              </span>
-              <span>特训当前筛选错题（{filteredQuestions.length} 题）</span>
-            </Button>
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={busy}
+                onClick={() =>
+                  onStartDrill(
+                    filteredQuestions,
+                    filteredQuestions.length,
+                    filter.subjectId,
+                  )
+                }
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  bolt
+                </span>
+                <span>特训当前筛选错题（{filteredQuestions.length} 题）</span>
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy}
+                onClick={() => setExportDialogOpen(true)}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  print
+                </span>
+                <span>导出错题卷 (PDF)</span>
+              </Button>
+            </>
           ) : null}
         </div>
       </section>
+
+      {exportNotice ? (
+        <div className="mistake-notebook-notice" role="status">
+          <span className="material-symbols-rounded" aria-hidden="true">
+            check_circle
+          </span>
+          <span>{exportNotice}</span>
+          <button
+            type="button"
+            className="mistake-notice-close"
+            onClick={() => setExportNotice(undefined)}
+            aria-label="关闭提示"
+          >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              close
+            </span>
+          </button>
+        </div>
+      ) : null}
 
       {/* 多维筛选工具条 */}
       <div className="mistake-notebook-toolbar">
@@ -195,6 +262,23 @@ export function MistakeNotebookView({
             <option value="choice">选择题</option>
             <option value="blank">填空题</option>
             <option value="solution">解答题</option>
+          </select>
+
+          {/* 排序方式 */}
+          <select
+            className="mistake-notebook-select"
+            value={filter.sortBy ?? "priority"}
+            aria-label="错题排序方式"
+            onChange={(e) =>
+              setFilter((prev) => ({
+                ...prev,
+                sortBy: e.target.value as MistakeSortOption,
+              }))
+            }
+          >
+            <option value="priority">综合优先级排序</option>
+            <option value="frequency">错误频次最高</option>
+            <option value="natural">原书题号顺序</option>
           </select>
         </div>
 
@@ -342,6 +426,43 @@ export function MistakeNotebookView({
                       </span>
                       <span>特训此题</span>
                     </Button>
+                    {onSnapshotUpdated !== undefined ? (
+                      isPending ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={busy || markingId === q.id}
+                          onClick={() => void handleQuickMark(q.id, "correct")}
+                          title="将本题标记为已攻克掌握"
+                        >
+                          <span
+                            className="material-symbols-rounded"
+                            aria-hidden="true"
+                          >
+                            check_circle
+                          </span>
+                          <span>标为已攻克</span>
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={busy || markingId === q.id}
+                          onClick={() =>
+                            void handleQuickMark(q.id, "incorrect")
+                          }
+                          title="将本题移回待攻克列表"
+                        >
+                          <span
+                            className="material-symbols-rounded"
+                            aria-hidden="true"
+                          >
+                            restart_alt
+                          </span>
+                          <span>移回待攻克</span>
+                        </Button>
+                      )
+                    ) : null}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -367,6 +488,11 @@ export function MistakeNotebookView({
                       regions={q.regions}
                       title={q.title}
                     />
+                    <QuestionAiAnalysis
+                      key={q.id}
+                      question={q}
+                      regions={q.regions}
+                    />
                   </div>
                 ) : null}
               </article>
@@ -374,6 +500,16 @@ export function MistakeNotebookView({
           })}
         </div>
       )}
+      {exportDialogOpen ? (
+        <PaperExportDialog
+          questions={filteredQuestions}
+          onClose={() => setExportDialogOpen(false)}
+          onSaved={(msg) => {
+            setExportDialogOpen(false);
+            setExportNotice(msg);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

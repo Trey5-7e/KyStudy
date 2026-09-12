@@ -145,4 +145,24 @@ describe("mistakeNotebookModel", () => {
     });
     expect(numberSearch.map((q) => q.id)).toEqual(["q4"]);
   });
+
+  it("sorts by frequency and natural order correctly", () => {
+    const questions = [q1, q2, q3, q4];
+
+    // frequency: q1 (3 mistakes), q3 (2 mistakes), q2 (1 mistake, 2 partial), q4 (1 mistake, 0 partial)
+    const byFrequency = filterMistakeNotebook(questions, {
+      status: "all",
+      query: "",
+      sortBy: "frequency",
+    });
+    expect(byFrequency.map((q) => q.id)).toEqual(["q1", "q3", "q2", "q4"]);
+
+    // natural: by sortOrder 1, 2, 3, 4
+    const byNatural = filterMistakeNotebook(questions, {
+      status: "all",
+      query: "",
+      sortBy: "natural",
+    });
+    expect(byNatural.map((q) => q.id)).toEqual(["q1", "q2", "q3", "q4"]);
+  });
 });
