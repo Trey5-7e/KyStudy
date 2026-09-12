@@ -44,11 +44,18 @@ import {
 } from "./reviewViewModel";
 import "./review.css";
 
+export type ReviewOpenRequest =
+  | {
+      kind: "continuous" | "instant-mistake";
+      nonce: number;
+    }
+  | number;
+
 export function ReviewPanel({
   openRequest,
   onOpenSettings,
 }: {
-  openRequest?: number;
+  openRequest?: ReviewOpenRequest;
   onOpenSettings(): void;
 }) {
   const [state, setState] = useState<PageState>({ kind: "loading" });
@@ -59,6 +66,7 @@ export function ReviewPanel({
   const [dismissedReviewRequest, setDismissedReviewRequest] =
     useState<number>();
   const [internalOpenRequest, setInternalOpenRequest] = useState<number>();
+  const handledInstantMistakeNonceRef = useRef<number | undefined>(undefined);
   const [draft, setDraft] = useState<SchemeDraft>();
   const [initial, setInitial] = useState<SchemeDraft>();
   const [instantMistakeSetupOpen, setInstantMistakeSetupOpen] = useState(false);
@@ -95,6 +103,18 @@ export function ReviewPanel({
       if (v === version.current) setState(next);
     });
   }, []);
+  useEffect(() => {
+    if (openRequest === undefined) return;
+    if (
+      typeof openRequest === "object" &&
+      openRequest.kind === "instant-mistake"
+    ) {
+      if (handledInstantMistakeNonceRef.current !== openRequest.nonce) {
+        handledInstantMistakeNonceRef.current = openRequest.nonce;
+        void openInstantMistake();
+      }
+    }
+  }, [openRequest]);
   useEffect(() => {
     if (!draft || !initial || sameSchemeDraft(draft, initial)) return;
   }, [draft, initial]);
@@ -343,14 +363,28 @@ export function ReviewPanel({
       ) : (
         <ContinuousReviewPanel
           session={session}
-          openRequest={
-            (openRequest !== undefined && openRequest !== dismissedReviewRequest
-              ? openRequest
-              : undefined) ?? internalOpenRequest
-          }
+          openRequest={(() => {
+            const nonce =
+              typeof openRequest === "number"
+                ? openRequest
+                : openRequest?.kind === "continuous"
+                  ? openRequest.nonce
+                  : undefined;
+            return (
+              (nonce !== undefined && nonce !== dismissedReviewRequest
+                ? nonce
+                : undefined) ?? internalOpenRequest
+            );
+          })()}
           onClose={() => {
-            if (openRequest !== undefined) {
-              setDismissedReviewRequest(openRequest);
+            const nonce =
+              typeof openRequest === "number"
+                ? openRequest
+                : openRequest?.kind === "continuous"
+                  ? openRequest.nonce
+                  : undefined;
+            if (nonce !== undefined) {
+              setDismissedReviewRequest(nonce);
             }
             setInternalOpenRequest(undefined);
           }}

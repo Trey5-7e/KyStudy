@@ -5,6 +5,7 @@ import { PageHeader, PageStatus } from "../shared/components/PagePrimitives";
 import type { AppView } from "./navigation";
 import type { QuestionBankOpenRequest } from "../features/workbook/questionBankWindowModel";
 import type { ResourceOpenRequest } from "../features/library/ResourcePanel";
+import type { ReviewOpenRequest } from "../features/review/ReviewPanel";
 
 const TodayOverviewPanel = lazy(() =>
   import("../features/today/TodayOverviewPanel").then((module) => ({
@@ -25,7 +26,7 @@ const ScheduleOverviewPanel = lazy<ComponentType<ScheduleOverviewPanelProps>>(
 );
 
 interface ReviewPanelProps {
-  openRequest?: number;
+  openRequest?: ReviewOpenRequest;
   onOpenSettings: () => void;
 }
 
@@ -95,7 +96,7 @@ export const PAGE_META: Readonly<Record<AppView, AppPageMeta>> = {
 
 export interface AppPageContentProps {
   activeView: AppView;
-  reviewOpenRequest?: number;
+  reviewOpenRequest?: ReviewOpenRequest;
   workbookOpenRequest?: QuestionBankOpenRequest;
   resourceOpenRequest?: ResourceOpenRequest;
   backAction?: ReactNode;

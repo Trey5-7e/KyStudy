@@ -489,6 +489,16 @@ export function QuestionBankPanel({
         active = false;
       };
     }
+
+    if (openRequest.kind === "open-quick-record") {
+      const nextWindow = recordDialogWindow(undefined, ROOT_WINDOW_ORIGIN);
+      void Promise.resolve().then(() => {
+        if (active) setActiveWindow(nextWindow);
+      });
+      return () => {
+        active = false;
+      };
+    }
   }, [loading, openRequest, snapshot.questions]);
 
   const attemptedCount = useMemo(

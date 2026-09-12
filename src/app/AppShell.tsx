@@ -3,13 +3,14 @@ import type { ReactNode } from "react";
 import type { IndexedQuestion } from "../shared/tauri/questionBankClient";
 import type { QuestionBankOpenRequest } from "../features/workbook/questionBankWindowModel";
 import type { ResourceOpenRequest } from "../features/library/ResourcePanel";
+import type { ReviewOpenRequest } from "../features/review/ReviewPanel";
 import { shouldInterceptNavigationClick, type AppView } from "./navigation";
 import { AppNavigation } from "./AppNavigation";
 import { AppPageContent } from "./AppPageContent";
 
 export interface AppShellProps {
   activeView: AppView;
-  reviewOpenRequest?: number;
+  reviewOpenRequest?: ReviewOpenRequest;
   workbookOpenRequest?: QuestionBankOpenRequest;
   resourceOpenRequest?: ResourceOpenRequest;
   onOpenReviewWindow: () => void;
@@ -19,6 +20,7 @@ export interface AppShellProps {
   onOpenReference: (documentId: string, page: number) => void;
   onStartPaper?: (questions: IndexedQuestion[], title?: string) => void;
   onNavigate: (view: AppView) => void;
+  onOpenCommandPalette?: () => void;
 }
 
 function BackToPlanningAction({
@@ -54,6 +56,7 @@ export function AppShell({
   onOpenReference,
   onStartPaper,
   onNavigate,
+  onOpenCommandPalette,
 }: AppShellProps) {
   const isWideContentView =
     activeView === "workbook" ||
@@ -71,7 +74,11 @@ export function AppShell({
         跳到主要内容
       </a>
 
-      <AppNavigation activeView={activeView} onNavigate={onNavigate} />
+      <AppNavigation
+        activeView={activeView}
+        onNavigate={onNavigate}
+        onOpenCommandPalette={onOpenCommandPalette}
+      />
 
       <main
         id="main-content"
