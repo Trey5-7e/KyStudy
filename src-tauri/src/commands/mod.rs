@@ -16,7 +16,8 @@ use crate::application::{
     AddNodeResourceInput, AddPlanReferenceInput, AddQuestionAttemptInput, AddQuestionRegionInput,
     AiAttachmentRef, AiCallPreview, AiCallResult, AiError, AiImagePreviewInput, AiModelOption,
     AiOverview, AiPreviewInput, AnalyticsBacklog, AnalyticsError, AnalyticsInput,
-    AnalyticsOverview, AnalyticsPeriodSummary, BackupError, BackupReport,
+    AnalyticsOverview, AnalyticsPeriodSummary, AppendIndexedQuestionInput, BackupError,
+    BackupReport,
     BatchClassifyQuestionsInput, BeginResourceIndexInput, BulkQuestionAttemptInput,
     ConfirmPlanningChatInput, ConfirmQuestionRegionOcrInput, ConfirmShiftCyclePlanInput,
     CreateKnowledgeMapInput, CreateQuestionInput, CreateStudySessionInput, CreateSubjectInput,
@@ -2712,6 +2713,32 @@ impl From<InsertIndexedQuestionRequestDto> for InsertIndexedQuestionInput {
         Self {
             anchor_question_id: value.anchor_question_id,
             placement: value.placement,
+            title: value.title,
+            chapter: value.chapter,
+            section_part: value.section_part,
+            question_type: value.question_type,
+            question_number: value.question_number,
+            regions: value.regions.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct AppendIndexedQuestionRequestDto {
+    segment_id: String,
+    title: String,
+    chapter: String,
+    section_part: String,
+    question_type: String,
+    question_number: String,
+    regions: Vec<QuestionRegionRequestDto>,
+}
+
+impl From<AppendIndexedQuestionRequestDto> for AppendIndexedQuestionInput {
+    fn from(value: AppendIndexedQuestionRequestDto) -> Self {
+        Self {
+            segment_id: value.segment_id,
             title: value.title,
             chapter: value.chapter,
             section_part: value.section_part,
@@ -6961,6 +6988,34 @@ pub(crate) async fn insert_indexed_question(
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)
         .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn append_indexed_question(
+    request: AppendIndexedQuestionRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.append_question(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn restore_segment_questions(
+    segment_id: String,
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use_cases.restore_segment_overwritten_questions(&segment_id)
+    })
+    .await
+    .map_err(|_| AppErrorDto::task_failed())?
+    .map(Into::into)
+    .map_err(|error| AppErrorDto::from_question_bank(&error))
 }
 
 #[tauri::command]

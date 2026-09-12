@@ -7,7 +7,7 @@ import {
 } from "../../shared/components/EditorDialog";
 import { Button } from "../../shared/ui/Button";
 import {
-  importQuestionIndex,
+  appendIndexedQuestion,
   insertIndexedQuestion,
   normalizeQuestionBankError,
   replaceIndexedQuestionRegions,
@@ -192,18 +192,15 @@ export function ManualIndexDialog({
         );
       } else {
         onSaved(
-          await importQuestionIndex(segment.id, [
-            {
-              sourceKey: `manual|${crypto.randomUUID()}`,
-              title,
-              chapter,
-              sectionPart,
-              questionType,
-              questionNumber,
-              indexConfidence: 1,
-              regions: workingRegions.map(toRegionInput),
-            },
-          ]),
+          await appendIndexedQuestion({
+            segmentId: segment.id,
+            title,
+            chapter,
+            sectionPart,
+            questionType,
+            questionNumber,
+            regions: workingRegions.map(toRegionInput),
+          }),
         );
       }
     } catch (saveError: unknown) {
@@ -220,18 +217,15 @@ export function ManualIndexDialog({
     setMessage("");
     setSuccessNotice("");
     try {
-      const nextSnapshot = await importQuestionIndex(segment.id, [
-        {
-          sourceKey: `manual|${crypto.randomUUID()}`,
-          title,
-          chapter,
-          sectionPart,
-          questionType,
-          questionNumber,
-          indexConfidence: 1,
-          regions: workingRegions.map(toRegionInput),
-        },
-      ]);
+      const nextSnapshot = await appendIndexedQuestion({
+        segmentId: segment.id,
+        title,
+        chapter,
+        sectionPart,
+        questionType,
+        questionNumber,
+        regions: workingRegions.map(toRegionInput),
+      });
       onSaved(nextSnapshot, { close: false });
       const savedNumber = questionNumber;
       const nextNumber = nextSuggestedQuestionNumber(questionNumber);

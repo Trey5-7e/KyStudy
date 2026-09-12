@@ -606,33 +606,36 @@ impl QuestionBankRepository for SqliteQuestionBankRepository {
             active_source_keys.insert(question.source_key.as_str());
         }
 
-        let mut statement = transaction
-            .prepare(
-                "SELECT m.question_id, m.source_key FROM question_index_metadata m
-                 JOIN question q ON q.id = m.question_id
-                 WHERE m.segment_id = ?1 AND q.deleted_at IS NULL AND m.index_source != 'manual'",
-            )
-            .map_err(database_error)?;
-        let obsolete_question_ids: Vec<String> = statement
-            .query_map(params![segment_id], |row| {
-                let question_id: String = row.get(0)?;
-                let source_key: String = row.get(1)?;
-                Ok((question_id, source_key))
-            })
-            .map_err(database_error)?
-            .filter_map(std::result::Result::ok)
-            .filter(|(_, key)| !active_source_keys.contains(key.as_str()))
-            .map(|(id, _)| id)
-            .collect();
-        drop(statement);
-
-        for question_id in obsolete_question_ids {
-            transaction
-                .execute(
-                    "UPDATE question SET deleted_at = ?2, updated_at = ?2 WHERE id = ?1",
-                    params![question_id, updated_at],
+        let is_manual_import = questions.iter().all(|q| q.source_key.starts_with("manual|"));
+        if !is_manual_import {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT m.question_id, m.source_key FROM question_index_metadata m
+                     JOIN question q ON q.id = m.question_id
+                     WHERE m.segment_id = ?1 AND q.deleted_at IS NULL AND m.index_source != 'manual'",
                 )
                 .map_err(database_error)?;
+            let obsolete_question_ids: Vec<String> = statement
+                .query_map(params![segment_id], |row| {
+                    let question_id: String = row.get(0)?;
+                    let source_key: String = row.get(1)?;
+                    Ok((question_id, source_key))
+                })
+                .map_err(database_error)?
+                .filter_map(std::result::Result::ok)
+                .filter(|(_, key)| !active_source_keys.contains(key.as_str()))
+                .map(|(id, _)| id)
+                .collect();
+            drop(statement);
+
+            for question_id in obsolete_question_ids {
+                transaction
+                    .execute(
+                        "UPDATE question SET deleted_at = ?2, updated_at = ?2 WHERE id = ?1",
+                        params![question_id, updated_at],
+                    )
+                    .map_err(database_error)?;
+            }
         }
 
         let (question_count, low_confidence): (i64, i64) = transaction
@@ -866,6 +869,128 @@ impl QuestionBankRepository for SqliteQuestionBankRepository {
             )
             .map_err(database_error)?;
         refresh_segment_question_count(&transaction, &segment.id, updated_at)?;
+        transaction.commit().map_err(database_error)?;
+        load_snapshot(&connection)
+    }
+
+    fn append_question(
+        &self,
+        segment_id: &str,
+        question: &ValidatedIndexedQuestion,
+        updated_at: i64,
+    ) -> Result<QuestionBankSnapshot, QuestionBankError> {
+        let mut connection = self.open()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(database_error)?;
+        let segment = load_segment_context(&transaction, segment_id)?;
+        validate_index_regions(question, &segment)?;
+
+        let max_order: Option<u32> = transaction
+            .query_row(
+                "SELECT MAX(m.sort_order)
+                 FROM question_index_metadata m
+                 JOIN question q ON q.id = m.question_id
+                 WHERE m.segment_id = ?1 AND q.deleted_at IS NULL",
+                params![segment_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(database_error)?
+            .flatten();
+        let next_order = max_order.map_or(0, |order| order.saturating_add(1));
+
+        let mut inserted = question.clone();
+        inserted.sort_order = next_order;
+        write_question_record(
+            &transaction,
+            &segment,
+            &inserted,
+            &inserted.id,
+            false,
+            true,
+            updated_at,
+        )?;
+        replace_index_regions(&transaction, &segment, &inserted, &inserted.id, updated_at)?;
+        write_index_metadata(&transaction, &segment, &inserted, &inserted.id, updated_at)?;
+        transaction
+            .execute(
+                "UPDATE question_index_metadata
+                 SET index_source = 'manual', index_confidence = 1.0
+                 WHERE question_id = ?1",
+                params![inserted.id],
+            )
+            .map_err(database_error)?;
+        transaction
+            .execute(
+                "UPDATE question
+                 SET classification_source = 'manual', classification_confidence = 1.0
+                 WHERE id = ?1",
+                params![inserted.id],
+            )
+            .map_err(database_error)?;
+        refresh_segment_question_count(&transaction, &segment.id, updated_at)?;
+        transaction.commit().map_err(database_error)?;
+        load_snapshot(&connection)
+    }
+
+    fn restore_segment_overwritten_questions(
+        &self,
+        segment_id: &str,
+        restored_at: i64,
+    ) -> Result<QuestionBankSnapshot, QuestionBankError> {
+        let mut connection = self.open()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(database_error)?;
+        let segment = load_segment_context(&transaction, segment_id)?;
+
+        transaction
+            .execute(
+                "UPDATE question
+                 SET deleted_at = NULL, updated_at = ?2
+                 WHERE id IN (
+                     SELECT m.question_id
+                     FROM question_index_metadata m
+                     WHERE m.segment_id = ?1
+                 )
+                 AND deleted_at IS NOT NULL
+                 AND NOT EXISTS (
+                     SELECT 1 FROM workbook_segment_question_trash t
+                     WHERE t.question_id = question.id
+                 )",
+                params![segment.id, restored_at],
+            )
+            .map_err(database_error)?;
+
+        let mut statement = transaction
+            .prepare(
+                "SELECT m.question_id
+                 FROM question_index_metadata m
+                 JOIN question q ON q.id = m.question_id
+                 WHERE m.segment_id = ?1 AND q.deleted_at IS NULL
+                 ORDER BY m.sort_order, q.created_at, q.id",
+            )
+            .map_err(database_error)?;
+        let question_ids: Vec<String> = statement
+            .query_map(params![segment.id], |row| row.get(0))
+            .map_err(database_error)?
+            .filter_map(std::result::Result::ok)
+            .collect();
+        drop(statement);
+
+        for (index, question_id) in question_ids.iter().enumerate() {
+            transaction
+                .execute(
+                    "UPDATE question_index_metadata
+                     SET sort_order = ?2, updated_at = ?3
+                     WHERE question_id = ?1",
+                    params![question_id, index as i64, restored_at],
+                )
+                .map_err(database_error)?;
+        }
+
+        refresh_segment_question_count(&transaction, &segment.id, restored_at)?;
         transaction.commit().map_err(database_error)?;
         load_snapshot(&connection)
     }
@@ -1755,17 +1880,27 @@ fn write_index_metadata(
     question_id: &str,
     updated_at: i64,
 ) -> Result<(), QuestionBankError> {
+    let index_source = if question.source_key.starts_with("manual|") {
+        "manual"
+    } else {
+        "pdf_outline"
+    };
     transaction
         .execute(
             "INSERT INTO question_index_metadata(
                 question_id, workbook_id, segment_id, source_key, section_part,
                 index_source, index_confidence, sort_order, created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, 'pdf_outline', ?6, ?7, ?8, ?8)
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?9, ?6, ?7, ?8, ?8)
              ON CONFLICT(question_id) DO UPDATE SET
                 workbook_id = excluded.workbook_id,
                 segment_id = excluded.segment_id,
                 source_key = excluded.source_key,
                 section_part = excluded.section_part,
+                index_source = CASE
+                    WHEN question_index_metadata.index_source = 'manual'
+                    THEN question_index_metadata.index_source
+                    ELSE excluded.index_source
+                END,
                 index_confidence = CASE
                     WHEN question_index_metadata.index_source = 'manual'
                     THEN question_index_metadata.index_confidence
@@ -1782,6 +1917,7 @@ fn write_index_metadata(
                 question.index_confidence,
                 i64::from(question.sort_order),
                 updated_at,
+                index_source,
             ],
         )
         .map_err(database_error)?;
@@ -2320,10 +2456,11 @@ mod tests {
 
     use super::*;
     use crate::application::{
-        BulkQuestionAttemptInput, CreateSubjectInput, CreateWorkbookCategoryInput,
-        DeleteTrashedWorkbookSegmentInput, ImportQuestionIndexInput, ImportRequest,
-        IndexedQuestionDraftInput, IndexedQuestionRegionUpdateInput, InsertIndexedQuestionInput,
-        QuestionBankUseCases, QuestionRegionInput, ReassignWorkbookSegmentInput,
+        AppendIndexedQuestionInput, BulkQuestionAttemptInput, CreateSubjectInput,
+        CreateWorkbookCategoryInput, DeleteTrashedWorkbookSegmentInput, ImportQuestionIndexInput,
+        ImportRequest, IndexedQuestionDraftInput, IndexedQuestionRegionUpdateInput,
+        InsertIndexedQuestionInput, QuestionBankUseCases, QuestionRegionInput,
+        ReassignWorkbookSegmentInput,
         RecordBulkQuestionAttemptsInput, RenameWorkbookCategoryInput,
         ReplaceIndexedQuestionRegionsInput, ResourceRepository, RestoreWorkbookSegmentInput,
         ScheduleUseCases, SetQuestionGapAcknowledgementInput, TrashWorkbookSegmentInput,
@@ -4214,6 +4351,81 @@ mod tests {
         assert_eq!(reimported.questions.len(), 1);
         assert_eq!(reimported.questions[0].title, "Fixture question 0");
         assert_eq!(reimported.segments[0].question_count, 1);
+    }
+
+    #[test]
+    fn append_question_preserves_existing_questions_and_increments_sort_order() {
+        let (_directory, bank, segment_id, fixture) = question_bank_fixture(2);
+        assert_eq!(fixture.questions.len(), 2);
+
+        let appended = bank
+            .append_question(AppendIndexedQuestionInput {
+                segment_id: segment_id.clone(),
+                title: "Manual appended question 1".to_owned(),
+                chapter: "Chapter 1".to_owned(),
+                section_part: "basic".to_owned(),
+                question_type: "choice".to_owned(),
+                question_number: "3".to_owned(),
+                regions: vec![QuestionRegionInput {
+                    page_number: 2,
+                    x: 0.1,
+                    y: 0.1,
+                    width: 0.5,
+                    height: 0.3,
+                }],
+            })
+            .expect("first manual question should append");
+
+        assert_eq!(appended.questions.len(), 3);
+        assert_eq!(appended.questions[2].title, "Manual appended question 1");
+        assert_eq!(appended.questions[2].sort_order, 2);
+        assert_eq!(appended.segments[0].question_count, 3);
+
+        let appended2 = bank
+            .append_question(AppendIndexedQuestionInput {
+                segment_id: segment_id.clone(),
+                title: "Manual appended question 2".to_owned(),
+                chapter: "Chapter 1".to_owned(),
+                section_part: "basic".to_owned(),
+                question_type: "solution".to_owned(),
+                question_number: "4".to_owned(),
+                regions: vec![QuestionRegionInput {
+                    page_number: 2,
+                    x: 0.1,
+                    y: 0.5,
+                    width: 0.5,
+                    height: 0.3,
+                }],
+            })
+            .expect("second manual question should append");
+
+        assert_eq!(appended2.questions.len(), 4);
+        assert_eq!(appended2.questions[3].title, "Manual appended question 2");
+        assert_eq!(appended2.questions[3].sort_order, 3);
+        assert_eq!(appended2.segments[0].question_count, 4);
+    }
+
+    #[test]
+    fn restore_segment_overwritten_questions_restores_soft_deleted_questions() {
+        let (_directory, bank, segment_id, fixture) = question_bank_fixture(3);
+        let original_ids: Vec<String> = fixture.questions.iter().map(|q| q.id.clone()).collect();
+        assert_eq!(fixture.questions.len(), 3);
+
+        for id in &original_ids[1..] {
+            bank.trash_question(id).expect("question should trash");
+        }
+        let after_trash = bank.snapshot().expect("snapshot");
+        assert_eq!(after_trash.questions.len(), 1);
+
+        let restored = bank
+            .restore_segment_overwritten_questions(&segment_id)
+            .expect("questions should restore");
+        assert_eq!(restored.questions.len(), 3);
+        assert_eq!(restored.segments[0].question_count, 3);
+        let restored_ids: Vec<String> = restored.questions.iter().map(|q| q.id.clone()).collect();
+        for id in original_ids {
+            assert!(restored_ids.contains(&id));
+        }
     }
 
     fn question_bank_fixture(

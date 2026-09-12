@@ -434,6 +434,8 @@ macro_rules! kystudy_command_handler {
             commands::update_indexed_question,
             commands::replace_indexed_question_regions,
             commands::insert_indexed_question,
+            commands::append_indexed_question,
+            commands::restore_segment_questions,
             commands::trash_indexed_question,
             commands::trash_workbook_segment,
             commands::restore_workbook_segment,

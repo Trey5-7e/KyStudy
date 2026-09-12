@@ -5,6 +5,7 @@ import { Button } from "../../shared/ui/Button";
 import {
   normalizeQuestionBankError,
   reassignWorkbookSegment,
+  restoreSegmentQuestions,
   trashWorkbookSegment,
   type QuestionBankSnapshot,
   type TrashedWorkbookDocumentSegment,
@@ -196,6 +197,22 @@ export function SegmentManagerDialog({
     }
   };
 
+  const restoreQuestions = async () => {
+    if (busy) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const next = await restoreSegmentQuestions(currentSegment.id);
+      onChanged(next, "已恢复本分段历史题目。");
+      setMessage("已恢复本分段历史题目。");
+    } catch (error: unknown) {
+      const normalized = normalizeQuestionBankError(error);
+      setMessage(`${normalized.message} ${normalized.action}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const primaryAction = () => {
     if (busy) return;
     if (visibility === "browsable") {
@@ -283,6 +300,17 @@ export function SegmentManagerDialog({
                   <span>登记做题</span>
                 </Button>
               ) : null}
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={restoreQuestions}
+                title="恢复此前因保存覆盖或误删的题目"
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  restore
+                </span>
+                <span>恢复历史题目</span>
+              </Button>
               <Button
                 variant="secondary"
                 disabled={busy}

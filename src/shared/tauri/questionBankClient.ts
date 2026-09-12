@@ -126,6 +126,16 @@ export interface InsertIndexedQuestionRequest {
   regions: QuestionRegionInput[];
 }
 
+export interface AppendIndexedQuestionRequest {
+  segmentId: string;
+  title: string;
+  chapter: string;
+  sectionPart: SectionPart;
+  questionType: QuestionType;
+  questionNumber: string;
+  regions: QuestionRegionInput[];
+}
+
 const QUESTION_TYPES = new Set<QuestionType>([
   "choice",
   "blank",
@@ -353,6 +363,22 @@ export async function insertIndexedQuestion(
 ): Promise<QuestionBankSnapshot> {
   return parseQuestionBankSnapshot(
     await invoke("insert_indexed_question", { request }),
+  );
+}
+
+export async function appendIndexedQuestion(
+  request: AppendIndexedQuestionRequest,
+): Promise<QuestionBankSnapshot> {
+  return parseQuestionBankSnapshot(
+    await invoke("append_indexed_question", { request }),
+  );
+}
+
+export async function restoreSegmentQuestions(
+  segmentId: string,
+): Promise<QuestionBankSnapshot> {
+  return parseQuestionBankSnapshot(
+    await invoke("restore_segment_questions", { segmentId }),
   );
 }
 
