@@ -56,6 +56,15 @@ export function AiChatWorkspace({
     useState<string>();
   const [modelUpdating, setModelUpdating] = useState(false);
   useEffect(() => {
+    const handleAiChatOpen = () => {
+      setMode("chat");
+    };
+    window.addEventListener(AI_CHAT_OPEN_EVENT, handleAiChatOpen);
+    return () =>
+      window.removeEventListener(AI_CHAT_OPEN_EVENT, handleAiChatOpen);
+  }, []);
+
+  useEffect(() => {
     let active = true;
     void getAiOverview().then(
       (next) => {

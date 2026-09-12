@@ -12,6 +12,7 @@ import {
   type QuestionAiAnalysisRequest,
 } from "../../shared/tauri/aiClient";
 import type { QuestionRegion } from "../../shared/tauri/questionClient";
+import { requestAiChat } from "../ai-chat/aiChatContext";
 import { captureQuestionRegionDataUrls } from "./QuestionRegionCard";
 import "./review.css";
 import {
@@ -273,22 +274,61 @@ export function QuestionAiAnalysis({
     }
   };
 
+  const handleOpenInAiChat = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const imageDataUrls = await captureQuestionRegionDataUrls(
+        question.documentId,
+        regions,
+      );
+      requestAiChat({
+        title: question.title.slice(0, 200),
+        documentTitle: question.documentTitle.slice(0, 300),
+        analysis: result?.responseText
+          ? result.responseText.slice(0, 12_000)
+          : undefined,
+        imageDataUrls: imageDataUrls.slice(0, 6),
+      });
+    } catch (operationError: unknown) {
+      const normalized = normalizeAiError(operationError);
+      setError(`${normalized.message}${normalized.action}`);
+    } finally {
+      if (mountedRef.current) {
+        setBusy(false);
+      }
+    }
+  };
+
   return (
     <section className="question-ai-analysis" aria-label="AI 题目分析">
       {pending === undefined ? (
         <div className="question-ai-toolbar">
           {result === undefined ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={busy}
-              onClick={() => void prepare()}
-            >
-              <span className="material-symbols-rounded" aria-hidden="true">
-                psychology
-              </span>
-              <span>{busy ? "正在准备题目图片…" : "辅助解析"}</span>
-            </Button>
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy}
+                onClick={() => void prepare()}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  psychology
+                </span>
+                <span>{busy ? "正在准备题目图片…" : "辅助解析"}</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => void handleOpenInAiChat()}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  forum
+                </span>
+                <span>去 AI 助手讨论</span>
+              </Button>
+            </>
           ) : null}
           <Button
             variant="secondary"
@@ -520,6 +560,17 @@ export function QuestionAiAnalysis({
             source={result.responseText}
           />
           <div className="question-ai-result-actions">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={busy}
+              onClick={() => void handleOpenInAiChat()}
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                forum
+              </span>
+              <span>在 AI 助手深入讨论</span>
+            </Button>
             <Button
               variant="ghost"
               size="sm"
