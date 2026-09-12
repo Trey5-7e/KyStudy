@@ -204,9 +204,9 @@ export function InstantMistakeDrillDialog({
       : "错题即时特训完成结算";
 
   const dialogDesc = inRetry
-    ? "针对本次未完全掌握的题目进行二次巩固 · 按空格揭晓解析，按 1/2/3 重新评估"
+    ? "针对本次未完全掌握的题目进行二次巩固"
     : !isFinished
-      ? "按算法推送的高优先级错题 · 按空格揭晓解析，按 1/2/3 快速打标，作答即刻入库"
+      ? undefined
       : `本次已刷 ${summary.totalCount} 道错题，掌握率 ${summary.masteryPercent}%；作答反馈已实时同步至数据库。`;
 
   return (
@@ -229,6 +229,7 @@ export function InstantMistakeDrillDialog({
             queueId={activeRetryQuestion.id}
             busy={busy}
             canUndo={retryIndex > 0}
+            defaultRevealed
             onFeedback={handleFeedback}
             onUndo={handleUndo}
           />
@@ -243,6 +244,7 @@ export function InstantMistakeDrillDialog({
             queueId={activeQuestion.id}
             busy={busy}
             canUndo={currentIndex > 0}
+            defaultRevealed
             onFeedback={handleFeedback}
             onUndo={handleUndo}
           />
