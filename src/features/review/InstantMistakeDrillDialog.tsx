@@ -21,6 +21,7 @@ export function InstantMistakeDrillDialog({
   today,
   targetCount,
   subjectId,
+  workbookId,
   onClose,
   onComplete,
   onSnapshotUpdated,
@@ -30,6 +31,7 @@ export function InstantMistakeDrillDialog({
   today: string;
   targetCount: number;
   subjectId?: string;
+  workbookId?: string;
   onClose(): void;
   onComplete?(): void;
   onSnapshotUpdated?(snapshot: QuestionBankSnapshot): void;
@@ -176,6 +178,7 @@ export function InstantMistakeDrillDialog({
     const nextBatch = selectInstantMistakeQuestions(poolQuestions, {
       count: targetCount,
       subjectId,
+      workbookId,
       avoidQuestionIds: updatedSeen,
     });
 

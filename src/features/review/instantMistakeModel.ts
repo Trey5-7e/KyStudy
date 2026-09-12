@@ -7,6 +7,7 @@ import type {
 export interface InstantMistakeSelectOptions {
   count: number;
   subjectId?: string;
+  workbookId?: string;
   avoidQuestionIds?: ReadonlySet<string>;
 }
 
@@ -26,15 +27,17 @@ export function isMistakeQuestion(question: IndexedQuestion): boolean {
 }
 
 /**
- * 筛选符合科目要求的错题池
+ * 筛选符合科目与练习册要求的错题池
  */
 export function filterMistakePool(
   questions: readonly IndexedQuestion[],
   subjectId?: string,
+  workbookId?: string,
 ): IndexedQuestion[] {
   return questions.filter((q) => {
     if (!isMistakeQuestion(q)) return false;
     if (subjectId && q.subjectId !== subjectId) return false;
+    if (workbookId && q.workbookId !== workbookId) return false;
     return true;
   });
 }
@@ -86,7 +89,11 @@ export function selectInstantMistakeQuestions(
   options: InstantMistakeSelectOptions,
 ): IndexedQuestion[] {
   const targetCount = Math.max(1, options.count);
-  const pool = filterMistakePool(questions, options.subjectId);
+  const pool = filterMistakePool(
+    questions,
+    options.subjectId,
+    options.workbookId,
+  );
   if (pool.length === 0) return [];
 
   const avoid = options.avoidQuestionIds ?? new Set<string>();

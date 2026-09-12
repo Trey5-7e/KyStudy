@@ -15,6 +15,7 @@ function mockQuestion(
   partialCount = 0,
   attemptCount = 0,
   subjectId = "math",
+  workbookId = "wb-1",
 ): IndexedQuestion {
   return {
     id,
@@ -22,8 +23,8 @@ function mockQuestion(
     documentTitle: "高等数学考研真题",
     subjectId,
     subjectName: subjectId === "math" ? "高等数学" : "线性代数",
-    workbookId: "wb-1",
-    workbookName: "复习全书",
+    workbookId,
+    workbookName: workbookId === "wb-1" ? "复习全书" : "真题解析",
     segmentId: "seg-1",
     chapter: "第1章 极限与连续",
     sectionPart: "basic",
@@ -71,8 +72,8 @@ describe("instantMistakeModel", () => {
       const questions = [
         mockQuestion("1", "incorrect", 1, 0, 1, "math"),
         mockQuestion("2", "correct", 0, 0, 1, "math"),
-        mockQuestion("3", "uncertain", 0, 1, 1, "linear"),
-        mockQuestion("4", "incorrect", 2, 0, 2, "linear"),
+        mockQuestion("3", "uncertain", 0, 1, 1, "linear", "wb-1"),
+        mockQuestion("4", "incorrect", 2, 0, 2, "linear", "wb-2"),
       ];
 
       const allMistakes = filterMistakePool(questions);
@@ -83,6 +84,9 @@ describe("instantMistakeModel", () => {
 
       const linearMistakes = filterMistakePool(questions, "linear");
       expect(linearMistakes.map((q) => q.id)).toEqual(["3", "4"]);
+
+      const workbook2Mistakes = filterMistakePool(questions, undefined, "wb-2");
+      expect(workbook2Mistakes.map((q) => q.id)).toEqual(["4"]);
     });
   });
 
