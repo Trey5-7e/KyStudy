@@ -35,6 +35,7 @@ interface TodaySupportSectionsProps {
   onEditExam(): void;
   onStartReview(openWindow: boolean): void;
   onOpenInstantMistake?(): void;
+  onOpenMistakeNotebook?(): void;
 }
 
 export function TodaySupportSections({
@@ -59,6 +60,7 @@ export function TodaySupportSections({
   onEditExam,
   onStartReview,
   onOpenInstantMistake,
+  onOpenMistakeNotebook,
 }: TodaySupportSectionsProps) {
   return (
     <aside className="today-support" aria-label="辅助信息">
@@ -78,6 +80,21 @@ export function TodaySupportSections({
               </Button>
             ) : review === undefined || activeSchemes.length === 0 ? (
               <div style={{ display: "inline-flex", gap: "0.4rem" }}>
+                {onOpenMistakeNotebook ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onOpenMistakeNotebook}
+                  >
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      auto_stories
+                    </span>
+                    <span>错题本</span>
+                  </Button>
+                ) : null}
                 {onOpenInstantMistake ? (
                   <Button
                     variant="secondary"
@@ -99,6 +116,21 @@ export function TodaySupportSections({
               </div>
             ) : (
               <div style={{ display: "inline-flex", gap: "0.4rem" }}>
+                {onOpenMistakeNotebook ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onOpenMistakeNotebook}
+                  >
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      auto_stories
+                    </span>
+                    <span>错题本</span>
+                  </Button>
+                ) : null}
                 {onOpenInstantMistake ? (
                   <Button
                     variant={

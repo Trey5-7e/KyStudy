@@ -55,7 +55,6 @@ export function AiChatWorkspace({
   const [modelOptionsProviderId, setModelOptionsProviderId] =
     useState<string>();
   const [modelUpdating, setModelUpdating] = useState(false);
-
   useEffect(() => {
     let active = true;
     void getAiOverview().then(

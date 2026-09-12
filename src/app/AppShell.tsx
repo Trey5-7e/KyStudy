@@ -22,6 +22,7 @@ export interface AppShellProps {
   onNavigate: (view: AppView) => void;
   onOpenCommandPalette?: () => void;
   onOpenInstantMistake?: () => void;
+  onOpenMistakeNotebook?: () => void;
 }
 
 function BackToPlanningAction({
@@ -59,6 +60,7 @@ export function AppShell({
   onNavigate,
   onOpenCommandPalette,
   onOpenInstantMistake,
+  onOpenMistakeNotebook,
 }: AppShellProps) {
   const isWideContentView =
     activeView === "workbook" ||
@@ -101,6 +103,7 @@ export function AppShell({
           onStartPaper={onStartPaper}
           onNavigate={onNavigate}
           onOpenInstantMistake={onOpenInstantMistake}
+          onOpenMistakeNotebook={onOpenMistakeNotebook}
         />
       </main>
     </div>

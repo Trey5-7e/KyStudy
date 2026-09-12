@@ -108,6 +108,7 @@ export interface AppPageContentProps {
   onStartPaper?: (questions: IndexedQuestion[], title?: string) => void;
   onNavigate: (view: AppView) => void;
   onOpenInstantMistake?: () => void;
+  onOpenMistakeNotebook?: () => void;
 }
 
 function PageContent({
@@ -123,6 +124,7 @@ function PageContent({
   onStartPaper,
   onNavigate,
   onOpenInstantMistake,
+  onOpenMistakeNotebook,
 }: AppPageContentProps) {
   switch (activeView) {
     case "today":
@@ -137,6 +139,7 @@ function PageContent({
           onOpenWorkbook={() => onNavigate("workbook")}
           onOpenPaper={onOpenPaperShortcut}
           onOpenInstantMistake={onOpenInstantMistake}
+          onOpenMistakeNotebook={onOpenMistakeNotebook}
         />
       );
     case "planning":
@@ -183,6 +186,7 @@ export function AppPageContent({
   onStartPaper,
   onNavigate,
   onOpenInstantMistake,
+  onOpenMistakeNotebook,
 }: AppPageContentProps) {
   const currentPage = PAGE_META[activeView];
   return (
@@ -207,6 +211,7 @@ export function AppPageContent({
         onStartPaper={onStartPaper}
         onNavigate={onNavigate}
         onOpenInstantMistake={onOpenInstantMistake}
+        onOpenMistakeNotebook={onOpenMistakeNotebook}
       />
     </Suspense>
   );

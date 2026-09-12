@@ -49,7 +49,7 @@ export type ReviewTab = "queue" | "notebook" | "schemes";
 
 export type ReviewOpenRequest =
   | {
-      kind: "continuous" | "instant-mistake";
+      kind: "continuous" | "instant-mistake" | "notebook";
       nonce: number;
     }
   | number;
@@ -70,6 +70,7 @@ export function ReviewPanel({
     useState<number>();
   const [internalOpenRequest, setInternalOpenRequest] = useState<number>();
   const handledInstantMistakeNonceRef = useRef<number | undefined>(undefined);
+  const handledNotebookNonceRef = useRef<number | undefined>(undefined);
   const [draft, setDraft] = useState<SchemeDraft>();
   const [initial, setInitial] = useState<SchemeDraft>();
   const [instantMistakeSetupOpen, setInstantMistakeSetupOpen] = useState(false);
@@ -131,6 +132,14 @@ export function ReviewPanel({
       if (handledInstantMistakeNonceRef.current !== openRequest.nonce) {
         handledInstantMistakeNonceRef.current = openRequest.nonce;
         void openInstantMistake();
+      }
+    } else if (
+      typeof openRequest === "object" &&
+      openRequest.kind === "notebook"
+    ) {
+      if (handledNotebookNonceRef.current !== openRequest.nonce) {
+        handledNotebookNonceRef.current = openRequest.nonce;
+        setActiveTab("notebook");
       }
     }
   }, [openRequest]);
