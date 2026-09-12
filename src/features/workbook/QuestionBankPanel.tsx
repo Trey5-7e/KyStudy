@@ -24,6 +24,7 @@ import {
   practiceStatus,
   renameWorkbookCategory,
   restoreWorkbookSegment,
+  type IndexedQuestion,
   type QuestionBankSnapshot,
   type TrashedWorkbookDocumentSegment,
   type WorkbookCategory,
@@ -71,6 +72,8 @@ import { ManualIndexDialog } from "./ManualIndexDialog";
 import { findSegmentRestoreConflicts } from "./questionBankModel";
 import { loadPaperDraft, type PaperDraftRecipe } from "./paperSetupPreferences";
 import type { QuestionBankOpenRequest } from "./questionBankWindowModel";
+import { InstantMistakeDrillDialog } from "../review/InstantMistakeDrillDialog";
+import { selectInstantMistakeQuestions } from "../review/instantMistakeModel";
 
 type QuestionBankLoadState =
   "loading" | "ready" | "refreshing" | "stale" | "error";
@@ -130,6 +133,33 @@ export function QuestionBankPanel({
   const questionBankHasSnapshotRef = useRef(false);
   const questionBankFocusFallbackRef = useRef<HTMLHeadingElement | null>(null);
   const handledOpenRequestRef = useRef<number | undefined>(undefined);
+  const [mistakeDrillSession, setMistakeDrillSession] = useState<{
+    subjectId: string;
+    workbookId: string;
+    questions: IndexedQuestion[];
+    targetCount: number;
+  }>();
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const handleStartMistakeDrill = useCallback(
+    (subjectId: string, workbookId: string) => {
+      const targetCount = 10;
+      const questions = selectInstantMistakeQuestions(snapshot.questions, {
+        count: targetCount,
+        subjectId,
+        workbookId,
+      });
+      if (questions.length > 0) {
+        setMistakeDrillSession({
+          subjectId,
+          workbookId,
+          questions,
+          targetCount,
+        });
+      }
+    },
+    [snapshot.questions],
+  );
 
   const applySnapshot = useCallback(
     (next: QuestionBankSnapshot, requestId?: number): boolean => {
@@ -1123,6 +1153,7 @@ export function QuestionBankPanel({
           onStartPaper={(subjectId, workbookId) => {
             openExclusiveWindow(paperDialogWindow(subjectId, workbookId));
           }}
+          onStartMistakeDrill={handleStartMistakeDrill}
         />
       ) : null}
 
@@ -1240,6 +1271,24 @@ export function QuestionBankPanel({
           );
         }}
       />
+      {mistakeDrillSession !== undefined ? (
+        <InstantMistakeDrillDialog
+          questions={mistakeDrillSession.questions}
+          allQuestions={snapshot.questions}
+          today={today}
+          targetCount={mistakeDrillSession.targetCount}
+          subjectId={mistakeDrillSession.subjectId}
+          workbookId={mistakeDrillSession.workbookId}
+          onClose={() => setMistakeDrillSession(undefined)}
+          onComplete={() => {
+            setMistakeDrillSession(undefined);
+            void refreshSnapshot();
+          }}
+          onSnapshotUpdated={(next) => {
+            applySnapshot(next);
+          }}
+        />
+      ) : null}
     </PageSurface>
   );
 }

@@ -23,6 +23,7 @@ import {
   QuestionRegionCard,
 } from "../review/QuestionRegionCard";
 import { QuestionOcrPanel } from "./QuestionOcrPanel";
+import { QuestionAiAnalysis } from "../review/QuestionAiAnalysis";
 import type { PdfRegionOverlay } from "../library/pdf/PdfReader";
 import { questionsInScope, type QuestionScope } from "./questionBankModel";
 import {
@@ -713,6 +714,11 @@ export function QuestionIndexBrowserDialog({
                       <span>做错 {question.incorrectCount} 次</span>
                       <span>不全对 {question.partialCount} 次</span>
                     </div>
+                    <QuestionAiAnalysis
+                      key={question.id}
+                      question={question}
+                      regions={question.regions}
+                    />
                   </>
                 )}
               </section>

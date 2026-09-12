@@ -6,6 +6,7 @@ import {
   type QuestionBankSnapshot,
   type WorkbookDocumentSegment,
 } from "../../shared/tauri/questionBankClient";
+import { isMistakeQuestion } from "../review/instantMistakeModel";
 import { groupQuestionBankSnapshot } from "./questionBankHomeModel";
 
 export function QuestionBankTree({
@@ -13,6 +14,7 @@ export function QuestionBankTree({
   onManageSegment,
   onQuickRecord,
   onStartPaper,
+  onStartMistakeDrill,
 }: {
   snapshot: QuestionBankSnapshot;
   onManageSegment(
@@ -21,6 +23,7 @@ export function QuestionBankTree({
   ): void;
   onQuickRecord?(subjectId: string, workbookId: string): void;
   onStartPaper?(subjectId: string, workbookId: string): void;
+  onStartMistakeDrill?(subjectId: string, workbookId: string): void;
 }) {
   const subjects = useMemo(
     () => groupQuestionBankSnapshot(snapshot),
@@ -125,6 +128,8 @@ export function QuestionBankTree({
                     questions.length === 0
                       ? 0
                       : Math.round((completed / questions.length) * 100);
+                  const mistakeCount =
+                    questions.filter(isMistakeQuestion).length;
                   const pendingWorkbookSegments = segments.filter(
                     (item) =>
                       segmentMeta.get(item.id)?.visibility === "pending",
@@ -180,6 +185,28 @@ export function QuestionBankTree({
                                   }
                                 >
                                   组卷
+                                </Button>
+                              ) : null}
+                              {onStartMistakeDrill !== undefined &&
+                              mistakeCount > 0 ? (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() =>
+                                    onStartMistakeDrill(
+                                      subject.subjectId,
+                                      workbook.workbookId,
+                                    )
+                                  }
+                                >
+                                  <span
+                                    className="material-symbols-rounded"
+                                    aria-hidden="true"
+                                  >
+                                    bolt
+                                  </span>
+                                  <span>错题特训 ({mistakeCount})</span>
                                 </Button>
                               ) : null}
                             </div>

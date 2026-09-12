@@ -1,4 +1,11 @@
-import { lazy, Suspense, useEffect, useState, type ComponentType } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useState,
+  type ComponentType,
+} from "react";
 
 import {
   EditorDialog,
@@ -158,7 +165,7 @@ export function ManualIndexDialog({
     };
   }, [segment]);
 
-  const save = async () => {
+  const save = useCallback(async () => {
     if (segment === undefined || workingRegions.length === 0) return;
     setBusy(true);
     setMessage("");
@@ -209,9 +216,20 @@ export function ManualIndexDialog({
     } finally {
       setBusy(false);
     }
-  };
+  }, [
+    chapter,
+    existingQuestion,
+    onSaved,
+    questionNumber,
+    questionType,
+    relativeInsert,
+    sectionPart,
+    segment,
+    title,
+    workingRegions,
+  ]);
 
-  const saveAndContinue = async () => {
+  const saveAndContinue = useCallback(async () => {
     if (segment === undefined || workingRegions.length === 0) return;
     setBusy(true);
     setMessage("");
@@ -244,7 +262,59 @@ export function ManualIndexDialog({
     } finally {
       setBusy(false);
     }
-  };
+  }, [
+    chapter,
+    onSaved,
+    questionNumber,
+    questionType,
+    sectionPart,
+    segment,
+    title,
+    workingRegions,
+  ]);
+
+  const canSave = !(
+    busy ||
+    workingRegions.length === 0 ||
+    (existingQuestion !== undefined && !regionDirty) ||
+    (existingQuestion === undefined &&
+      (chapter.trim() === "" ||
+        questionNumber.trim() === "" ||
+        title.trim() === ""))
+  );
+
+  const canSaveAndContinue =
+    existingQuestion === undefined &&
+    relativeInsert === undefined &&
+    !(
+      busy ||
+      workingRegions.length === 0 ||
+      chapter.trim() === "" ||
+      questionNumber.trim() === "" ||
+      title.trim() === ""
+    );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.shiftKey) {
+          if (canSave) void save();
+        } else {
+          if (canSaveAndContinue) {
+            void saveAndContinue();
+          } else if (canSave) {
+            void save();
+          }
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [canSave, canSaveAndContinue, save, saveAndContinue]);
 
   return (
     <EditorDialog
@@ -480,33 +550,19 @@ export function ManualIndexDialog({
             {existingQuestion === undefined && relativeInsert === undefined ? (
               <Button
                 variant="secondary"
-                disabled={
-                  busy ||
-                  workingRegions.length === 0 ||
-                  chapter.trim() === "" ||
-                  questionNumber.trim() === "" ||
-                  title.trim() === ""
-                }
+                disabled={!canSaveAndContinue}
                 onClick={() => void saveAndContinue()}
               >
                 <span className="material-symbols-rounded" aria-hidden="true">
                   playlist_add
                 </span>
-                <span>保存并继续框下一题</span>
+                <span>保存并继续框下一题 (Ctrl+Enter)</span>
               </Button>
             ) : null}
             <Button
               variant="primary"
               aria-describedby="manual-index-save-reason"
-              disabled={
-                busy ||
-                workingRegions.length === 0 ||
-                (existingQuestion !== undefined && !regionDirty) ||
-                (existingQuestion === undefined &&
-                  (chapter.trim() === "" ||
-                    questionNumber.trim() === "" ||
-                    title.trim() === ""))
-              }
+              disabled={!canSave}
               onClick={() => void save()}
             >
               <span className="material-symbols-rounded" aria-hidden="true">
@@ -521,9 +577,9 @@ export function ManualIndexDialog({
                   ? "正在保存…"
                   : existingQuestion === undefined
                     ? relativeInsert === undefined
-                      ? "保存并完成"
-                      : "插入题目卡片"
-                    : "保存区域调整"}
+                      ? "保存并完成 (Ctrl+Shift+Enter)"
+                      : "插入题目卡片 (Ctrl+Enter)"
+                    : "保存区域调整 (Ctrl+Enter)"}
               </span>
             </Button>
           </EditorDialogFooter>
