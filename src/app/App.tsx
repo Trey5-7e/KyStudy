@@ -264,6 +264,10 @@ export function App() {
         workbookOpenRequest={workbookOpenRequest}
         resourceOpenRequest={resourceOpenRequest}
         onOpenCommandPalette={() => setPaletteOpen(true)}
+        onOpenInstantMistake={() => {
+          setReviewOpenRequest({ kind: "instant-mistake", nonce: Date.now() });
+          navigate("review");
+        }}
         onOpenReviewWindow={() =>
           setReviewOpenRequest({ kind: "continuous", nonce: Date.now() })
         }

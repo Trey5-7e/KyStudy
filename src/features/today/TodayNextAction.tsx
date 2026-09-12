@@ -28,6 +28,7 @@ interface TodayNextActionProps {
   ): void;
   onOpenPlan(): void;
   onOpenWorkbook(): void;
+  onOpenInstantMistake?(): void;
 }
 
 export function TodayNextAction({
@@ -46,6 +47,7 @@ export function TodayNextAction({
   onUpdateCycleItemState,
   onOpenPlan,
   onOpenWorkbook,
+  onOpenInstantMistake,
 }: TodayNextActionProps) {
   return (
     <section
@@ -123,9 +125,27 @@ export function TodayNextAction({
               : nextCycleAction.label}
           </Button>
         ) : kind === "plan" ? (
-          <Button variant="primary" size="md" onClick={onOpenPlan}>
-            打开计划
-          </Button>
+          <div style={{ display: "inline-flex", gap: "0.5rem" }}>
+            {onOpenInstantMistake ? (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={onOpenInstantMistake}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  bolt
+                </span>
+                <span>立即刷错题</span>
+              </Button>
+            ) : null}
+            <Button
+              variant={onOpenInstantMistake ? "secondary" : "primary"}
+              size="md"
+              onClick={onOpenPlan}
+            >
+              打开计划
+            </Button>
+          </div>
         ) : (
           <Button variant="primary" size="md" onClick={onOpenWorkbook}>
             打开习题册

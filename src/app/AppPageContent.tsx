@@ -107,6 +107,7 @@ export interface AppPageContentProps {
   onOpenReference: (documentId: string, page: number) => void;
   onStartPaper?: (questions: IndexedQuestion[], title?: string) => void;
   onNavigate: (view: AppView) => void;
+  onOpenInstantMistake?: () => void;
 }
 
 function PageContent({
@@ -121,6 +122,7 @@ function PageContent({
   onOpenReference,
   onStartPaper,
   onNavigate,
+  onOpenInstantMistake,
 }: AppPageContentProps) {
   switch (activeView) {
     case "today":
@@ -134,6 +136,7 @@ function PageContent({
           onOpenSettings={() => onNavigate("settings")}
           onOpenWorkbook={() => onNavigate("workbook")}
           onOpenPaper={onOpenPaperShortcut}
+          onOpenInstantMistake={onOpenInstantMistake}
         />
       );
     case "planning":
@@ -179,6 +182,7 @@ export function AppPageContent({
   onOpenReference,
   onStartPaper,
   onNavigate,
+  onOpenInstantMistake,
 }: AppPageContentProps) {
   const currentPage = PAGE_META[activeView];
   return (
@@ -202,6 +206,7 @@ export function AppPageContent({
         onOpenReference={onOpenReference}
         onStartPaper={onStartPaper}
         onNavigate={onNavigate}
+        onOpenInstantMistake={onOpenInstantMistake}
       />
     </Suspense>
   );

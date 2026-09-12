@@ -59,6 +59,7 @@ interface TodayOverviewPanelProps {
   onOpenSettings(): void;
   onOpenWorkbook(): void;
   onOpenPaper(): void;
+  onOpenInstantMistake?(): void;
 }
 
 interface CyclePlanUndoState {
@@ -167,6 +168,7 @@ export function TodayOverviewPanel({
   onOpenSettings,
   onOpenWorkbook,
   onOpenPaper,
+  onOpenInstantMistake,
 }: TodayOverviewPanelProps) {
   const [state, setState] = useState<OverviewState>({ kind: "loading" });
   const [busyTaskId, setBusyTaskId] = useState<string>();
@@ -488,6 +490,7 @@ export function TodayOverviewPanel({
         }
         onOpenPlan={onOpenPlan}
         onOpenWorkbook={onOpenWorkbook}
+        onOpenInstantMistake={onOpenInstantMistake}
       />
 
       <TodayProgressSection
@@ -531,6 +534,7 @@ export function TodayOverviewPanel({
           onOpenPaper={onOpenPaper}
           onEditExam={() => setExamEditorOpen(true)}
           onStartReview={(openWindow) => void startTodayReview(openWindow)}
+          onOpenInstantMistake={onOpenInstantMistake}
         />
       </div>
     </section>

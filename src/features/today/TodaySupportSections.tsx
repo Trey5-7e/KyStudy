@@ -34,6 +34,7 @@ interface TodaySupportSectionsProps {
   onOpenPaper(): void;
   onEditExam(): void;
   onStartReview(openWindow: boolean): void;
+  onOpenInstantMistake?(): void;
 }
 
 export function TodaySupportSections({
@@ -57,6 +58,7 @@ export function TodaySupportSections({
   onOpenPaper,
   onEditExam,
   onStartReview,
+  onOpenInstantMistake,
 }: TodaySupportSectionsProps) {
   return (
     <aside className="today-support" aria-label="辅助信息">
@@ -75,24 +77,64 @@ export function TodaySupportSections({
                 重新读取
               </Button>
             ) : review === undefined || activeSchemes.length === 0 ? (
-              <Button variant="text" size="sm" onClick={onOpenWorkbook}>
-                打开习题册
-              </Button>
+              <div style={{ display: "inline-flex", gap: "0.4rem" }}>
+                {onOpenInstantMistake ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={onOpenInstantMistake}
+                  >
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      bolt
+                    </span>
+                    <span>立即刷错题</span>
+                  </Button>
+                ) : null}
+                <Button variant="text" size="sm" onClick={onOpenWorkbook}>
+                  打开习题册
+                </Button>
+              </div>
             ) : (
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={busyTaskId !== undefined}
-                onClick={() => onStartReview(!reviewRestDay && !reviewFinished)}
-              >
-                {busyTaskId === "today-review"
-                  ? "正在准备…"
-                  : reviewRestDay || reviewFinished
-                    ? "查看今日错题"
-                    : generatedSchemes === 0
-                      ? "开始复习"
-                      : "继续复习"}
-              </Button>
+              <div style={{ display: "inline-flex", gap: "0.4rem" }}>
+                {onOpenInstantMistake ? (
+                  <Button
+                    variant={
+                      reviewRestDay || reviewFinished ? "primary" : "secondary"
+                    }
+                    size="sm"
+                    onClick={onOpenInstantMistake}
+                  >
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                    >
+                      bolt
+                    </span>
+                    <span>立即刷错题</span>
+                  </Button>
+                ) : null}
+                <Button
+                  variant={
+                    reviewRestDay || reviewFinished ? "ghost" : "secondary"
+                  }
+                  size="sm"
+                  disabled={busyTaskId !== undefined}
+                  onClick={() =>
+                    onStartReview(!reviewRestDay && !reviewFinished)
+                  }
+                >
+                  {busyTaskId === "today-review"
+                    ? "正在准备…"
+                    : reviewRestDay || reviewFinished
+                      ? "查看方案"
+                      : generatedSchemes === 0
+                        ? "开始复习"
+                        : "继续复习"}
+                </Button>
+              </div>
             )
           }
         />
