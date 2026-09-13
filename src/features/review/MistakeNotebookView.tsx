@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   recordBulkQuestionAttempts,
   type IndexedQuestion,
@@ -61,6 +61,26 @@ export function MistakeNotebookView({
     sortBy: "priority",
   });
 
+  const [viewMode, setViewMode] = useState<"list" | "split">(() => {
+    try {
+      const saved = localStorage.getItem("kystudy.mistake_notebook.view_mode");
+      if (saved === "list" || saved === "split") return saved;
+    } catch {
+      // ignore
+    }
+    return "split";
+  });
+
+  const handleViewModeChange = (mode: "list" | "split") => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("kystudy.mistake_notebook.view_mode", mode);
+    } catch {
+      // ignore
+    }
+  };
+
+  const [activeSplitQuestionId, setActiveSplitQuestionId] = useState<string>();
   const [previewQuestionId, setPreviewQuestionId] = useState<string>();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -92,6 +112,30 @@ export function MistakeNotebookView({
     [filteredQuestions, selectedIds],
   );
 
+  const effectiveActiveSplitId = useMemo(() => {
+    if (
+      activeSplitQuestionId &&
+      filteredQuestions.some((q) => q.id === activeSplitQuestionId)
+    ) {
+      return activeSplitQuestionId;
+    }
+    return filteredQuestions[0]?.id;
+  }, [activeSplitQuestionId, filteredQuestions]);
+
+  const activeSplitIndex = useMemo(
+    () =>
+      effectiveActiveSplitId === undefined
+        ? -1
+        : filteredQuestions.findIndex((q) => q.id === effectiveActiveSplitId),
+    [filteredQuestions, effectiveActiveSplitId],
+  );
+
+  const activeSplitQuestion = useMemo(
+    () =>
+      activeSplitIndex >= 0 ? filteredQuestions[activeSplitIndex] : undefined,
+    [filteredQuestions, activeSplitIndex],
+  );
+
   const previewIndex = useMemo(
     () =>
       previewQuestionId === undefined
@@ -110,32 +154,101 @@ export function MistakeNotebookView({
     [filteredQuestions, previewIndex, previewQuestionId, questions],
   );
 
+  const toggleSelect = useCallback((questionId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) {
+        next.delete(questionId);
+      } else {
+        next.add(questionId);
+      }
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
-    if (!previewQuestionId) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
         e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
       ) {
         return;
       }
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        if (previewIndex > 0) {
-          const prev = filteredQuestions[previewIndex - 1];
-          if (prev) setPreviewQuestionId(prev.id);
+
+      // Dialog navigation
+      if (previewQuestionId) {
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          if (previewIndex > 0) {
+            const prev = filteredQuestions[previewIndex - 1];
+            if (prev) setPreviewQuestionId(prev.id);
+          }
+        } else if (e.key === "ArrowRight") {
+          e.preventDefault();
+          if (
+            previewIndex >= 0 &&
+            previewIndex < filteredQuestions.length - 1
+          ) {
+            const next = filteredQuestions[previewIndex + 1];
+            if (next) setPreviewQuestionId(next.id);
+          }
         }
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        if (previewIndex >= 0 && previewIndex < filteredQuestions.length - 1) {
-          const next = filteredQuestions[previewIndex + 1];
-          if (next) setPreviewQuestionId(next.id);
+        return;
+      }
+
+      // Split view keyboard navigation
+      if (viewMode === "split" && filteredQuestions.length > 0) {
+        if (e.key === "ArrowUp" || e.key === "k" || e.key === "K") {
+          e.preventDefault();
+          if (activeSplitIndex > 0) {
+            const target = filteredQuestions[activeSplitIndex - 1];
+            if (target) {
+              setActiveSplitQuestionId(target.id);
+              document
+                .getElementById(`mistake-split-card-${target.id}`)
+                ?.scrollIntoView({
+                  block: "nearest",
+                  behavior: "smooth",
+                });
+            }
+          }
+        } else if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") {
+          e.preventDefault();
+          if (
+            activeSplitIndex >= 0 &&
+            activeSplitIndex < filteredQuestions.length - 1
+          ) {
+            const target = filteredQuestions[activeSplitIndex + 1];
+            if (target) {
+              setActiveSplitQuestionId(target.id);
+              document
+                .getElementById(`mistake-split-card-${target.id}`)
+                ?.scrollIntoView({
+                  block: "nearest",
+                  behavior: "smooth",
+                });
+            }
+          }
+        } else if (e.key === "x" || e.key === "X") {
+          if (activeSplitQuestion) {
+            e.preventDefault();
+            toggleSelect(activeSplitQuestion.id);
+          }
         }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [previewQuestionId, previewIndex, filteredQuestions]);
+  }, [
+    previewQuestionId,
+    previewIndex,
+    viewMode,
+    activeSplitIndex,
+    activeSplitQuestion,
+    filteredQuestions,
+    toggleSelect,
+  ]);
 
   const handleStatusChange = (status: MistakeStatusFilter) => {
     setFilter((prev) => ({ ...prev, status }));
@@ -152,18 +265,6 @@ export function MistakeNotebookView({
       sortBy: "priority",
     });
     setSelectedIds(new Set());
-  };
-
-  const toggleSelect = (questionId: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(questionId)) {
-        next.delete(questionId);
-      } else {
-        next.add(questionId);
-      }
-      return next;
-    });
   };
 
   const handleSelectAll = () => {
@@ -417,6 +518,40 @@ export function MistakeNotebookView({
           </select>
         </div>
 
+        {/* 视图模式切换 */}
+        <div
+          className="mistake-view-pills"
+          role="radiogroup"
+          aria-label="错题本视图模式"
+        >
+          <button
+            type="button"
+            className={`mistake-view-pill ${viewMode === "split" ? "is-active" : ""}`}
+            onClick={() => handleViewModeChange("split")}
+            title="双栏沉浸式复盘视图"
+            aria-checked={viewMode === "split"}
+            role="radio"
+          >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              vertical_split
+            </span>
+            <span>双栏复盘</span>
+          </button>
+          <button
+            type="button"
+            className={`mistake-view-pill ${viewMode === "list" ? "is-active" : ""}`}
+            onClick={() => handleViewModeChange("list")}
+            title="单列列表视图"
+            aria-checked={viewMode === "list"}
+            role="radio"
+          >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              view_agenda
+            </span>
+            <span>单列列表</span>
+          </button>
+        </div>
+
         {/* 关键词搜索框 */}
         <div className="mistake-notebook-search">
           <span
@@ -567,7 +702,7 @@ export function MistakeNotebookView({
             重置筛选条件
           </Button>
         </div>
-      ) : (
+      ) : viewMode === "list" ? (
         <div className="mistake-notebook-list">
           {filteredQuestions.map((q, index) => {
             const isPending = isMistakePending(q);
@@ -736,6 +871,386 @@ export function MistakeNotebookView({
               </article>
             );
           })}
+        </div>
+      ) : (
+        <div className="mistake-notebook-split-container">
+          {/* 左侧 Master 紧凑导航列表 */}
+          <aside className="mistake-split-master" aria-label="错题导航列表">
+            <div className="mistake-split-master-header">
+              <span className="mistake-split-master-count">
+                共 <strong>{filteredQuestions.length}</strong> 道错题
+              </span>
+              <span className="mistake-split-master-hint">
+                按 J/K 或 ↑/↓ 切换
+              </span>
+            </div>
+            <div className="mistake-split-master-list">
+              {filteredQuestions.map((q, index) => {
+                const isActive = q.id === effectiveActiveSplitId;
+                const isPending = isMistakePending(q);
+                const isMastered = isMistakeMastered(q);
+                const subjectName =
+                  subjectsById.get(q.subjectId) ??
+                  workbooksById.get(q.workbookId) ??
+                  "未归类科目";
+
+                const typeLabel =
+                  q.questionType === "choice"
+                    ? "选择"
+                    : q.questionType === "blank"
+                      ? "填空"
+                      : "解答";
+
+                return (
+                  <div
+                    key={q.id}
+                    id={`mistake-split-card-${q.id}`}
+                    className={`mistake-compact-card ${isActive ? "is-active" : ""} ${selectedIds.has(q.id) ? "is-selected" : ""}`}
+                    onClick={() => setActiveSplitQuestionId(q.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setActiveSplitQuestionId(q.id);
+                      }
+                    }}
+                  >
+                    <div className="mistake-compact-card-header">
+                      <div className="mistake-compact-card-meta">
+                        <input
+                          type="checkbox"
+                          id={`mistake-compact-select-${q.id}`}
+                          className="mistake-card-checkbox"
+                          checked={selectedIds.has(q.id)}
+                          onChange={() => toggleSelect(q.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`选择第 ${index + 1} 题`}
+                        />
+                        <span className="mistake-meta-tag">{subjectName}</span>
+                        <span className="mistake-meta-type">{typeLabel}</span>
+                      </div>
+                      <div className="mistake-compact-card-badge">
+                        {isPending ? (
+                          q.currentResult === "incorrect" ? (
+                            <Badge tone="danger">做错</Badge>
+                          ) : (
+                            <Badge tone="warning">模糊</Badge>
+                          )
+                        ) : isMastered ? (
+                          <Badge tone="success">已攻克</Badge>
+                        ) : (
+                          <Badge tone="neutral">未做</Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mistake-compact-card-body">
+                      <h4 className="mistake-compact-card-title">
+                        第 {index + 1} 题 · {q.title}
+                      </h4>
+                      {q.chapter ? (
+                        <div className="mistake-compact-card-chapter">
+                          {q.chapter}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="mistake-compact-card-footer">
+                      <span className="mistake-compact-stats">
+                        错 <strong>{q.incorrectCount}</strong> · 模{" "}
+                        <strong>{q.partialCount}</strong> · 正{" "}
+                        <strong>
+                          {Math.max(
+                            0,
+                            q.attemptCount - q.incorrectCount - q.partialCount,
+                          )}
+                        </strong>
+                      </span>
+                      {isActive ? (
+                        <span className="mistake-compact-active-indicator">
+                          <span
+                            className="material-symbols-rounded"
+                            aria-hidden="true"
+                          >
+                            arrow_right
+                          </span>
+                          <span>查看中</span>
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </aside>
+
+          {/* 右侧 Detail 联动复盘面板 */}
+          <main
+            className="mistake-split-detail"
+            aria-label="错题详情与做题轨迹"
+          >
+            {activeSplitQuestion ? (
+              <div className="mistake-split-detail-content">
+                <div className="mistake-split-detail-toolbar">
+                  <div className="mistake-split-detail-nav">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={activeSplitIndex <= 0}
+                      onClick={() => {
+                        if (activeSplitIndex > 0) {
+                          const prev = filteredQuestions[activeSplitIndex - 1];
+                          if (prev) {
+                            setActiveSplitQuestionId(prev.id);
+                            document
+                              .getElementById(`mistake-split-card-${prev.id}`)
+                              ?.scrollIntoView({
+                                block: "nearest",
+                                behavior: "smooth",
+                              });
+                          }
+                        }
+                      }}
+                      title="上一题 (快捷键: K 或 ↑)"
+                    >
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        navigate_before
+                      </span>
+                      <span>上一题</span>
+                    </Button>
+                    <strong className="mistake-split-nav-index">
+                      {activeSplitIndex >= 0 ? activeSplitIndex + 1 : 1} /{" "}
+                      {filteredQuestions.length}
+                    </strong>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={
+                        activeSplitIndex < 0 ||
+                        activeSplitIndex >= filteredQuestions.length - 1
+                      }
+                      onClick={() => {
+                        if (
+                          activeSplitIndex >= 0 &&
+                          activeSplitIndex < filteredQuestions.length - 1
+                        ) {
+                          const next = filteredQuestions[activeSplitIndex + 1];
+                          if (next) {
+                            setActiveSplitQuestionId(next.id);
+                            document
+                              .getElementById(`mistake-split-card-${next.id}`)
+                              ?.scrollIntoView({
+                                block: "nearest",
+                                behavior: "smooth",
+                              });
+                          }
+                        }
+                      }}
+                      title="下一题 (快捷键: J 或 ↓)"
+                    >
+                      <span>下一题</span>
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        navigate_next
+                      </span>
+                    </Button>
+                  </div>
+
+                  <div className="mistake-split-detail-actions">
+                    <Button
+                      variant={
+                        selectedIds.has(activeSplitQuestion.id)
+                          ? "secondary"
+                          : "ghost"
+                      }
+                      size="sm"
+                      onClick={() => toggleSelect(activeSplitQuestion.id)}
+                      title={
+                        selectedIds.has(activeSplitQuestion.id)
+                          ? "从批量勾选中取消"
+                          : "加入批量勾选 (快捷键: X)"
+                      }
+                    >
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        {selectedIds.has(activeSplitQuestion.id)
+                          ? "check_box"
+                          : "check_box_outline_blank"}
+                      </span>
+                      <span>
+                        {selectedIds.has(activeSplitQuestion.id)
+                          ? "已勾选"
+                          : "勾选此题"}
+                      </span>
+                    </Button>
+
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() =>
+                        onStartDrill(
+                          [activeSplitQuestion],
+                          1,
+                          activeSplitQuestion.subjectId,
+                        )
+                      }
+                    >
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        bolt
+                      </span>
+                      <span>特训此题</span>
+                    </Button>
+
+                    {onSnapshotUpdated !== undefined ? (
+                      isMistakePending(activeSplitQuestion) ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={
+                            busy || markingId === activeSplitQuestion.id
+                          }
+                          onClick={() =>
+                            void handleQuickMark(
+                              activeSplitQuestion.id,
+                              "correct",
+                            )
+                          }
+                          title="将本题标记为已攻克"
+                        >
+                          <span
+                            className="material-symbols-rounded"
+                            aria-hidden="true"
+                          >
+                            check_circle
+                          </span>
+                          <span>标为已攻克</span>
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={
+                            busy || markingId === activeSplitQuestion.id
+                          }
+                          onClick={() =>
+                            void handleQuickMark(
+                              activeSplitQuestion.id,
+                              "incorrect",
+                            )
+                          }
+                          title="将本题移回待攻克列表"
+                        >
+                          <span
+                            className="material-symbols-rounded"
+                            aria-hidden="true"
+                          >
+                            restart_alt
+                          </span>
+                          <span>移回待攻克</span>
+                        </Button>
+                      )
+                    ) : null}
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setPreviewQuestionId(activeSplitQuestion.id)
+                      }
+                      title="打开弹窗全屏查看"
+                    >
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        open_in_full
+                      </span>
+                      <span>全屏</span>
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mistake-split-detail-body">
+                  <div className="mistake-preview-stats">
+                    <span className="mistake-preview-stat-item">
+                      <strong>当前状态：</strong>
+                      {isMistakePending(activeSplitQuestion) ? (
+                        activeSplitQuestion.currentResult === "incorrect" ? (
+                          <Badge tone="danger">做错</Badge>
+                        ) : (
+                          <Badge tone="warning">模糊</Badge>
+                        )
+                      ) : isMistakeMastered(activeSplitQuestion) ? (
+                        <Badge tone="success">已攻克</Badge>
+                      ) : (
+                        <Badge tone="neutral">未做</Badge>
+                      )}
+                    </span>
+                    <span className="mistake-preview-stat-item">
+                      累计做过{" "}
+                      <strong>{activeSplitQuestion.attemptCount}</strong> 次
+                    </span>
+                    <span className="mistake-preview-stat-item">
+                      做错 <strong>{activeSplitQuestion.incorrectCount}</strong>{" "}
+                      次
+                    </span>
+                    <span className="mistake-preview-stat-item">
+                      模糊 <strong>{activeSplitQuestion.partialCount}</strong>{" "}
+                      次
+                    </span>
+                    <span className="mistake-preview-stat-item">
+                      正确{" "}
+                      <strong>
+                        {Math.max(
+                          0,
+                          activeSplitQuestion.attemptCount -
+                            activeSplitQuestion.incorrectCount -
+                            activeSplitQuestion.partialCount,
+                        )}
+                      </strong>{" "}
+                      次
+                    </span>
+                  </div>
+
+                  <QuestionRegionCard
+                    documentId={activeSplitQuestion.documentId}
+                    regions={activeSplitQuestion.regions}
+                    title={activeSplitQuestion.title}
+                  />
+
+                  <QuestionAttemptTimeline
+                    key={activeSplitQuestion.id}
+                    questionId={activeSplitQuestion.id}
+                  />
+
+                  <QuestionAiAnalysis
+                    key={activeSplitQuestion.id}
+                    question={activeSplitQuestion}
+                    regions={activeSplitQuestion.regions}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="mistake-split-empty">
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  touch_app
+                </span>
+                <p>请从左侧选择一道错题以进行复盘</p>
+              </div>
+            )}
+          </main>
         </div>
       )}
       {exportDialogOpen ? (

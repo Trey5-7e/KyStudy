@@ -1514,6 +1514,286 @@
   color: var(--color-text);
 }
 
+/* 视图模式切换胶囊 (列表 / 双栏) */
+.mistake-view-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.mistake-view-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 0.82rem;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mistake-view-pill:hover {
+  color: var(--color-text);
+}
+
+.mistake-view-pill.is-active {
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.mistake-view-pill .material-symbols-rounded {
+  font-size: 1.1rem;
+}
+
+/* 双栏沉浸式复盘视图容器 */
+.mistake-notebook-split-container {
+  display: grid;
+  grid-template-columns: minmax(320px, 370px) minmax(0, 1fr);
+  gap: var(--space-4, 1rem);
+  align-items: stretch;
+  min-height: min(680px, calc(100vh - 280px));
+  max-height: calc(100vh - 250px);
+}
+
+/* 左侧 Master 紧凑导航列表 */
+.mistake-split-master {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-surface, 0 1px 3px rgba(0, 0, 0, 0.04));
+}
+
+.mistake-split-master-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--color-bg-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.mistake-split-master-count strong {
+  color: var(--color-text);
+}
+
+.mistake-split-master-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.mistake-split-master-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 紧凑错题卡片 */
+.mistake-compact-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-surface);
+  cursor: pointer;
+  transition: all 0.16s ease;
+  user-select: none;
+}
+
+.mistake-compact-card:hover {
+  border-color: var(--color-border-default);
+  background: var(--color-bg-subtle);
+}
+
+.mistake-compact-card.is-active {
+  border-color: var(--color-primary-500, #3b82f6);
+  background: rgba(59, 130, 246, 0.05);
+  box-shadow: 0 1px 4px rgba(59, 130, 246, 0.12);
+}
+
+.mistake-compact-card.is-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3.5px;
+  background: var(--color-primary-500, #3b82f6);
+  border-radius: 0 2px 2px 0;
+}
+
+.mistake-compact-card.is-selected {
+  outline: 1.5px dashed var(--color-primary-500, #3b82f6);
+}
+
+.mistake-compact-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.mistake-compact-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mistake-compact-card-title {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.mistake-compact-card-chapter {
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mistake-compact-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--color-text-secondary);
+  border-top: 1px dashed var(--color-border-subtle);
+  padding-top: 4px;
+}
+
+.mistake-compact-stats strong {
+  color: var(--color-text);
+}
+
+.mistake-compact-active-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--color-primary-600, #2563eb);
+  font-weight: 600;
+  font-size: 0.74rem;
+}
+
+.mistake-compact-active-indicator .material-symbols-rounded {
+  font-size: 1rem;
+}
+
+/* 右侧 Detail 联动展区 */
+.mistake-split-detail {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  overflow-y: auto;
+  box-shadow: var(--shadow-surface, 0 1px 3px rgba(0, 0, 0, 0.04));
+}
+
+.mistake-split-detail-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.mistake-split-detail-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3, 0.75rem);
+  padding: 10px 16px;
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border-subtle);
+  backdrop-filter: blur(8px);
+}
+
+.mistake-split-detail-nav,
+.mistake-split-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+}
+
+.mistake-split-nav-index {
+  font-size: 0.85rem;
+  color: var(--color-text);
+  padding: 0 4px;
+}
+
+.mistake-split-detail-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 1rem);
+  flex: 1 1 auto;
+}
+
+.mistake-split-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
+  height: 100%;
+}
+
+.mistake-split-empty .material-symbols-rounded {
+  font-size: 3rem;
+  opacity: 0.4;
+}
+
+/* 响应式支持：小于 960px 自动切为垂直堆叠 */
+@media (max-width: 960px) {
+  .mistake-notebook-split-container {
+    grid-template-columns: 1fr;
+    max-height: none;
+  }
+  .mistake-split-master {
+    max-height: 380px;
+  }
+  .mistake-split-detail {
+    max-height: none;
+  }
+}
+
 @media (max-width: 680px) {
   .mistake-notebook-summary {
     flex-direction: column;
