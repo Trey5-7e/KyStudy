@@ -1911,6 +1911,16 @@
   border-bottom: 1px solid var(--color-border-subtle);
 }
 
+.question-timeline-card.is-collapsed .question-timeline-header {
+  border-bottom: none;
+}
+
+.question-timeline-collapsed-hint {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
 .question-timeline-title-row {
   display: flex;
   align-items: center;

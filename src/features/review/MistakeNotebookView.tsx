@@ -1182,7 +1182,10 @@ export function MistakeNotebookView({
                   </div>
                 </div>
 
-                <div className="mistake-split-detail-body">
+                <div
+                  key={activeSplitQuestion.id}
+                  className="mistake-split-detail-body"
+                >
                   <div className="mistake-preview-stats">
                     <span className="mistake-preview-stat-item">
                       <strong>当前状态：</strong>
@@ -1225,18 +1228,19 @@ export function MistakeNotebookView({
                   </div>
 
                   <QuestionRegionCard
+                    key={`split-region-${activeSplitQuestion.id}`}
                     documentId={activeSplitQuestion.documentId}
                     regions={activeSplitQuestion.regions}
                     title={activeSplitQuestion.title}
                   />
 
                   <QuestionAttemptTimeline
-                    key={activeSplitQuestion.id}
+                    key={`split-timeline-${activeSplitQuestion.id}`}
                     questionId={activeSplitQuestion.id}
                   />
 
                   <QuestionAiAnalysis
-                    key={activeSplitQuestion.id}
+                    key={`split-ai-${activeSplitQuestion.id}`}
                     question={activeSplitQuestion}
                     regions={activeSplitQuestion.regions}
                   />
@@ -1404,7 +1408,10 @@ export function MistakeNotebookView({
               </div>
             </div>
 
-            <div className="mistake-preview-dialog-content">
+            <div
+              key={previewQuestion.id}
+              className="mistake-preview-dialog-content"
+            >
               <div className="mistake-preview-stats">
                 <span className="mistake-preview-stat-item">
                   <strong>最新状态：</strong>
@@ -1443,16 +1450,17 @@ export function MistakeNotebookView({
                 </span>
               </div>
               <QuestionRegionCard
+                key={`preview-region-${previewQuestion.id}`}
                 documentId={previewQuestion.documentId}
                 regions={previewQuestion.regions}
                 title={previewQuestion.title}
               />
               <QuestionAttemptTimeline
-                key={previewQuestion.id}
+                key={`preview-timeline-${previewQuestion.id}`}
                 questionId={previewQuestion.id}
               />
               <QuestionAiAnalysis
-                key={previewQuestion.id}
+                key={`preview-ai-${previewQuestion.id}`}
                 question={previewQuestion}
                 regions={previewQuestion.regions}
               />

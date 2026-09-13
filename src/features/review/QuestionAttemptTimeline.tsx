@@ -248,7 +248,7 @@ export function QuestionAttemptTimeline({
 
   return (
     <section
-      className={`question-timeline-card ${className ?? ""}`}
+      className={`question-timeline-card ${isExpanded ? "is-expanded" : "is-collapsed"} ${className ?? ""}`}
       aria-label="做题轨迹与历史时间线"
     >
       <header className="question-timeline-header">
@@ -270,11 +270,16 @@ export function QuestionAttemptTimeline({
                 连对 {history.successfulStreak} 次
               </Badge>
             ) : null}
+            {!isExpanded ? (
+              <span className="question-timeline-collapsed-hint">
+                （共 {history.attempts.length} 次作答，已收起）
+              </span>
+            ) : null}
           </div>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={() => setIsExpanded((prev) => !prev)}
             aria-expanded={isExpanded}
             title={isExpanded ? "收起轨迹时间线" : "展开轨迹时间线"}
           >
@@ -286,30 +291,32 @@ export function QuestionAttemptTimeline({
         </div>
 
         {/* Trajectory Overview Metrics */}
-        <div className="question-timeline-metrics">
-          <div className="question-timeline-metric-item">
-            <span className="metric-label">累计做题</span>
-            <strong className="metric-value">
-              {history.attempts.length} 次
-            </strong>
-          </div>
-          <div className="question-timeline-metric-item">
-            <span className="metric-label">做错次数</span>
-            <strong className="metric-value danger">
-              {history.mistakeCount} 次
-            </strong>
-          </div>
-          <div className="question-timeline-metric-item">
-            <span className="metric-label">首次失分</span>
-            <span className="metric-text">{firstMistakeFormatted}</span>
-          </div>
-          {history.dueDate ? (
+        {isExpanded ? (
+          <div className="question-timeline-metrics">
             <div className="question-timeline-metric-item">
-              <span className="metric-label">下次复习</span>
-              <span className="metric-text highlight">{history.dueDate}</span>
+              <span className="metric-label">累计做题</span>
+              <strong className="metric-value">
+                {history.attempts.length} 次
+              </strong>
             </div>
-          ) : null}
-        </div>
+            <div className="question-timeline-metric-item">
+              <span className="metric-label">做错次数</span>
+              <strong className="metric-value danger">
+                {history.mistakeCount} 次
+              </strong>
+            </div>
+            <div className="question-timeline-metric-item">
+              <span className="metric-label">首次失分</span>
+              <span className="metric-text">{firstMistakeFormatted}</span>
+            </div>
+            {history.dueDate ? (
+              <div className="question-timeline-metric-item">
+                <span className="metric-label">下次复习</span>
+                <span className="metric-text highlight">{history.dueDate}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
       {isExpanded ? (
