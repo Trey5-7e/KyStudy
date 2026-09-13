@@ -326,7 +326,7 @@ export function ContinuousReviewPanel({
           }
           description={
             inRetry
-              ? `第 ${retryIndex + 1} / ${retryQueue?.length} 题 · 思考作答后按空格揭晓答案，按 1/2/3 重新评估掌握度`
+              ? `第 ${retryIndex + 1} / ${retryQueue?.length} 题 · 针对本次未完全掌握的题目进行二次巩固，按 1/2/3 重新评估掌握度`
               : active
                 ? `${session.completedCount + 1} / ${session.totalCount}`
                 : `本次已复习 ${summary.totalCount} 道错题，掌握率 ${summary.masteryPercent}%；做题反馈已同步至复习方案。`
@@ -343,6 +343,7 @@ export function ContinuousReviewPanel({
               queueId=""
               busy={busy}
               canUndo={retryIndex > 0}
+              defaultRevealed
               onFeedback={handleRetryFeedback}
               onUndo={handleRetryUndo}
             />
@@ -353,6 +354,7 @@ export function ContinuousReviewPanel({
               queueId={session.activeScheme.queue?.id ?? ""}
               busy={busy}
               canUndo={!!session.latestCompletedQueueId}
+              defaultRevealed
               onFeedback={onFeedback}
               onUndo={onUndo}
             />
@@ -569,7 +571,7 @@ export function QuestionReviewContent({
   queueId,
   busy,
   canUndo,
-  defaultRevealed = false,
+  defaultRevealed = true,
   onFeedback,
   onUndo,
 }: {
