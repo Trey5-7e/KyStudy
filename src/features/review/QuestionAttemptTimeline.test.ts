@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractErrorMessage,
   formatAttemptDuration,
   formatTimelineTimestamp,
   getAttemptResultMeta,
@@ -8,6 +9,29 @@ import {
 } from "./QuestionAttemptTimeline";
 
 describe("QuestionAttemptTimeline helpers", () => {
+  describe("extractErrorMessage", () => {
+    it("extracts message from Error instance", () => {
+      expect(extractErrorMessage(new Error("网络超时"))).toBe("网络超时");
+    });
+
+    it("extracts message from plain object with message property", () => {
+      expect(
+        extractErrorMessage({
+          code: "WORKBOOK_NOT_FOUND",
+          message: "找不到习题册",
+        }),
+      ).toBe("找不到习题册");
+    });
+
+    it("uses plain string if provided", () => {
+      expect(extractErrorMessage("服务不可用")).toBe("服务不可用");
+    });
+
+    it("falls back to default message if unknown shape", () => {
+      expect(extractErrorMessage({})).toBe("获取题目做题轨迹失败");
+      expect(extractErrorMessage(null, "自定义回退")).toBe("自定义回退");
+    });
+  });
   describe("formatAttemptDuration", () => {
     it("returns undefined for undefined or non-positive durations", () => {
       expect(formatAttemptDuration(undefined)).toBeUndefined();

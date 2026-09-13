@@ -100,6 +100,28 @@ export function getReviewRatingMeta(rating?: string):
   }
 }
 
+export function extractErrorMessage(
+  err: unknown,
+  fallback = "获取题目做题轨迹失败",
+): string {
+  if (err instanceof Error && err.message.trim().length > 0) {
+    return err.message;
+  }
+  if (typeof err === "object" && err !== null) {
+    const candidate = err as Record<string, unknown>;
+    if (
+      typeof candidate.message === "string" &&
+      candidate.message.trim().length > 0
+    ) {
+      return candidate.message;
+    }
+  }
+  if (typeof err === "string" && err.trim().length > 0) {
+    return err;
+  }
+  return fallback;
+}
+
 export interface QuestionAttemptTimelineProps {
   questionId: string;
   className?: string;
@@ -149,7 +171,7 @@ export function QuestionAttemptTimeline({
           setFetchState({
             key: currentKey,
             loading: false,
-            error: err instanceof Error ? err.message : "获取题目做题轨迹失败",
+            error: extractErrorMessage(err, "获取题目做题轨迹失败"),
             history: null,
           });
         }
@@ -180,7 +202,7 @@ export function QuestionAttemptTimeline({
         setFetchState({
           key: currentKey,
           loading: false,
-          error: err instanceof Error ? err.message : "重试失败",
+          error: extractErrorMessage(err, "重试失败"),
           history: null,
         });
       });

@@ -442,7 +442,7 @@ impl QuestionRepository for SqliteQuestionRepository {
 
     fn get_question_history(&self, question_id: &str) -> Result<QuestionHistory, QuestionError> {
         let connection = self.open()?;
-        ensure_active_question(&connection, question_id)?;
+        ensure_question_exists(&connection, question_id)?;
         load_question_history(&connection, question_id)
     }
 }
@@ -758,16 +758,33 @@ fn load_active_question_document(
 }
 
 fn ensure_active_question(connection: &Connection, question_id: &str) -> Result<(), QuestionError> {
-    let document_id = connection
+    let exists: bool = connection
         .query_row(
-            "SELECT document_id FROM question WHERE id = ?1 AND deleted_at IS NULL",
+            "SELECT EXISTS(
+                SELECT 1 FROM question WHERE id = ?1 AND deleted_at IS NULL
+             )",
             params![question_id],
-            |row| row.get::<_, String>(0),
+            |row| row.get(0),
         )
-        .optional()
-        .map_err(database_error)?
-        .ok_or(QuestionError::QuestionNotFound)?;
-    ensure_workbook(connection, &document_id).map(|_| ())
+        .map_err(database_error)?;
+    if !exists {
+        return Err(QuestionError::QuestionNotFound);
+    }
+    Ok(())
+}
+
+fn ensure_question_exists(connection: &Connection, question_id: &str) -> Result<(), QuestionError> {
+    let exists: bool = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM question WHERE id = ?1)",
+            params![question_id],
+            |row| row.get(0),
+        )
+        .map_err(database_error)?;
+    if !exists {
+        return Err(QuestionError::QuestionNotFound);
+    }
+    Ok(())
 }
 
 fn load_workspace_id(connection: &Connection) -> Result<String, QuestionError> {
@@ -1043,11 +1060,11 @@ fn load_question_history(
             let due_date = due_date_str
                 .as_deref()
                 .and_then(|s| LocalDate::parse(s).ok());
-            let mistake_count = to_u32(mistake_count, 2).map_err(database_error)?;
+            let mistake_count = u32::try_from(mistake_count.max(0)).unwrap_or(0);
             let consecutive_failure_count =
-                to_u32(consecutive_failure_count, 3).map_err(database_error)?;
+                u32::try_from(consecutive_failure_count.max(0)).unwrap_or(0);
             let successful_streak =
-                optional_u32(successful_streak, 6).map_err(database_error)?.unwrap_or(0);
+                successful_streak.map(|v| u32::try_from(v.max(0)).unwrap_or(0)).unwrap_or(0);
             (
                 first_mistake_at,
                 last_mistake_at,
@@ -1078,22 +1095,30 @@ fn load_question_history(
             let result_str = row.get::<_, String>(2)?;
             let rating_str = row.get::<_, Option<String>>(7)?;
             let next_due_date_str = row.get::<_, Option<String>>(8)?;
+            let duration_i64 = row.get::<_, Option<i64>>(4)?;
             let interval_days_i64 = row.get::<_, Option<i64>>(9)?;
+
+            let result = AttemptResult::parse(&result_str).unwrap_or_else(|| {
+                match result_str.trim().to_lowercase().as_str() {
+                    "correct" | "pass" | "passed" | "mastered" => AttemptResult::Correct,
+                    "incorrect" | "wrong" | "fail" | "failed" => AttemptResult::Incorrect,
+                    _ => AttemptResult::Uncertain,
+                }
+            });
 
             Ok(QuestionAttemptTimelineItem {
                 id: row.get(0)?,
                 question_id: row.get(1)?,
-                result: AttemptResult::parse(&result_str)
-                    .ok_or_else(|| conversion_error(2, "invalid attempt result"))?,
+                result,
                 attempted_at: row.get(3)?,
-                duration_seconds: optional_u32(row.get::<_, Option<i64>>(4)?, 4)?,
+                duration_seconds: duration_i64.and_then(|v| u32::try_from(v.max(0)).ok()),
                 answer_note: row.get(5)?,
                 created_at: row.get(6)?,
                 review_rating: rating_str.as_deref().and_then(ReviewRating::parse),
                 next_due_date: next_due_date_str
                     .as_deref()
                     .and_then(|s| LocalDate::parse(s).ok()),
-                interval_days: optional_u32(interval_days_i64, 9)?,
+                interval_days: interval_days_i64.and_then(|v| u32::try_from(v.max(0)).ok()),
             })
         })
         .map_err(database_error)?
@@ -1434,5 +1459,30 @@ mod tests {
         assert_eq!(second_node.result, AttemptResult::Incorrect);
         assert!(second_node.review_rating.is_none());
         assert!(second_node.next_due_date.is_none());
+
+        // 4. Change document role to "reference" to verify history does not depend on role = 'workbook'
+        resources
+            .update_role(&created.question.document_id, "reference")
+            .expect("update role to reference");
+
+        // 5. Add attempt with 45s duration and "uncertain" result
+        let third_attempt_id = Uuid::now_v7().to_string();
+        let third_attempt_at = second_attempt_at + 86_400_000;
+        connection
+            .execute(
+                "INSERT INTO question_attempt(
+                    id, question_id, result, attempted_at,
+                    duration_seconds, answer_note, created_at
+                 ) VALUES (?1, ?2, 'uncertain', ?3, 45, NULL, ?3)",
+                params![third_attempt_id, created.question.id, third_attempt_at],
+            )
+            .expect("insert attempt with 45s duration and uncertain result");
+
+        let history_after_role_change = use_cases
+            .get_question_history(&created.question.id)
+            .expect("history should load even when document role is reference");
+        assert_eq!(history_after_role_change.attempts.len(), 3);
+        assert_eq!(history_after_role_change.attempts[0].result, AttemptResult::Uncertain);
+        assert_eq!(history_after_role_change.attempts[0].duration_seconds, Some(45));
     }
 }

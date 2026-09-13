@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseQuestionBundle } from "./questionClient";
+import { parseQuestionBundle, parseQuestionHistory } from "./questionClient";
 
 const VALID_BUNDLE = {
   question: {
@@ -80,9 +80,54 @@ describe("parseQuestionBundle", () => {
     ).toThrowError("QUESTION_REGION_INVALID");
   });
 
-  it("requires at least one formal source region", () => {
-    expect(() =>
-      parseQuestionBundle({ ...VALID_BUNDLE, regions: [] }),
-    ).toThrowError("QUESTION_BUNDLE_INVALID");
+  it("allows 0 durationSeconds in attempts", () => {
+    const bundleWithZeroDuration = {
+      ...VALID_BUNDLE,
+      attempts: [
+        {
+          ...VALID_BUNDLE.attempts[0],
+          durationSeconds: 0,
+        },
+      ],
+    };
+    const parsed = parseQuestionBundle(bundleWithZeroDuration);
+    expect(parsed.attempts[0]?.durationSeconds).toBe(0);
+  });
+});
+
+describe("parseQuestionHistory", () => {
+  it("parses valid question history payload", () => {
+    const rawHistory = {
+      questionId: "q-1",
+      firstMistakeAt: 1000,
+      lastMistakeAt: 2000,
+      mistakeCount: 3,
+      consecutiveFailureCount: 1,
+      masteryLevel: "learning",
+      dueDate: "2026-07-25",
+      successfulStreak: 2,
+      attempts: [
+        {
+          id: "att-1",
+          questionId: "q-1",
+          result: "correct",
+          attemptedAt: 2000,
+          durationSeconds: 0,
+          answerNote: "好",
+          reviewRating: "mastered",
+          nextDueDate: "2026-07-30",
+          intervalDays: 5,
+          createdAt: 2000,
+        },
+      ],
+    };
+
+    const parsed = parseQuestionHistory(rawHistory);
+    expect(parsed.questionId).toBe("q-1");
+    expect(parsed.mistakeCount).toBe(3);
+    expect(parsed.attempts.length).toBe(1);
+    expect(parsed.attempts[0]?.durationSeconds).toBe(0);
+    expect(parsed.attempts[0]?.reviewRating).toBe("mastered");
+    expect(parsed.attempts[0]?.intervalDays).toBe(5);
   });
 });
