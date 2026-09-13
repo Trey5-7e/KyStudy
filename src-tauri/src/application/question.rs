@@ -5,7 +5,7 @@ use uuid::Uuid;
 use super::{PersistenceError, current_utc_millis};
 use crate::domain::{
     AttemptResult, ClassificationSource, LocalDate, Question, QuestionAttempt, QuestionBundle,
-    QuestionRegion, QuestionType, WorkbookProfile, classify_question_text,
+    QuestionHistory, QuestionRegion, QuestionType, WorkbookProfile, classify_question_text,
 };
 
 const MIN_REGION_SPAN: f64 = 0.002;
@@ -185,6 +185,7 @@ pub(crate) trait QuestionRepository: Clone + Send + Sync + 'static {
         question_id: &str,
         updated_at: i64,
     ) -> Result<QuestionBundle, QuestionError>;
+    fn get_question_history(&self, question_id: &str) -> Result<QuestionHistory, QuestionError>;
 }
 
 /// Manual, offline workbook question use cases.
@@ -402,6 +403,14 @@ impl<R: QuestionRepository> QuestionUseCases<R> {
         validate_id(question_id)?;
         self.repository
             .restore_question(question_id, current_utc_millis()?)
+    }
+
+    pub(crate) fn get_question_history(
+        &self,
+        question_id: &str,
+    ) -> Result<QuestionHistory, QuestionError> {
+        validate_id(question_id)?;
+        self.repository.get_question_history(question_id)
     }
 }
 

@@ -53,6 +53,31 @@ export interface QuestionAttempt {
   createdAt: number;
 }
 
+export interface QuestionAttemptTimelineItem {
+  id: string;
+  questionId: string;
+  result: AttemptResult;
+  attemptedAt: number;
+  durationSeconds?: number;
+  answerNote?: string;
+  reviewRating?: "mastered" | "uncertain" | "failed" | "skipped";
+  nextDueDate?: string;
+  intervalDays?: number;
+  createdAt: number;
+}
+
+export interface QuestionHistory {
+  questionId: string;
+  firstMistakeAt?: number;
+  lastMistakeAt?: number;
+  mistakeCount: number;
+  consecutiveFailureCount: number;
+  masteryLevel?: "new" | "learning" | "uncertain" | "mastered";
+  dueDate?: string;
+  successfulStreak: number;
+  attempts: QuestionAttemptTimelineItem[];
+}
+
 export interface QuestionKnowledgeLink {
   nodeId: string;
   nodeTitle: string;
@@ -131,6 +156,18 @@ const CLASSIFICATION_SOURCES = new Set<ClassificationSource>([
   "pending",
   "automatic",
   "manual",
+]);
+const REVIEW_RATINGS = new Set<string>([
+  "mastered",
+  "uncertain",
+  "failed",
+  "skipped",
+]);
+const REVIEW_MASTERIES = new Set<string>([
+  "new",
+  "learning",
+  "uncertain",
+  "mastered",
 ]);
 
 const ERROR_COPY: Record<string, { message: string; action: string }> = {
@@ -259,6 +296,14 @@ export async function restoreQuestion(
   return parseQuestionBundle(await invoke("restore_question", { questionId }));
 }
 
+export async function getQuestionHistory(
+  questionId: string,
+): Promise<QuestionHistory> {
+  return parseQuestionHistory(
+    await invoke("get_question_history", { questionId }),
+  );
+}
+
 export function normalizeQuestionError(error: unknown): ResourceCommandError {
   if (isRecord(error) && typeof error.code === "string") {
     const copy = ERROR_COPY[error.code];
@@ -292,6 +337,84 @@ export function parseQuestionBundle(value: unknown): QuestionBundle {
     regions,
     attempts: value.attempts.map(parseQuestionAttempt),
     knowledgeLinks: value.knowledgeLinks.map(parseQuestionKnowledgeLink),
+  };
+}
+
+export function parseQuestionHistory(value: unknown): QuestionHistory {
+  if (!isRecord(value) || typeof value.questionId !== "string") {
+    throw new Error("QUESTION_HISTORY_INVALID");
+  }
+  if (
+    !isOptionalNonNegativeInteger(value.firstMistakeAt) ||
+    !isOptionalNonNegativeInteger(value.lastMistakeAt) ||
+    !isNonNegativeInteger(value.mistakeCount) ||
+    !isNonNegativeInteger(value.consecutiveFailureCount) ||
+    !isNonNegativeInteger(value.successfulStreak) ||
+    !Array.isArray(value.attempts)
+  ) {
+    throw new Error("QUESTION_HISTORY_INVALID");
+  }
+
+  const masteryLevel = optionalString(value.masteryLevel);
+  if (masteryLevel !== undefined && !REVIEW_MASTERIES.has(masteryLevel)) {
+    throw new Error("QUESTION_HISTORY_INVALID");
+  }
+
+  return {
+    questionId: value.questionId,
+    firstMistakeAt:
+      typeof value.firstMistakeAt === "number"
+        ? value.firstMistakeAt
+        : undefined,
+    lastMistakeAt:
+      typeof value.lastMistakeAt === "number" ? value.lastMistakeAt : undefined,
+    mistakeCount: value.mistakeCount,
+    consecutiveFailureCount: value.consecutiveFailureCount,
+    masteryLevel: masteryLevel as QuestionHistory["masteryLevel"],
+    dueDate: optionalString(value.dueDate),
+    successfulStreak: value.successfulStreak,
+    attempts: value.attempts.map(parseQuestionAttemptTimelineItem),
+  };
+}
+
+function parseQuestionAttemptTimelineItem(
+  value: unknown,
+): QuestionAttemptTimelineItem {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.questionId !== "string" ||
+    !ATTEMPT_RESULTS.has(value.result as AttemptResult) ||
+    !isNonNegativeInteger(value.attemptedAt) ||
+    !isNonNegativeInteger(value.createdAt) ||
+    !isOptionalPositiveInteger(value.durationSeconds) ||
+    !isOptionalString(value.answerNote) ||
+    !isOptionalString(value.nextDueDate) ||
+    !isOptionalNonNegativeInteger(value.intervalDays)
+  ) {
+    throw new Error("QUESTION_ATTEMPT_TIMELINE_ITEM_INVALID");
+  }
+
+  const reviewRating = optionalString(value.reviewRating);
+  if (reviewRating !== undefined && !REVIEW_RATINGS.has(reviewRating)) {
+    throw new Error("QUESTION_ATTEMPT_TIMELINE_ITEM_INVALID");
+  }
+
+  return {
+    id: value.id,
+    questionId: value.questionId,
+    result: value.result as AttemptResult,
+    attemptedAt: value.attemptedAt,
+    durationSeconds:
+      typeof value.durationSeconds === "number"
+        ? value.durationSeconds
+        : undefined,
+    answerNote: optionalString(value.answerNote),
+    reviewRating: reviewRating as QuestionAttemptTimelineItem["reviewRating"],
+    nextDueDate: optionalString(value.nextDueDate),
+    intervalDays:
+      typeof value.intervalDays === "number" ? value.intervalDays : undefined,
+    createdAt: value.createdAt,
   };
 }
 

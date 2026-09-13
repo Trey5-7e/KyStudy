@@ -452,6 +452,7 @@ macro_rules! kystudy_command_handler {
             commands::update_question_region,
             commands::delete_question_region,
             commands::add_question_attempt,
+            commands::get_question_history,
             commands::trash_question,
             commands::restore_question,
             commands::get_ocr_status,
