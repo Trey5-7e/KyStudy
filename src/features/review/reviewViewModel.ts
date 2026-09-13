@@ -81,7 +81,9 @@ export async function loadReviewPage(): Promise<PageState> {
         dashboard,
         subjects: subjects.filter((s) => !s.archivedAt),
         workbooks: resources.filter(
-          (r) => r.kind === "pdf" && r.role === "workbook",
+          (r) =>
+            r.kind === "pdf" &&
+            (r.role === "workbook" || r.role === "other" || !r.role),
         ),
       },
     };

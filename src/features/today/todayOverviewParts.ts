@@ -100,19 +100,22 @@ export function summarizeTodayReview(
   const target = activeSchemes.reduce(
     (total, item) =>
       total +
-      (item.queue?.items.length ??
-        Math.min(item.dueCount, item.scheme.dailyQuota)),
+      (item.queue && item.queue.items.length > 0
+        ? item.queue.items.length
+        : Math.min(item.dueCount, item.scheme.dailyQuota)),
     0,
   );
   const generated = activeSchemes.filter(
-    (item) => item.queue !== undefined,
+    (item) => item.queue !== undefined && item.queue.items.length > 0,
   ).length;
   const finished =
     activeSchemes.length > 0 &&
+    target > 0 &&
     activeSchemes.every(
       (item) =>
         item.isRestDay ||
         (item.queue !== undefined &&
+          item.queue.items.length > 0 &&
           item.queue.completedCount >= item.queue.items.length),
     );
   const restDay =
