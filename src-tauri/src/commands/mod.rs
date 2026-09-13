@@ -57,9 +57,10 @@ use crate::domain::{
     DailyReviewItem, DailyReviewQueue, IndexedQuestion, KnowledgeMap, KnowledgeMapBundle,
     KnowledgeNode, KnowledgeNodeResource, MindMapDraftNode, MindMapImportDraft, MistakeProfile,
     OcrRecognition, OcrTextLine, PlanReference, PlanStage, Question, QuestionAttempt,
-    QuestionBankSnapshot, QuestionBundle, QuestionKnowledgeLink, QuestionRegion, QuestionType,
-    ResourceIndexSession, ResourceIndexStatus, ResourceSearchResult, ReviewBacklog,
-    ReviewDashboard, ReviewEvent, ReviewPreferences, ReviewQuestion, ReviewReason, ReviewScheme,
+    QuestionAttemptTimelineItem, QuestionBankSnapshot, QuestionBundle, QuestionHistory,
+    QuestionKnowledgeLink, QuestionRegion, QuestionType, ResourceIndexSession,
+    ResourceIndexStatus, ResourceSearchResult, ReviewBacklog, ReviewDashboard, ReviewEvent,
+    ReviewMastery, ReviewPreferences, ReviewQuestion, ReviewRating, ReviewReason, ReviewScheme,
     ReviewSchemeDashboard, ReviewSchemeQueue, ReviewSchemeQueueItem, ReviewSchemeToday,
     ReviewSchemeTypeQuota, ReviewState, StudyPlan, StudyPlanBundle, StudySession, StudyStatistics,
     Subject, SubjectStatistics, Task, TaskChange, TaskChangeSnapshot, TaskSplit, TaskTransition,
@@ -2518,6 +2519,68 @@ impl From<QuestionAttempt> for QuestionAttemptDto {
             duration_seconds: attempt.duration_seconds,
             answer_note: attempt.answer_note,
             created_at: attempt.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct QuestionAttemptTimelineItemDto {
+    pub(crate) id: String,
+    pub(crate) question_id: String,
+    pub(crate) result: &'static str,
+    pub(crate) attempted_at: i64,
+    pub(crate) duration_seconds: Option<u32>,
+    pub(crate) answer_note: Option<String>,
+    pub(crate) review_rating: Option<&'static str>,
+    pub(crate) next_due_date: Option<String>,
+    pub(crate) interval_days: Option<u32>,
+    pub(crate) created_at: i64,
+}
+
+impl From<QuestionAttemptTimelineItem> for QuestionAttemptTimelineItemDto {
+    fn from(item: QuestionAttemptTimelineItem) -> Self {
+        Self {
+            id: item.id,
+            question_id: item.question_id,
+            result: item.result.as_str(),
+            attempted_at: item.attempted_at,
+            duration_seconds: item.duration_seconds,
+            answer_note: item.answer_note,
+            review_rating: item.review_rating.map(ReviewRating::as_str),
+            next_due_date: item.next_due_date.map(|d| d.as_str().to_string()),
+            interval_days: item.interval_days,
+            created_at: item.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct QuestionHistoryDto {
+    pub(crate) question_id: String,
+    pub(crate) first_mistake_at: Option<i64>,
+    pub(crate) last_mistake_at: Option<i64>,
+    pub(crate) mistake_count: u32,
+    pub(crate) consecutive_failure_count: u32,
+    pub(crate) mastery_level: Option<&'static str>,
+    pub(crate) due_date: Option<String>,
+    pub(crate) successful_streak: u32,
+    pub(crate) attempts: Vec<QuestionAttemptTimelineItemDto>,
+}
+
+impl From<QuestionHistory> for QuestionHistoryDto {
+    fn from(history: QuestionHistory) -> Self {
+        Self {
+            question_id: history.question_id,
+            first_mistake_at: history.first_mistake_at,
+            last_mistake_at: history.last_mistake_at,
+            mistake_count: history.mistake_count,
+            consecutive_failure_count: history.consecutive_failure_count,
+            mastery_level: history.mastery_level.map(ReviewMastery::as_str),
+            due_date: history.due_date.map(|d| d.as_str().to_string()),
+            successful_streak: history.successful_streak,
+            attempts: history.attempts.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -7419,6 +7482,19 @@ pub(crate) async fn add_question_attempt(
 ) -> Result<QuestionBundleDto, AppErrorDto> {
     let use_cases = state.questions.clone();
     tauri::async_runtime::spawn_blocking(move || use_cases.add_attempt(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn get_question_history(
+    question_id: String,
+    state: State<'_, AppState>,
+) -> Result<QuestionHistoryDto, AppErrorDto> {
+    let use_cases = state.questions.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.get_question_history(&question_id))
         .await
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)

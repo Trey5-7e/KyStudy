@@ -23,8 +23,9 @@ pub(crate) use mindmap::{
 pub(crate) use ocr::{OcrRecognition, OcrRecognitionState, OcrTextLine};
 pub(crate) use planning::{PlanReference, PlanStage, PlanStatus, StudyPlan, StudyPlanBundle};
 pub(crate) use question::{
-    AttemptResult, ClassificationSource, Question, QuestionAttempt, QuestionBundle,
-    QuestionKnowledgeLink, QuestionRegion, QuestionType, WorkbookProfile, classify_question_text,
+    AttemptResult, ClassificationSource, Question, QuestionAttempt, QuestionAttemptTimelineItem,
+    QuestionBundle, QuestionHistory, QuestionKnowledgeLink, QuestionRegion, QuestionType,
+    WorkbookProfile, classify_question_text,
 };
 pub(crate) use question_bank::{
     IndexedQuestion, QuestionBankSnapshot, TrashedWorkbookDocumentSegment, WorkbookCategory,

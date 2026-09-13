@@ -1,3 +1,5 @@
+use super::{LocalDate, ReviewMastery, ReviewRating};
+
 /// User-recorded outcome for one question attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AttemptResult {
@@ -233,3 +235,33 @@ pub(crate) struct QuestionBundle {
     pub(crate) attempts: Vec<QuestionAttempt>,
     pub(crate) knowledge_links: Vec<QuestionKnowledgeLink>,
 }
+
+/// One chronological item in the question's attempt and review trajectory.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct QuestionAttemptTimelineItem {
+    pub(crate) id: String,
+    pub(crate) question_id: String,
+    pub(crate) result: AttemptResult,
+    pub(crate) attempted_at: i64,
+    pub(crate) duration_seconds: Option<u32>,
+    pub(crate) answer_note: Option<String>,
+    pub(crate) review_rating: Option<ReviewRating>,
+    pub(crate) next_due_date: Option<LocalDate>,
+    pub(crate) interval_days: Option<u32>,
+    pub(crate) created_at: i64,
+}
+
+/// Aggregated attempt trajectory and mistake profile for a question.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct QuestionHistory {
+    pub(crate) question_id: String,
+    pub(crate) first_mistake_at: Option<i64>,
+    pub(crate) last_mistake_at: Option<i64>,
+    pub(crate) mistake_count: u32,
+    pub(crate) consecutive_failure_count: u32,
+    pub(crate) mastery_level: Option<ReviewMastery>,
+    pub(crate) due_date: Option<LocalDate>,
+    pub(crate) successful_streak: u32,
+    pub(crate) attempts: Vec<QuestionAttemptTimelineItem>,
+}
+

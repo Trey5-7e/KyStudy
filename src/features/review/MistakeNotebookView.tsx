@@ -14,6 +14,7 @@ import { Button } from "../../shared/ui/Button";
 import { EditorDialog } from "../../shared/components/EditorDialog";
 import { QuestionRegionCard } from "./QuestionRegionCard";
 import { QuestionAiAnalysis } from "./QuestionAiAnalysis";
+import { QuestionAttemptTimeline } from "./QuestionAttemptTimeline";
 import { PaperExportDialog } from "../workbook/PaperExportDialog";
 import {
   createBatchAttempts,
@@ -707,6 +708,20 @@ export function MistakeNotebookView({
                       variant="ghost"
                       size="sm"
                       onClick={() => setPreviewQuestionId(q.id)}
+                      title="查看做题轨迹与时间线"
+                    >
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        timeline
+                      </span>
+                      <span>轨迹</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setPreviewQuestionId(q.id)}
                     >
                       <span
                         className="material-symbols-rounded"
@@ -714,7 +729,7 @@ export function MistakeNotebookView({
                       >
                         visibility
                       </span>
-                      <span>查看题目切片</span>
+                      <span>题目切片</span>
                     </Button>
                   </div>
                 </footer>
@@ -916,6 +931,10 @@ export function MistakeNotebookView({
                 documentId={previewQuestion.documentId}
                 regions={previewQuestion.regions}
                 title={previewQuestion.title}
+              />
+              <QuestionAttemptTimeline
+                key={previewQuestion.id}
+                questionId={previewQuestion.id}
               />
               <QuestionAiAnalysis
                 key={previewQuestion.id}

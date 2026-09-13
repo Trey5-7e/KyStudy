@@ -4,8 +4,9 @@ use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, 
 
 use crate::application::{QuestionError, QuestionRepository, ValidatedQuestionUpdate};
 use crate::domain::{
-    AttemptResult, ClassificationSource, Question, QuestionAttempt, QuestionBundle,
-    QuestionKnowledgeLink, QuestionRegion, QuestionType, WorkbookProfile,
+    AttemptResult, ClassificationSource, LocalDate, Question, QuestionAttempt,
+    QuestionAttemptTimelineItem, QuestionBundle, QuestionHistory, QuestionKnowledgeLink,
+    QuestionRegion, QuestionType, ReviewMastery, ReviewRating, WorkbookProfile,
 };
 
 use super::sqlite_workspace::{SqliteWorkspaceRepository, database_error, migrate, open_database};
@@ -437,6 +438,12 @@ impl QuestionRepository for SqliteQuestionRepository {
         }
         transaction.commit().map_err(database_error)?;
         load_bundle(&connection, question_id)
+    }
+
+    fn get_question_history(&self, question_id: &str) -> Result<QuestionHistory, QuestionError> {
+        let connection = self.open()?;
+        ensure_active_question(&connection, question_id)?;
+        load_question_history(&connection, question_id)
     }
 }
 
@@ -979,6 +986,133 @@ fn load_knowledge_links(
         .collect()
 }
 
+fn load_question_history(
+    connection: &Connection,
+    question_id: &str,
+) -> Result<QuestionHistory, QuestionError> {
+    let profile_row = connection
+        .query_row(
+            "SELECT mp.first_mistake_at, mp.last_mistake_at, mp.mistake_count,
+                    mp.consecutive_failure_count, rs.mastery_level, rs.due_date,
+                    rs.successful_streak
+             FROM mistake_profile mp
+             LEFT JOIN review_state rs ON rs.question_id = mp.question_id
+             WHERE mp.question_id = ?1",
+            params![question_id],
+            |row| {
+                let first_mistake_at: Option<i64> = row.get(0)?;
+                let last_mistake_at: Option<i64> = row.get(1)?;
+                let mistake_count: i64 = row.get(2)?;
+                let consecutive_failure_count: i64 = row.get(3)?;
+                let mastery_level_str: Option<String> = row.get(4)?;
+                let due_date_str: Option<String> = row.get(5)?;
+                let successful_streak: Option<i64> = row.get(6)?;
+                Ok((
+                    first_mistake_at,
+                    last_mistake_at,
+                    mistake_count,
+                    consecutive_failure_count,
+                    mastery_level_str,
+                    due_date_str,
+                    successful_streak,
+                ))
+            },
+        )
+        .optional()
+        .map_err(database_error)?;
+
+    let (
+        first_mistake_at,
+        last_mistake_at,
+        mistake_count,
+        consecutive_failure_count,
+        mastery_level,
+        due_date,
+        successful_streak,
+    ) = match profile_row {
+        Some((
+            first_mistake_at,
+            last_mistake_at,
+            mistake_count,
+            consecutive_failure_count,
+            mastery_level_str,
+            due_date_str,
+            successful_streak,
+        )) => {
+            let mastery_level = mastery_level_str.as_deref().and_then(ReviewMastery::parse);
+            let due_date = due_date_str
+                .as_deref()
+                .and_then(|s| LocalDate::parse(s).ok());
+            let mistake_count = to_u32(mistake_count, 2).map_err(database_error)?;
+            let consecutive_failure_count =
+                to_u32(consecutive_failure_count, 3).map_err(database_error)?;
+            let successful_streak =
+                optional_u32(successful_streak, 6).map_err(database_error)?.unwrap_or(0);
+            (
+                first_mistake_at,
+                last_mistake_at,
+                mistake_count,
+                consecutive_failure_count,
+                mastery_level,
+                due_date,
+                successful_streak,
+            )
+        }
+        None => (None, None, 0, 0, None, None, 0),
+    };
+
+    let mut statement = connection
+        .prepare(
+            "SELECT qa.id, qa.question_id, qa.result, qa.attempted_at,
+                    qa.duration_seconds, qa.answer_note, qa.created_at,
+                    re.rating, re.next_due_date, re.interval_days
+             FROM question_attempt qa
+             LEFT JOIN review_event re ON re.attempt_id = qa.id
+             WHERE qa.question_id = ?1
+             ORDER BY qa.attempted_at DESC, qa.id DESC",
+        )
+        .map_err(database_error)?;
+
+    let attempts = statement
+        .query_map(params![question_id], |row| {
+            let result_str = row.get::<_, String>(2)?;
+            let rating_str = row.get::<_, Option<String>>(7)?;
+            let next_due_date_str = row.get::<_, Option<String>>(8)?;
+            let interval_days_i64 = row.get::<_, Option<i64>>(9)?;
+
+            Ok(QuestionAttemptTimelineItem {
+                id: row.get(0)?,
+                question_id: row.get(1)?,
+                result: AttemptResult::parse(&result_str)
+                    .ok_or_else(|| conversion_error(2, "invalid attempt result"))?,
+                attempted_at: row.get(3)?,
+                duration_seconds: optional_u32(row.get::<_, Option<i64>>(4)?, 4)?,
+                answer_note: row.get(5)?,
+                created_at: row.get(6)?,
+                review_rating: rating_str.as_deref().and_then(ReviewRating::parse),
+                next_due_date: next_due_date_str
+                    .as_deref()
+                    .and_then(|s| LocalDate::parse(s).ok()),
+                interval_days: optional_u32(interval_days_i64, 9)?,
+            })
+        })
+        .map_err(database_error)?
+        .map(|row| row.map_err(database_error).map_err(QuestionError::from))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(QuestionHistory {
+        question_id: question_id.to_string(),
+        first_mistake_at,
+        last_mistake_at,
+        mistake_count,
+        consecutive_failure_count,
+        mastery_level,
+        due_date,
+        successful_streak,
+        attempts,
+    })
+}
+
 fn to_u32(value: i64, column: usize) -> rusqlite::Result<u32> {
     u32::try_from(value).map_err(|_| conversion_error(column, "integer is outside u32"))
 }
@@ -1170,5 +1304,135 @@ mod tests {
                 },
             })
             .expect("saved region should adjust")
+    }
+
+    #[test]
+    fn question_history_retrieves_attempts_and_review_events() {
+        let directory = tempdir().expect("temporary directory should exist");
+        let workspace = SqliteWorkspaceRepository::new(directory.path());
+        workspace
+            .initialize_default(&NewWorkspace::default_at(1_700_000_000_000))
+            .expect("workspace should initialize");
+        let source = directory.path().join("workbook.pdf");
+        std::fs::write(&source, b"question-fixture").expect("fixture should write");
+        let resources = SqliteBlobStore::new(directory.path());
+        let document = resources
+            .import_file(
+                &source,
+                &ImportRequest {
+                    job_id: Uuid::now_v7().to_string(),
+                    document_id: Uuid::now_v7().to_string(),
+                    title: "习题册".to_owned(),
+                    kind: "pdf".to_owned(),
+                    mime_type: "application/pdf".to_owned(),
+                    created_at: 1_700_000_000_001,
+                },
+                &AtomicBool::new(false),
+                &mut |_| {},
+            )
+            .expect("workbook should import");
+        resources
+            .update_role(&document.id, "workbook")
+            .expect("workbook role should persist");
+        resources
+            .save_reading_progress(&document.id, 3, 1)
+            .expect("known page count should persist");
+        let repository = SqliteQuestionRepository::new(directory.path());
+        let use_cases = QuestionUseCases::new(repository.clone());
+        let created = use_cases
+            .create_question(CreateQuestionInput {
+                document_id: document.id,
+                title: "线性表综合题".to_owned(),
+                subject_id: None,
+                question_type: Some("solution".to_owned()),
+                chapter: Some("数据结构".to_owned()),
+                question_number: Some("1".to_owned()),
+                difficulty: 4,
+                analysis_markdown: None,
+                region: QuestionRegionInput {
+                    page_number: 1,
+                    x: 0.1,
+                    y: 0.2,
+                    width: 0.5,
+                    height: 0.2,
+                },
+                knowledge_node_ids: Vec::new(),
+            })
+            .expect("question should create");
+
+        // 1. Initial history: empty attempts, default stats
+        let initial_history = use_cases
+            .get_question_history(&created.question.id)
+            .expect("history should load for fresh question");
+        assert_eq!(initial_history.attempts.len(), 0);
+        assert_eq!(initial_history.mistake_count, 0);
+        assert_eq!(initial_history.consecutive_failure_count, 0);
+        assert!(initial_history.first_mistake_at.is_none());
+
+        // 2. Add an incorrect attempt via practice
+        use_cases
+            .add_attempt(incorrect_attempt(&created.question.id))
+            .expect("attempt should save");
+
+        let history_after_first = use_cases
+            .get_question_history(&created.question.id)
+            .expect("history should load after attempt");
+        assert_eq!(history_after_first.attempts.len(), 1);
+        assert_eq!(history_after_first.mistake_count, 1);
+        assert!(history_after_first.first_mistake_at.is_some());
+        assert_eq!(history_after_first.attempts[0].result, AttemptResult::Incorrect);
+        assert_eq!(history_after_first.attempts[0].duration_seconds, Some(300));
+        assert!(history_after_first.attempts[0].review_rating.is_none());
+
+        let first_attempt_at = history_after_first.attempts[0].attempted_at;
+        let second_attempt_at = first_attempt_at + 86_400_000;
+
+        // 3. Simulate a review event linked to a second attempt (1 day later)
+        let connection = repository.open().expect("open connection");
+        let second_attempt_id = Uuid::now_v7().to_string();
+        connection
+            .execute(
+                "INSERT INTO question_attempt(
+                    id, question_id, result, attempted_at,
+                    duration_seconds, answer_note, created_at
+                 ) VALUES (?1, ?2, 'correct', ?3, 150, '复习掌握良好', ?3)",
+                params![second_attempt_id, created.question.id, second_attempt_at],
+            )
+            .expect("insert attempt");
+        connection
+            .execute(
+                "INSERT INTO review_event(
+                    id, question_id, attempt_id, rating, previous_due_date,
+                    next_due_date, interval_days, policy_version, created_at
+                 ) VALUES (?1, ?2, ?3, 'mastered', '2026-07-20', '2026-07-25', 5, 1, ?4)",
+                params![
+                    Uuid::now_v7().to_string(),
+                    created.question.id,
+                    second_attempt_id,
+                    second_attempt_at
+                ],
+            )
+            .expect("insert review event");
+
+        let history_after_review = use_cases
+            .get_question_history(&created.question.id)
+            .expect("history should load after review event");
+        assert_eq!(history_after_review.attempts.len(), 2);
+        // Descending order: second attempt is first
+        let first_node = &history_after_review.attempts[0];
+        assert_eq!(first_node.result, AttemptResult::Correct);
+        assert_eq!(first_node.review_rating, Some(ReviewRating::Mastered));
+        assert_eq!(first_node.interval_days, Some(5));
+        assert_eq!(
+            first_node.next_due_date,
+            Some(LocalDate::parse("2026-07-25").unwrap())
+        );
+        assert_eq!(first_node.answer_note.as_deref(), Some("复习掌握良好"));
+
+        // Second node is the earlier practice attempt
+        let second_node = &history_after_review.attempts[1];
+        assert_eq!(second_node.result, AttemptResult::Incorrect);
+        assert!(second_node.review_rating.is_none());
+        assert!(second_node.next_due_date.is_none());
     }
 }
