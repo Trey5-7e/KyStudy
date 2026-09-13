@@ -219,12 +219,40 @@ impl ReviewSchemeRepository for SqliteReviewSchemeRepository {
             transaction.commit().map_err(database_error)?;
             return Ok(());
         }
+
+        // Clean up any stale empty queue (0 items and 0 completed count) for this scheme today
+        transaction
+            .execute(
+                "DELETE FROM review_scheme_queue
+                 WHERE scheme_id = ?1 AND queue_date = ?2 AND completed_count = 0
+                   AND NOT EXISTS(
+                       SELECT 1 FROM review_scheme_queue_item WHERE queue_id = review_scheme_queue.id
+                   )",
+                params![scheme_id, queue_date.as_str()],
+            )
+            .map_err(database_error)?;
+
         if queue_exists(&transaction, scheme_id, queue_date)? {
             transaction.commit().map_err(database_error)?;
             return Ok(());
         }
         if let Some(document_id) = temporary_document_id {
             ensure_temporary_document(&transaction, &scheme, document_id)?;
+        }
+
+        let carryovers =
+            load_carryovers(&transaction, &scheme.id, queue_date, temporary_document_id)?;
+        let candidates = load_candidates(&transaction, &scheme, queue_date, temporary_document_id)?;
+        let selected = select_scheme_questions(
+            carryovers,
+            candidates,
+            &scheme.type_quotas,
+            scheme.daily_quota,
+            queue_date,
+        );
+        if selected.is_empty() {
+            transaction.commit().map_err(database_error)?;
+            return Ok(());
         }
 
         let queue_id = Uuid::now_v7().to_string();
@@ -242,17 +270,6 @@ impl ReviewSchemeRepository for SqliteReviewSchemeRepository {
                 ],
             )
             .map_err(database_error)?;
-
-        let carryovers =
-            load_carryovers(&transaction, &scheme.id, queue_date, temporary_document_id)?;
-        let candidates = load_candidates(&transaction, &scheme, queue_date, temporary_document_id)?;
-        let selected = select_scheme_questions(
-            carryovers,
-            candidates,
-            &scheme.type_quotas,
-            scheme.daily_quota,
-            queue_date,
-        );
         for (position, item) in selected.iter().enumerate() {
             let position = u32::try_from(position).map_err(|_| invalid_stored())?;
             transaction
@@ -575,7 +592,7 @@ fn ensure_available_question(
                  FROM question q
                  JOIN resource_document d ON d.id = q.document_id
                  WHERE q.id = ?1 AND q.deleted_at IS NULL
-                   AND d.kind = 'pdf' AND d.role = 'workbook'
+                   AND d.kind = 'pdf' AND d.deleted_at IS NULL
                    AND NOT EXISTS(
                        SELECT 1
                        FROM question_index_metadata m
@@ -737,8 +754,12 @@ fn load_scheme_queue(
     let Some((id, quota, generated_at, completed_count)) = raw else {
         return Ok(None);
     };
+    let items = load_queue_items(connection, &id)?;
+    if items.is_empty() && completed_count == 0 {
+        return Ok(None);
+    }
     Ok(Some(ReviewSchemeQueue {
-        items: load_queue_items(connection, &id)?,
+        items,
         id,
         scheme_id: scheme_id.to_owned(),
         queue_date: queue_date.clone(),
@@ -763,8 +784,10 @@ fn load_queue_items(
                    OR (
                        EXISTS(
                            SELECT 1 FROM question q
+                           JOIN resource_document d ON d.id = q.document_id
                            WHERE q.id = review_scheme_queue_item.question_id
                              AND q.deleted_at IS NULL
+                             AND d.kind = 'pdf' AND d.deleted_at IS NULL
                        )
                        AND NOT EXISTS(
                            SELECT 1
@@ -835,15 +858,33 @@ fn count_due_questions(
              FROM mistake_profile mp
              JOIN review_state st ON st.question_id = mp.question_id
              JOIN question q ON q.id = mp.question_id
+             JOIN resource_document d ON d.id = q.document_id
              LEFT JOIN workbook_profile wp ON wp.document_id = q.document_id
              WHERE mp.active = 1 AND st.suspended_at IS NULL
                AND q.deleted_at IS NULL AND q.question_type IS NOT NULL
+               AND d.kind = 'pdf' AND d.deleted_at IS NULL
                AND COALESCE(q.subject_id, wp.default_subject_id) = ?1
                AND st.due_date <= ?2
                AND (?3 OR EXISTS(
                     SELECT 1 FROM review_scheme_document sd
                     WHERE sd.scheme_id = ?4 AND sd.document_id = q.document_id
-               ))",
+               ))
+               AND NOT EXISTS(
+                    SELECT 1
+                    FROM question_index_metadata m
+                    JOIN workbook_document_segment s ON s.id = m.segment_id
+                    WHERE m.question_id = q.id AND s.deleted_at IS NOT NULL
+               )
+               AND NOT EXISTS(
+                    SELECT 1 FROM review_scheme_queue_item assigned
+                    WHERE assigned.question_id = q.id AND assigned.queue_date = ?2
+               )
+               AND NOT EXISTS(
+                    SELECT 1 FROM review_scheme_queue_item other_pending
+                    JOIN review_scheme_queue other_queue ON other_queue.id = other_pending.queue_id
+                    WHERE other_pending.question_id = q.id AND other_pending.state = 'pending'
+                      AND other_queue.scheme_id != ?4
+               )",
             params![
                 scheme.subject_id,
                 today.as_str(),
@@ -863,13 +904,21 @@ fn count_pending_classification(
     let count = connection
         .query_row(
             "SELECT COUNT(*) FROM question q
+             JOIN resource_document d ON d.id = q.document_id
              LEFT JOIN workbook_profile wp ON wp.document_id = q.document_id
              WHERE q.deleted_at IS NULL AND q.question_type IS NULL
+               AND d.kind = 'pdf' AND d.deleted_at IS NULL
                AND COALESCE(q.subject_id, wp.default_subject_id) = ?1
                AND (?2 OR EXISTS(
                     SELECT 1 FROM review_scheme_document sd
                     WHERE sd.scheme_id = ?3 AND sd.document_id = q.document_id
-               ))",
+               ))
+               AND NOT EXISTS(
+                    SELECT 1
+                    FROM question_index_metadata m
+                    JOIN workbook_document_segment s ON s.id = m.segment_id
+                    WHERE m.question_id = q.id AND s.deleted_at IS NOT NULL
+               )",
             params![scheme.subject_id, scheme.all_subject_workbooks, scheme.id],
             |row| row.get::<_, i64>(0),
         )
@@ -890,8 +939,10 @@ fn load_carryovers(
              FROM review_scheme_queue_item i
              JOIN review_scheme_queue sq ON sq.id = i.queue_id
              JOIN question q ON q.id = i.question_id
+             JOIN resource_document d ON d.id = q.document_id
              WHERE sq.scheme_id = ?1 AND sq.queue_date < ?2 AND i.state = 'pending'
                AND q.deleted_at IS NULL
+               AND d.kind = 'pdf' AND d.deleted_at IS NULL
                AND NOT EXISTS(
                    SELECT 1
                    FROM question_index_metadata m
@@ -952,7 +1003,7 @@ fn load_candidates(
              LEFT JOIN question_attempt a ON a.question_id = q.id
              WHERE mp.active = 1 AND st.suspended_at IS NULL
                AND q.deleted_at IS NULL AND q.question_type IS NOT NULL
-               AND d.kind = 'pdf' AND d.role = 'workbook'
+               AND d.kind = 'pdf' AND d.deleted_at IS NULL
                AND COALESCE(q.subject_id, wp.default_subject_id) = ?1
                AND st.due_date <= ?2
                AND (?3 IS NULL OR q.document_id = ?3)
@@ -960,6 +1011,12 @@ fn load_candidates(
                     SELECT 1 FROM review_scheme_document sd
                     WHERE sd.scheme_id = ?5 AND sd.document_id = q.document_id
                ))
+               AND NOT EXISTS(
+                    SELECT 1
+                    FROM question_index_metadata m
+                    JOIN workbook_document_segment s ON s.id = m.segment_id
+                    WHERE m.question_id = q.id AND s.deleted_at IS NOT NULL
+               )
                AND NOT EXISTS(
                     SELECT 1 FROM review_scheme_queue_item pending
                     WHERE pending.question_id = q.id AND pending.state = 'pending'
@@ -1010,7 +1067,14 @@ fn queue_exists(
     connection
         .query_row(
             "SELECT EXISTS(
-                SELECT 1 FROM review_scheme_queue WHERE scheme_id = ?1 AND queue_date = ?2
+                SELECT 1 FROM review_scheme_queue q
+                WHERE q.scheme_id = ?1 AND q.queue_date = ?2
+                  AND (
+                      q.completed_count > 0
+                      OR EXISTS(
+                          SELECT 1 FROM review_scheme_queue_item i WHERE i.queue_id = q.id
+                      )
+                  )
              )",
             params![scheme_id, queue_date.as_str()],
             |row| row.get(0),
@@ -1046,7 +1110,7 @@ fn ensure_workbook(connection: &Connection, document_id: &str) -> Result<(), Rev
         .query_row(
             "SELECT EXISTS(
                 SELECT 1 FROM resource_document
-                WHERE id = ?1 AND kind = 'pdf' AND role = 'workbook'
+                WHERE id = ?1 AND kind = 'pdf' AND deleted_at IS NULL
              )",
             params![document_id],
             |row| row.get::<_, bool>(0),
@@ -1680,5 +1744,143 @@ mod tests {
         assert_eq!(queue.completed_count, 0);
         assert_eq!(queue.items[0].state, ReviewSchemeItemState::Pending);
         assert!(queue.items[0].review_event.is_none());
+    }
+
+    #[test]
+    fn non_workbook_role_document_questions_generate_scheme_queue() {
+        let directory = tempdir().expect("temporary directory should exist");
+        SqliteWorkspaceRepository::new(directory.path())
+            .initialize_default(&NewWorkspace::default_at(1_700_000_000_000))
+            .expect("workspace should initialize");
+        let subject = ScheduleUseCases::new(SqliteScheduleRepository::new(directory.path()))
+            .create_subject(&CreateSubjectInput {
+                name: "英语".to_owned(),
+                color_key: "blue".to_owned(),
+                sort_order: 0,
+            })
+            .expect("subject should create");
+        let source = directory.path().join("english-reading.pdf");
+        std::fs::write(&source, b"english-reading").expect("fixture should write");
+        let resources = SqliteBlobStore::new(directory.path());
+        let document = resources
+            .import_file(
+                &source,
+                &ImportRequest {
+                    job_id: Uuid::now_v7().to_string(),
+                    document_id: Uuid::now_v7().to_string(),
+                    title: "英语真题阅读".to_owned(),
+                    kind: "pdf".to_owned(),
+                    mime_type: "application/pdf".to_owned(),
+                    created_at: 1_700_000_000_001,
+                },
+                &AtomicBool::new(false),
+                &mut |_| {},
+            )
+            .expect("document should import");
+        resources
+            .update_role(&document.id, "workbook")
+            .expect("workbook role should persist");
+        resources
+            .save_reading_progress(&document.id, 5, 1)
+            .expect("page count should persist");
+        let questions = QuestionUseCases::new(SqliteQuestionRepository::new(directory.path()));
+        questions
+            .set_workbook_subject(&SetWorkbookSubjectInput {
+                document_id: document.id.clone(),
+                subject_id: Some(subject.id.clone()),
+            })
+            .expect("workbook subject should persist");
+
+        let question_one = questions
+            .create_question(CreateQuestionInput {
+                document_id: document.id.clone(),
+                title: "Reading Q1".to_owned(),
+                subject_id: None,
+                question_type: Some("choice".to_owned()),
+                chapter: None,
+                question_number: None,
+                difficulty: 3,
+                analysis_markdown: None,
+                region: QuestionRegionInput {
+                    page_number: 1,
+                    x: 0.1,
+                    y: 0.1,
+                    width: 0.8,
+                    height: 0.2,
+                },
+                knowledge_node_ids: Vec::new(),
+            })
+            .expect("first question should create");
+        questions
+            .add_attempt(AddQuestionAttemptInput {
+                question_id: question_one.question.id.clone(),
+                result: "incorrect".to_owned(),
+                attempted_on: "2026-07-19".to_owned(),
+                duration_seconds: Some(60),
+                answer_note: None,
+            })
+            .expect("attempt should persist");
+
+        // Switch document role to "reference" (or "other") to test resilience when document role is not workbook
+        resources
+            .update_role(&document.id, "reference")
+            .expect("document role should update to reference");
+
+        let schemes = ReviewSchemeUseCases::new(SqliteReviewSchemeRepository::new(directory.path()));
+        let dashboard = schemes
+            .save_scheme(SaveReviewSchemeInput {
+                scheme_id: None,
+                name: "英语全科目复习".to_owned(),
+                subject_id: subject.id.clone(),
+                all_subject_workbooks: true,
+                daily_quota: 5,
+                enabled: true,
+                document_ids: Vec::new(),
+                type_quotas: vec![
+                    quota("choice", 5),
+                    quota("blank", 0),
+                    quota("solution", 0),
+                    quota("other", 0),
+                ],
+                today: "2026-07-20".to_owned(),
+            })
+            .expect("scheme should save");
+
+        assert_eq!(dashboard.schemes[0].due_count, 1);
+        assert!(dashboard.schemes[0].queue.is_none());
+
+        let generated = schemes
+            .generate_queue(&crate::application::GenerateReviewSchemeQueueInput {
+                scheme_id: dashboard.schemes[0].scheme.id.clone(),
+                queue_date: "2026-07-20".to_owned(),
+                temporary_document_id: None,
+            })
+            .expect("queue should generate successfully");
+
+        let queue = generated.schemes[0]
+            .queue
+            .as_ref()
+            .expect("today queue must exist and not be empty");
+        assert_eq!(queue.items.len(), 1);
+        assert_eq!(queue.items[0].question.question.id, question_one.question.id);
+        assert_eq!(generated.schemes[0].due_count, 0); // Assigned today
+    }
+
+    #[test]
+    fn empty_candidates_does_not_create_empty_queue() {
+        let fixture = initialized_fixture();
+        // No mistakes added!
+        let scheme_id = fixture.save_scheme(3);
+        let dashboard = fixture
+            .schemes
+            .generate_queue(&crate::application::GenerateReviewSchemeQueueInput {
+                scheme_id,
+                queue_date: "2026-07-20".to_owned(),
+                temporary_document_id: None,
+            })
+            .expect("queue generation should succeed without candidates");
+
+        assert_eq!(dashboard.schemes[0].due_count, 0);
+        assert!(dashboard.schemes[0].queue.is_none());
     }
 }

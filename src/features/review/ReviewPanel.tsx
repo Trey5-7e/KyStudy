@@ -71,6 +71,7 @@ export function ReviewPanel({
   const [internalOpenRequest, setInternalOpenRequest] = useState<number>();
   const handledInstantMistakeNonceRef = useRef<number | undefined>(undefined);
   const handledNotebookNonceRef = useRef<number | undefined>(undefined);
+  const handledContinuousNonceRef = useRef<number | undefined>(undefined);
   const [draft, setDraft] = useState<SchemeDraft>();
   const [initial, setInitial] = useState<SchemeDraft>();
   const [instantMistakeSetupOpen, setInstantMistakeSetupOpen] = useState(false);
@@ -140,6 +141,19 @@ export function ReviewPanel({
       if (handledNotebookNonceRef.current !== openRequest.nonce) {
         handledNotebookNonceRef.current = openRequest.nonce;
         setActiveTab("notebook");
+      }
+    } else if (
+      typeof openRequest === "object" &&
+      openRequest.kind === "continuous"
+    ) {
+      if (handledContinuousNonceRef.current !== openRequest.nonce) {
+        handledContinuousNonceRef.current = openRequest.nonce;
+        setActiveTab("queue");
+      }
+    } else if (typeof openRequest === "number") {
+      if (handledContinuousNonceRef.current !== openRequest) {
+        handledContinuousNonceRef.current = openRequest;
+        setActiveTab("queue");
       }
     }
   }, [openRequest]);

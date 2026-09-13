@@ -5,6 +5,7 @@ import type {
   CyclePlanItem,
   CyclePlanOverview,
 } from "../../shared/tauri/cyclePlanClient";
+import type { ReviewSchemeDashboard } from "../../shared/tauri/reviewSchemeClient";
 import { summarizeTodayOverview } from "./todayOverviewParts";
 
 function item(overrides: Partial<CyclePlanItem>): CyclePlanItem {
@@ -124,5 +125,73 @@ describe("today cycle ordering", () => {
       summary.cycle.items.map(({ item: cycleItem }) => cycleItem.id),
     ).toEqual(["earlier-start", "later-start"]);
     expect(summary.nextCycle?.item.id).toBe("earlier-start");
+  });
+
+  it("keeps due count as target if queue is empty or undefined and avoids premature finished state", () => {
+    const dashboardWithDueOnly: ReviewSchemeDashboard = {
+      restWeekdays: [],
+      schemes: [
+        {
+          scheme: {
+            id: "scheme-1",
+            name: "英语",
+            subjectId: "sub-1",
+            subjectName: "英语",
+            allSubjectWorkbooks: true,
+            dailyQuota: 10,
+            enabled: true,
+            documentIds: [],
+            typeQuotas: [],
+            createdAt: 1,
+            updatedAt: 1,
+          },
+          isRestDay: false,
+          dueCount: 5,
+          pendingClassificationCount: 0,
+          queue: undefined,
+        },
+      ],
+    };
+
+    const initialSummary = summarizeTodayOverview(
+      undefined,
+      "2026-08-11",
+      dashboardWithDueOnly,
+      false,
+    );
+    expect(initialSummary.review.target).toBe(5);
+    expect(initialSummary.review.remaining).toBe(5);
+    expect(initialSummary.review.finished).toBe(false);
+    expect(initialSummary.reviewHasWork).toBe(true);
+
+    // If an empty queue anomaly happens (items.length = 0)
+    const dashboardWithEmptyQueue: ReviewSchemeDashboard = {
+      restWeekdays: [],
+      schemes: [
+        {
+          ...dashboardWithDueOnly.schemes[0]!,
+          queue: {
+            id: "queue-1",
+            schemeId: "scheme-1",
+            queueDate: "2026-08-11",
+            quota: 10,
+            generatedAt: 1,
+            completedCount: 0,
+            items: [],
+          },
+        },
+      ],
+    };
+
+    const anomalySummary = summarizeTodayOverview(
+      undefined,
+      "2026-08-11",
+      dashboardWithEmptyQueue,
+      false,
+    );
+    expect(anomalySummary.review.target).toBe(5);
+    expect(anomalySummary.review.remaining).toBe(5);
+    expect(anomalySummary.review.finished).toBe(false);
+    expect(anomalySummary.reviewHasWork).toBe(true);
   });
 });
