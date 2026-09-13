@@ -387,7 +387,7 @@ function parseQuestionAttemptTimelineItem(
     !ATTEMPT_RESULTS.has(value.result as AttemptResult) ||
     !isNonNegativeInteger(value.attemptedAt) ||
     !isNonNegativeInteger(value.createdAt) ||
-    !isOptionalPositiveInteger(value.durationSeconds) ||
+    !isOptionalNonNegativeInteger(value.durationSeconds) ||
     !isOptionalString(value.answerNote) ||
     !isOptionalString(value.nextDueDate) ||
     !isOptionalNonNegativeInteger(value.intervalDays)
@@ -544,7 +544,7 @@ function parseQuestionAttempt(value: unknown): QuestionAttempt {
     typeof value.questionId !== "string" ||
     !ATTEMPT_RESULTS.has(value.result as AttemptResult) ||
     !isNonNegativeInteger(value.attemptedAt) ||
-    !isOptionalPositiveInteger(value.durationSeconds) ||
+    !isOptionalNonNegativeInteger(value.durationSeconds) ||
     !isOptionalString(value.answerNote) ||
     !isNonNegativeInteger(value.createdAt)
   ) {
@@ -626,10 +626,6 @@ function isPositiveNormalized(value: unknown): value is number {
 
 function isOptionalNonNegativeInteger(value: unknown): boolean {
   return value === undefined || value === null || isNonNegativeInteger(value);
-}
-
-function isOptionalPositiveInteger(value: unknown): boolean {
-  return value === undefined || value === null || isPositiveInteger(value);
 }
 
 function isOptionalString(value: unknown): boolean {
