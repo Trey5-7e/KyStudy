@@ -15,8 +15,11 @@ import { EditorDialog } from "../../shared/components/EditorDialog";
 import { QuestionRegionCard } from "./QuestionRegionCard";
 import { QuestionAiAnalysis } from "./QuestionAiAnalysis";
 import { QuestionAttemptTimeline } from "./QuestionAttemptTimeline";
+import { QuestionMistakeTagEditor } from "./QuestionMistakeTagEditor";
+import { BatchTagDialog } from "./BatchTagDialog";
 import { PaperExportDialog } from "../workbook/PaperExportDialog";
 import {
+  calculateForgettingMeta,
   createBatchAttempts,
   filterMistakeNotebook,
   isMistakeMastered,
@@ -27,6 +30,15 @@ import {
   type MistakeSortOption,
   type MistakeStatusFilter,
 } from "./mistakeNotebookModel";
+import {
+  batchAddTagsToQuestions,
+  batchRemoveTagsFromQuestions,
+  getAllAvailableTags,
+  getMistakeTagTone,
+  loadAllQuestionTags,
+  loadCustomTags,
+  subscribeMistakeTagsChanged,
+} from "./mistakeTagModel";
 
 export interface MistakeNotebookViewProps {
   questions: readonly IndexedQuestion[];
@@ -57,9 +69,31 @@ export function MistakeNotebookView({
     questionType: "all",
     status: "all",
     errorThreshold: "all",
+    tag: undefined,
     query: "",
     sortBy: "priority",
   });
+
+  const [tagsMap, setTagsMap] = useState<Record<string, string[]>>(() =>
+    loadAllQuestionTags(),
+  );
+  const [customTags, setCustomTags] = useState<string[]>(() =>
+    loadCustomTags(),
+  );
+  const [batchTagDialogOpen, setBatchTagDialogOpen] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = subscribeMistakeTagsChanged(() => {
+      setTagsMap(loadAllQuestionTags());
+      setCustomTags(loadCustomTags());
+    });
+    return unsubscribe;
+  }, []);
+
+  const allKnownTags = useMemo(
+    () => getAllAvailableTags(customTags),
+    [customTags],
+  );
 
   const [viewMode, setViewMode] = useState<"list" | "split">(() => {
     try {
@@ -103,8 +137,8 @@ export function MistakeNotebookView({
   const summary = useMemo(() => summarizeMistakes(questions), [questions]);
 
   const filteredQuestions = useMemo(
-    () => filterMistakeNotebook(questions, filter),
-    [questions, filter],
+    () => filterMistakeNotebook(questions, filter, tagsMap, today),
+    [questions, filter, tagsMap, today],
   );
 
   const selectedQuestions = useMemo(
@@ -261,10 +295,25 @@ export function MistakeNotebookView({
       questionType: "all",
       status: "all",
       errorThreshold: "all",
+      tag: undefined,
       query: "",
       sortBy: "priority",
     });
     setSelectedIds(new Set());
+  };
+
+  const handleBatchTagApply = (tags: string[], mode: "add" | "remove") => {
+    if (selectedQuestions.length === 0 || tags.length === 0) return;
+    const qids = selectedQuestions.map((q) => q.id);
+    if (mode === "add") {
+      const updated = batchAddTagsToQuestions(qids, tags);
+      setTagsMap(updated);
+      setExportNotice(`已为 ${qids.length} 道错题成功添加标签`);
+    } else {
+      const updated = batchRemoveTagsFromQuestions(qids, tags);
+      setTagsMap(updated);
+      setExportNotice(`已从 ${qids.length} 道错题中成功移除标签`);
+    }
   };
 
   const handleSelectAll = () => {
@@ -500,6 +549,26 @@ export function MistakeNotebookView({
             <option value="gte3">顽固错题 (≥ 3次)</option>
           </select>
 
+          {/* 标签过滤 */}
+          <select
+            className="mistake-notebook-select"
+            value={filter.tag ?? "all"}
+            aria-label="筛选错题标签"
+            onChange={(e) =>
+              setFilter((prev) => ({
+                ...prev,
+                tag: e.target.value === "all" ? undefined : e.target.value,
+              }))
+            }
+          >
+            <option value="all">全部标签</option>
+            {allKnownTags.map((tag) => (
+              <option key={tag} value={tag}>
+                🏷️ {tag}
+              </option>
+            ))}
+          </select>
+
           {/* 排序方式 */}
           <select
             className="mistake-notebook-select"
@@ -513,6 +582,7 @@ export function MistakeNotebookView({
             }
           >
             <option value="priority">综合优先级排序</option>
+            <option value="forgetting_curve">🧠 遗忘曲线 (最急需复习)</option>
             <option value="frequency">错误频次最高</option>
             <option value="natural">原书题号顺序</option>
           </select>
@@ -644,6 +714,18 @@ export function MistakeNotebookView({
               </span>
               <span>导出选中（{selectedQuestions.length}）</span>
             </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={busy || batchMarking}
+              onClick={() => setBatchTagDialogOpen(true)}
+              title="批量为选中的错题添加或移除标签"
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">
+                label
+              </span>
+              <span>批量打标签</span>
+            </Button>
             {onSnapshotUpdated !== undefined ? (
               <>
                 <Button
@@ -707,6 +789,8 @@ export function MistakeNotebookView({
           {filteredQuestions.map((q, index) => {
             const isPending = isMistakePending(q);
             const isMastered = isMistakeMastered(q);
+            const qTags = tagsMap[q.id] ?? [];
+            const forgettingMeta = calculateForgettingMeta(q, today);
             const subjectName =
               subjectsById.get(q.subjectId) ??
               workbooksById.get(q.workbookId) ??
@@ -748,6 +832,9 @@ export function MistakeNotebookView({
                     </div>
                   </div>
                   <div className="mistake-card-badge">
+                    <Badge tone={forgettingMeta.tone}>
+                      {forgettingMeta.label}
+                    </Badge>
                     {isPending ? (
                       q.currentResult === "incorrect" ? (
                         <Badge tone="danger">做错</Badge>
@@ -766,6 +853,18 @@ export function MistakeNotebookView({
                   <h4 className="mistake-card-title">
                     第 {index + 1} 题 · {q.title}
                   </h4>
+                  {qTags.length > 0 ? (
+                    <div className="mistake-card-tags">
+                      {qTags.map((tag) => (
+                        <span
+                          key={tag}
+                          className={`mistake-tag-chip tone-${getMistakeTagTone(tag)}`}
+                        >
+                          🏷️ {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className="mistake-card-stats">
                     <span>
                       累计错误 <strong>{q.incorrectCount}</strong> 次
@@ -889,6 +988,8 @@ export function MistakeNotebookView({
                 const isActive = q.id === effectiveActiveSplitId;
                 const isPending = isMistakePending(q);
                 const isMastered = isMistakeMastered(q);
+                const qTags = tagsMap[q.id] ?? [];
+                const forgettingMeta = calculateForgettingMeta(q, today);
                 const subjectName =
                   subjectsById.get(q.subjectId) ??
                   workbooksById.get(q.workbookId) ??
@@ -931,6 +1032,9 @@ export function MistakeNotebookView({
                         <span className="mistake-meta-type">{typeLabel}</span>
                       </div>
                       <div className="mistake-compact-card-badge">
+                        <Badge tone={forgettingMeta.tone}>
+                          {forgettingMeta.label}
+                        </Badge>
                         {isPending ? (
                           q.currentResult === "incorrect" ? (
                             <Badge tone="danger">做错</Badge>
@@ -949,6 +1053,23 @@ export function MistakeNotebookView({
                       <h4 className="mistake-compact-card-title">
                         第 {index + 1} 题 · {q.title}
                       </h4>
+                      {qTags.length > 0 ? (
+                        <div className="mistake-compact-card-tags">
+                          {qTags.slice(0, 3).map((tag) => (
+                            <span
+                              key={tag}
+                              className={`mistake-tag-chip is-compact tone-${getMistakeTagTone(tag)}`}
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                          {qTags.length > 3 ? (
+                            <span className="mistake-tag-more">
+                              +{qTags.length - 3}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {q.chapter ? (
                         <div className="mistake-compact-card-chapter">
                           {q.chapter}
@@ -1202,6 +1323,16 @@ export function MistakeNotebookView({
                       )}
                     </span>
                     <span className="mistake-preview-stat-item">
+                      <strong>遗忘复习：</strong>
+                      {(() => {
+                        const meta = calculateForgettingMeta(
+                          activeSplitQuestion,
+                          today,
+                        );
+                        return <Badge tone={meta.tone}>{meta.label}</Badge>;
+                      })()}
+                    </span>
+                    <span className="mistake-preview-stat-item">
                       累计做过{" "}
                       <strong>{activeSplitQuestion.attemptCount}</strong> 次
                     </span>
@@ -1232,6 +1363,13 @@ export function MistakeNotebookView({
                     documentId={activeSplitQuestion.documentId}
                     regions={activeSplitQuestion.regions}
                     title={activeSplitQuestion.title}
+                  />
+
+                  <QuestionMistakeTagEditor
+                    key={`split-tags-${activeSplitQuestion.id}`}
+                    questionId={activeSplitQuestion.id}
+                    tags={tagsMap[activeSplitQuestion.id] ?? []}
+                    disabled={busy}
                   />
 
                   <QuestionAttemptTimeline
@@ -1428,6 +1566,16 @@ export function MistakeNotebookView({
                   )}
                 </span>
                 <span className="mistake-preview-stat-item">
+                  <strong>遗忘复习：</strong>
+                  {(() => {
+                    const meta = calculateForgettingMeta(
+                      previewQuestion,
+                      today,
+                    );
+                    return <Badge tone={meta.tone}>{meta.label}</Badge>;
+                  })()}
+                </span>
+                <span className="mistake-preview-stat-item">
                   累计做过 <strong>{previewQuestion.attemptCount}</strong> 次
                 </span>
                 <span className="mistake-preview-stat-item">
@@ -1455,6 +1603,12 @@ export function MistakeNotebookView({
                 regions={previewQuestion.regions}
                 title={previewQuestion.title}
               />
+              <QuestionMistakeTagEditor
+                key={`preview-tags-${previewQuestion.id}`}
+                questionId={previewQuestion.id}
+                tags={tagsMap[previewQuestion.id] ?? []}
+                disabled={busy}
+              />
               <QuestionAttemptTimeline
                 key={`preview-timeline-${previewQuestion.id}`}
                 questionId={previewQuestion.id}
@@ -1468,6 +1622,14 @@ export function MistakeNotebookView({
           </div>
         </EditorDialog>
       ) : null}
+
+      <BatchTagDialog
+        isOpen={batchTagDialogOpen}
+        selectedQuestionsCount={selectedQuestions.length}
+        allKnownTags={allKnownTags}
+        onClose={() => setBatchTagDialogOpen(false)}
+        onApply={handleBatchTagApply}
+      />
     </div>
   );
 }

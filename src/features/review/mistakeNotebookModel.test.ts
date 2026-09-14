@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { IndexedQuestion } from "../../shared/tauri/questionBankClient";
 import {
+  calculateForgettingMeta,
   createBatchAttempts,
+  diffCalendarDays,
   filterMistakeNotebook,
   isMistakeMastered,
   isMistakePending,
@@ -196,5 +198,190 @@ describe("mistakeNotebookModel", () => {
 
     const setAttempts = createBatchAttempts(new Set(["q4"]), "incorrect");
     expect(setAttempts).toEqual([{ questionId: "q4", result: "incorrect" }]);
+  });
+
+  it("calculates calendar days difference accurately", () => {
+    expect(diffCalendarDays("2026-09-14", "2026-09-14")).toBe(0);
+    expect(diffCalendarDays("2026-09-16", "2026-09-14")).toBe(2);
+    expect(diffCalendarDays("2026-09-10", "2026-09-14")).toBe(-4);
+  });
+
+  it("evaluates forgetting curve metadata correctly across states", () => {
+    const todayStr = "2026-09-14";
+    const nowMs = 1726315200000; // 2026-09-14 12:00:00
+
+    // 1. Pending mistake, overdue by 2 days
+    const qOverduePending = createMockQuestion({
+      id: "q-od-pen",
+      dueDate: "2026-09-12",
+      currentResult: "incorrect",
+      incorrectCount: 2,
+    });
+    const meta1 = calculateForgettingMeta(qOverduePending, todayStr, nowMs);
+    expect(meta1.status).toBe("overdue");
+    expect(meta1.label).toBe("已超期 2 天");
+    expect(meta1.tone).toBe("danger");
+    expect(meta1.urgencyScore).toBeGreaterThan(10000);
+
+    // 2. Mastered mistake, overdue by 3 days
+    const qOverdueMastered = createMockQuestion({
+      id: "q-od-mas",
+      dueDate: "2026-09-11",
+      currentResult: "correct",
+      incorrectCount: 1,
+    });
+    const meta2 = calculateForgettingMeta(qOverdueMastered, todayStr, nowMs);
+    expect(meta2.status).toBe("overdue");
+    expect(meta2.label).toBe("已超期 3 天");
+    expect(meta2.tone).toBe("danger");
+
+    // 3. Due today
+    const qDueToday = createMockQuestion({
+      id: "q-today",
+      dueDate: "2026-09-14",
+      currentResult: "incorrect",
+    });
+    const meta3 = calculateForgettingMeta(qDueToday, todayStr, nowMs);
+    expect(meta3.status).toBe("due_today");
+    expect(meta3.label).toBe("今日当复");
+    expect(meta3.tone).toBe("warning");
+
+    // 4. Pending without dueDate, last attempted 2 days ago (>24h)
+    const qNoDueUrgent = createMockQuestion({
+      id: "q-urgent",
+      dueDate: undefined,
+      currentResult: "incorrect",
+      lastAttemptAt: nowMs - 48 * 3600 * 1000,
+    });
+    const meta4 = calculateForgettingMeta(qNoDueUrgent, todayStr, nowMs);
+    expect(meta4.status).toBe("urgent_retry");
+    expect(meta4.label).toBe("亟待攻克");
+    expect(meta4.tone).toBe("danger");
+
+    // 5. Due in 1 day (tomorrow)
+    const qTomorrow = createMockQuestion({
+      id: "q-tomorrow",
+      dueDate: "2026-09-15",
+      currentResult: "correct",
+    });
+    const meta5 = calculateForgettingMeta(qTomorrow, todayStr, nowMs);
+    expect(meta5.status).toBe("expiring");
+    expect(meta5.label).toBe("明日当复");
+    expect(meta5.tone).toBe("info");
+
+    // 6. Stable (due in 5 days)
+    const qStable = createMockQuestion({
+      id: "q-stable",
+      dueDate: "2026-09-19",
+      currentResult: "correct",
+    });
+    const meta6 = calculateForgettingMeta(qStable, todayStr, nowMs);
+    expect(meta6.status).toBe("stable");
+    expect(meta6.label).toBe("5 天后复习");
+    expect(meta6.tone).toBe("success");
+  });
+
+  it("sorts by forgetting curve prioritizing urgency", () => {
+    const todayStr = "2026-09-14";
+    const nowMs = 1726315200000;
+
+    const qOverdue = createMockQuestion({
+      id: "q-overdue",
+      dueDate: "2026-09-11", // overdue by 3 days
+      currentResult: "incorrect",
+      incorrectCount: 3,
+    });
+    const qToday = createMockQuestion({
+      id: "q-today",
+      dueDate: "2026-09-14", // due today
+      currentResult: "incorrect",
+      incorrectCount: 2,
+    });
+    const qUrgent = createMockQuestion({
+      id: "q-urgent",
+      dueDate: undefined,
+      currentResult: "incorrect",
+      lastAttemptAt: nowMs - 36 * 3600 * 1000, // > 24h
+      incorrectCount: 1,
+    });
+    const qStable = createMockQuestion({
+      id: "q-stable",
+      dueDate: "2026-09-20", // due in 6 days
+      currentResult: "correct",
+      incorrectCount: 1,
+    });
+
+    const sorted = filterMistakeNotebook(
+      [qStable, qToday, qUrgent, qOverdue],
+      {
+        status: "all",
+        query: "",
+        sortBy: "forgetting_curve",
+      },
+      undefined,
+      todayStr,
+      nowMs,
+    );
+
+    // Expected order: qOverdue -> qToday -> qUrgent -> qStable
+    expect(sorted.map((q) => q.id)).toEqual([
+      "q-overdue",
+      "q-today",
+      "q-urgent",
+      "q-stable",
+    ]);
+  });
+
+  it("filters questions by custom and preset tags", () => {
+    const questions = [q1, q2, q3, q4];
+    const tagsMap: Record<string, string[]> = {
+      q1: ["计算失误", "典型好题"],
+      q2: ["概念模糊"],
+      q3: ["典型好题", "反常积分"],
+    };
+
+    const calcMistakes = filterMistakeNotebook(
+      questions,
+      {
+        status: "all",
+        query: "",
+        tag: "计算失误",
+      },
+      tagsMap,
+    );
+    expect(calcMistakes.map((q) => q.id)).toEqual(["q1"]);
+
+    const classicMistakes = filterMistakeNotebook(
+      questions,
+      {
+        status: "all",
+        query: "",
+        tag: "典型好题",
+      },
+      tagsMap,
+    );
+    expect(classicMistakes.map((q) => q.id)).toEqual(["q1", "q3"]);
+
+    const customTagMistakes = filterMistakeNotebook(
+      questions,
+      {
+        status: "all",
+        query: "",
+        tag: "反常积分",
+      },
+      tagsMap,
+    );
+    expect(customTagMistakes.map((q) => q.id)).toEqual(["q3"]);
+
+    const nonExistentTag = filterMistakeNotebook(
+      questions,
+      {
+        status: "all",
+        query: "",
+        tag: "未打标标签",
+      },
+      tagsMap,
+    );
+    expect(nonExistentTag).toHaveLength(0);
   });
 });

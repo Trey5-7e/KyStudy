@@ -6,10 +6,13 @@ import type {
   AttemptResult,
   QuestionType,
 } from "../../shared/tauri/questionClient";
+import type { BadgeTone } from "../../shared/ui/Badge";
 import { isMistakeQuestion } from "./instantMistakeModel";
+import { loadAllQuestionTags } from "./mistakeTagModel";
 
 export type MistakeStatusFilter = "all" | "pending" | "mastered";
-export type MistakeSortOption = "priority" | "frequency" | "natural";
+export type MistakeSortOption =
+  "priority" | "frequency" | "natural" | "forgetting_curve";
 export type MistakeFrequencyFilter = "all" | "gte2" | "gte3";
 
 export interface MistakeNotebookFilter {
@@ -18,6 +21,7 @@ export interface MistakeNotebookFilter {
   questionType?: QuestionType | "all";
   status: MistakeStatusFilter;
   errorThreshold?: MistakeFrequencyFilter;
+  tag?: string;
   query: string;
   sortBy?: MistakeSortOption;
 }
@@ -74,12 +78,187 @@ export function summarizeMistakes(
   };
 }
 
+export type ForgettingStatus =
+  | "overdue"
+  | "due_today"
+  | "urgent_retry"
+  | "expiring"
+  | "stable"
+  | "unreviewed";
+
+export interface ForgettingMeta {
+  status: ForgettingStatus;
+  urgencyScore: number;
+  label: string;
+  tone: BadgeTone;
+  daysDiff?: number;
+}
+
+export function getLocalDateString(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * 计算两个 YYYY-MM-DD 日期的日历天数差 (dateA - dateB)
+ */
+export function diffCalendarDays(dateA: string, dateB: string): number {
+  const partsA = dateA.split("-");
+  const partsB = dateB.split("-");
+  if (partsA.length !== 3 || partsB.length !== 3) {
+    return 0;
+  }
+  const yA = Number(partsA[0]);
+  const mA = Number(partsA[1]);
+  const dA = Number(partsA[2]);
+  const yB = Number(partsB[0]);
+  const mB = Number(partsB[1]);
+  const dB = Number(partsB[2]);
+  if (
+    !Number.isFinite(yA) ||
+    !Number.isFinite(mA) ||
+    !Number.isFinite(dA) ||
+    !Number.isFinite(yB) ||
+    !Number.isFinite(mB) ||
+    !Number.isFinite(dB)
+  ) {
+    return 0;
+  }
+  const msA = Date.UTC(yA, mA - 1, dA);
+  const msB = Date.UTC(yB, mB - 1, dB);
+  return Math.round((msA - msB) / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * 基于艾宾浩斯遗忘模型计算题目当前的复习紧迫度与记忆状态
+ */
+export function calculateForgettingMeta(
+  q: IndexedQuestion,
+  todayStr: string = getLocalDateString(),
+  nowMs: number = Date.now(),
+): ForgettingMeta {
+  const isPending = isMistakePending(q);
+  const incorrectCount = q.incorrectCount ?? 0;
+  const partialCount = q.partialCount ?? 0;
+  const totalMistakes = incorrectCount + partialCount;
+
+  // 1. 如果有排期复习日 dueDate
+  if (q.dueDate) {
+    const daysUntilDue = diffCalendarDays(q.dueDate, todayStr);
+
+    if (daysUntilDue < 0) {
+      // 超期 (dueDate < today)
+      const overdueDays = Math.abs(daysUntilDue);
+      const urgencyScore =
+        (isPending ? 10000 : 7000) + overdueDays * 100 + totalMistakes * 10;
+
+      return {
+        status: "overdue",
+        urgencyScore,
+        label: `已超期 ${overdueDays} 天`,
+        tone: "danger",
+        daysDiff: daysUntilDue,
+      };
+    }
+
+    if (daysUntilDue === 0) {
+      // 今日当复 (dueDate === today)
+      const urgencyScore = (isPending ? 8500 : 6000) + totalMistakes * 10;
+      return {
+        status: "due_today",
+        urgencyScore,
+        label: "今日当复",
+        tone: "warning",
+        daysDiff: 0,
+      };
+    }
+
+    // daysUntilDue > 0: 未来待复习
+    if (isPending) {
+      const urgencyScore = Math.max(
+        5000 - daysUntilDue * 50 + totalMistakes * 10,
+        1000,
+      );
+      return {
+        status: "expiring",
+        urgencyScore,
+        label: daysUntilDue === 1 ? "明日重练" : `${daysUntilDue} 天后重练`,
+        tone: daysUntilDue === 1 ? "warning" : "info",
+        daysDiff: daysUntilDue,
+      };
+    }
+
+    // 已攻克，排在未来
+    if (daysUntilDue <= 2) {
+      const urgencyScore = 4000 - daysUntilDue * 500 + totalMistakes * 5;
+      return {
+        status: "expiring",
+        urgencyScore,
+        label: daysUntilDue === 1 ? "明日当复" : `${daysUntilDue} 天后复习`,
+        tone: "info",
+        daysDiff: daysUntilDue,
+      };
+    }
+
+    // daysUntilDue > 2: 稳固记忆
+    const urgencyScore = Math.max(2000 - daysUntilDue * 20, 100);
+    return {
+      status: "stable",
+      urgencyScore,
+      label: `${daysUntilDue} 天后复习`,
+      tone: "success",
+      daysDiff: daysUntilDue,
+    };
+  }
+
+  // 2. 没有 dueDate (尚未排入间隔复习计划)
+  if (isPending) {
+    let elapsedHours = 0;
+    if (q.lastAttemptAt) {
+      elapsedHours = Math.max(0, (nowMs - q.lastAttemptAt) / (1000 * 60 * 60));
+    }
+    const elapsedDays = Math.floor(elapsedHours / 24);
+
+    if (elapsedDays >= 1) {
+      const urgencyScore =
+        8000 + Math.min(elapsedDays, 30) * 50 + totalMistakes * 10;
+      return {
+        status: "urgent_retry",
+        urgencyScore,
+        label: "亟待攻克",
+        tone: "danger",
+      };
+    }
+
+    const urgencyScore = 7500 + totalMistakes * 10;
+    return {
+      status: "urgent_retry",
+      urgencyScore,
+      label: "待攻克",
+      tone: "warning",
+    };
+  }
+
+  // 已攻克但无 dueDate
+  return {
+    status: "stable",
+    urgencyScore: 500 + totalMistakes * 5,
+    label: "已掌握",
+    tone: "neutral",
+  };
+}
+
 /**
  * 多维筛选与搜索错题本清单
  */
 export function filterMistakeNotebook(
   questions: readonly IndexedQuestion[],
   filter: MistakeNotebookFilter,
+  tagsMap?: Record<string, string[]>,
+  todayStr?: string,
+  nowMs?: number,
 ): IndexedQuestion[] {
   const normalizedQuery = filter.query.trim().toLowerCase();
 
@@ -121,6 +300,18 @@ export function filterMistakeNotebook(
       if (q.incorrectCount + q.partialCount < 3) return false;
     }
 
+    // 标签过滤
+    if (filter.tag && filter.tag !== "all") {
+      const qTags =
+        tagsMap?.[q.id] ??
+        (typeof window !== "undefined"
+          ? (loadAllQuestionTags()[q.id] ?? [])
+          : []);
+      if (!qTags.includes(filter.tag)) {
+        return false;
+      }
+    }
+
     // 关键词搜索（题目标题、题号、章节、习题册名）
     if (normalizedQuery.length > 0) {
       const matchTitle = q.title.toLowerCase().includes(normalizedQuery);
@@ -137,8 +328,27 @@ export function filterMistakeNotebook(
   });
 
   const sortBy = filter.sortBy ?? "priority";
+  const effectiveToday = todayStr ?? getLocalDateString();
+  const effectiveNow = nowMs ?? Date.now();
 
   return filtered.sort((a, b) => {
+    if (sortBy === "forgetting_curve") {
+      const metaA = calculateForgettingMeta(a, effectiveToday, effectiveNow);
+      const metaB = calculateForgettingMeta(b, effectiveToday, effectiveNow);
+      if (metaA.urgencyScore !== metaB.urgencyScore) {
+        return metaB.urgencyScore - metaA.urgencyScore;
+      }
+      if (a.incorrectCount !== b.incorrectCount) {
+        return b.incorrectCount - a.incorrectCount;
+      }
+      return (
+        a.sortOrder - b.sortOrder ||
+        a.questionNumber.localeCompare(b.questionNumber, undefined, {
+          numeric: true,
+        })
+      );
+    }
+
     if (sortBy === "natural") {
       return (
         a.sortOrder - b.sortOrder ||

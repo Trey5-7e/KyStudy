@@ -985,7 +985,11 @@ impl QuestionBankRepository for SqliteQuestionBankRepository {
                     "UPDATE question_index_metadata
                      SET sort_order = ?2, updated_at = ?3
                      WHERE question_id = ?1",
-                    params![question_id, index as i64, restored_at],
+                    params![
+                        question_id,
+                        i64::try_from(index).unwrap_or(i64::MAX),
+                        restored_at
+                    ],
                 )
                 .map_err(database_error)?;
         }
@@ -2177,7 +2181,10 @@ fn load_questions(connection: &Connection) -> Result<Vec<IndexedQuestion>, Quest
                     (SELECT COUNT(*) FROM question_attempt a
                      WHERE a.question_id = q.id AND a.result = 'incorrect'),
                     (SELECT COUNT(*) FROM question_attempt a
-                     WHERE a.question_id = q.id AND a.result = 'uncertain')
+                     WHERE a.question_id = q.id AND a.result = 'uncertain'),
+                    (SELECT a.attempted_at FROM question_attempt a
+                     WHERE a.question_id = q.id ORDER BY a.attempted_at DESC, a.id DESC LIMIT 1),
+                    (SELECT rs.due_date FROM review_state rs WHERE rs.question_id = q.id)
              FROM question_index_metadata m
              JOIN question q ON q.id = m.question_id
              JOIN resource_document d ON d.id = q.document_id
@@ -2195,6 +2202,8 @@ fn load_questions(connection: &Connection) -> Result<Vec<IndexedQuestion>, Quest
         .query_map([], |row| {
             let question_type: Option<String> = row.get(11)?;
             let current_result: Option<String> = row.get(16)?;
+            let last_attempt_at: Option<i64> = row.get(20)?;
+            let due_date: Option<String> = row.get(21)?;
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
@@ -2216,6 +2225,8 @@ fn load_questions(connection: &Connection) -> Result<Vec<IndexedQuestion>, Quest
                 row.get::<_, u32>(17)?,
                 row.get::<_, u32>(18)?,
                 row.get::<_, u32>(19)?,
+                last_attempt_at,
+                due_date,
             ))
         })
         .map_err(database_error)?
@@ -2251,6 +2262,8 @@ fn load_questions(connection: &Connection) -> Result<Vec<IndexedQuestion>, Quest
                 attempt_count: row.17,
                 incorrect_count: row.18,
                 partial_count: row.19,
+                last_attempt_at: row.20,
+                due_date: row.21,
                 regions: load_regions(connection, &row.0)?,
             })
         })

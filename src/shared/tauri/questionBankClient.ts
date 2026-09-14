@@ -68,6 +68,8 @@ export interface IndexedQuestion {
   attemptCount: number;
   incorrectCount: number;
   partialCount: number;
+  lastAttemptAt?: number;
+  dueDate?: string;
   regions: QuestionRegion[];
 }
 
@@ -554,6 +556,8 @@ function parseIndexedQuestion(value: unknown): IndexedQuestion {
     !isNonNegativeInteger(value.attemptCount) ||
     !isNonNegativeInteger(value.incorrectCount) ||
     !isNonNegativeInteger(value.partialCount) ||
+    !isOptionalNonNegativeInteger(value.lastAttemptAt) ||
+    !isOptionalString(value.dueDate) ||
     !Array.isArray(value.regions)
   ) {
     throw new Error("INDEXED_QUESTION_INVALID");
@@ -564,6 +568,9 @@ function parseIndexedQuestion(value: unknown): IndexedQuestion {
       typeof value.currentResult === "string"
         ? (value.currentResult as AttemptResult)
         : undefined,
+    lastAttemptAt:
+      typeof value.lastAttemptAt === "number" ? value.lastAttemptAt : undefined,
+    dueDate: typeof value.dueDate === "string" ? value.dueDate : undefined,
     regions: value.regions.map(parseQuestionRegion),
   };
 }
@@ -596,6 +603,14 @@ function isOptionalAttemptResult(value: unknown): boolean {
     value === null ||
     ATTEMPT_RESULTS.has(value as AttemptResult)
   );
+}
+
+function isOptionalNonNegativeInteger(value: unknown): boolean {
+  return value === undefined || value === null || isNonNegativeInteger(value);
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || value === null || typeof value === "string";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

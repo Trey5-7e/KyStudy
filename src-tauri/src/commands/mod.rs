@@ -3098,6 +3098,8 @@ pub(crate) struct IndexedQuestionDto {
     attempt_count: u32,
     incorrect_count: u32,
     partial_count: u32,
+    last_attempt_at: Option<i64>,
+    due_date: Option<String>,
     regions: Vec<QuestionRegionDto>,
 }
 
@@ -3125,6 +3127,8 @@ impl From<IndexedQuestion> for IndexedQuestionDto {
             attempt_count: value.attempt_count,
             incorrect_count: value.incorrect_count,
             partial_count: value.partial_count,
+            last_attempt_at: value.last_attempt_at,
+            due_date: value.due_date,
             regions: value.regions.into_iter().map(Into::into).collect(),
         }
     }
