@@ -72,6 +72,8 @@ pub(crate) struct IndexedQuestion {
     pub(crate) attempt_count: u32,
     pub(crate) incorrect_count: u32,
     pub(crate) partial_count: u32,
+    pub(crate) last_attempt_at: Option<i64>,
+    pub(crate) due_date: Option<String>,
     pub(crate) regions: Vec<QuestionRegion>,
 }
 

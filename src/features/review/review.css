@@ -2178,3 +2178,374 @@
   white-space: pre-wrap;
   color: var(--color-text);
 }
+
+/* ==========================================================================
+   错题标签系统与遗忘曲线视觉呈现 (Mistake Tags & Forgetting Curve)
+   ========================================================================== */
+
+/* 基础错题标签芯片 */
+.mistake-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.2;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--color-border-subtle, #e2e8f0);
+  background: var(--color-bg-subtle, #f8fafc);
+  color: var(--color-text-secondary, #475569);
+  white-space: nowrap;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.mistake-tag-chip .tag-chip-icon {
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.mistake-tag-chip.is-compact {
+  padding: 1px 5px;
+  font-size: 0.68rem;
+}
+
+.mistake-tag-chip.tone-danger {
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+}
+
+.mistake-tag-chip.tone-warning {
+  border-color: rgba(245, 158, 11, 0.25);
+  background: rgba(245, 158, 11, 0.08);
+  color: #d97706;
+}
+
+.mistake-tag-chip.tone-info {
+  border-color: rgba(59, 130, 246, 0.25);
+  background: rgba(59, 130, 246, 0.08);
+  color: #2563eb;
+}
+
+.mistake-tag-chip.tone-success {
+  border-color: rgba(16, 185, 129, 0.25);
+  background: rgba(16, 185, 129, 0.08);
+  color: #059669;
+}
+
+.mistake-tag-chip.tone-neutral {
+  border-color: var(--color-border-subtle, #e2e8f0);
+  background: var(--color-bg-subtle, #f1f5f9);
+  color: var(--color-text-secondary, #475569);
+}
+
+.mistake-tag-chip .tag-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin-left: 2px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: opacity 0.15s ease;
+}
+
+.mistake-tag-chip .tag-remove-btn:hover {
+  opacity: 1;
+}
+
+.mistake-tag-chip .tag-remove-btn .material-symbols-rounded {
+  font-size: 0.8rem;
+}
+
+/* 卡片内标签容器 */
+.mistake-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.mistake-compact-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.mistake-tag-more {
+  font-size: 0.68rem;
+  color: var(--color-text-muted, #94a3b8);
+  font-weight: 600;
+  padding: 0 2px;
+}
+
+/* 交互式点击标签胶囊 (Toggle Chip) */
+.mistake-tag-toggle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border-radius: var(--radius-full, 9999px);
+  border: 1px dashed var(--color-border-default, #cbd5e1);
+  background: var(--color-bg-surface, #ffffff);
+  color: var(--color-text-secondary, #475569);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.mistake-tag-toggle-chip .tag-chip-icon {
+  font-size: 0.95rem;
+}
+
+.mistake-tag-toggle-chip:hover:not(:disabled) {
+  border-color: var(--color-primary-500, #3b82f6);
+  color: var(--color-primary-600, #2563eb);
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.mistake-tag-toggle-chip.is-selected {
+  border-style: solid;
+  font-weight: 600;
+}
+
+.mistake-tag-toggle-chip.is-selected.tone-danger {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+}
+
+.mistake-tag-toggle-chip.is-selected.tone-warning {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+}
+
+.mistake-tag-toggle-chip.is-selected.tone-info {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+}
+
+.mistake-tag-toggle-chip.is-selected.tone-success {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+}
+
+.mistake-tag-toggle-chip.is-selected.tone-neutral {
+  border-color: var(--color-border-default, #94a3b8);
+  background: var(--color-bg-subtle, #f1f5f9);
+  color: var(--color-text, #1e293b);
+}
+
+/* 错题归因标签编辑器展区 (QuestionMistakeTagEditor) */
+.mistake-tag-editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--color-border-subtle, #e2e8f0);
+  background: var(--color-bg-subtle, #f8fafc);
+  margin-top: 8px;
+}
+
+.mistake-tag-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mistake-tag-editor-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--color-text, #1e293b);
+}
+
+.mistake-tag-editor-title .material-symbols-rounded {
+  font-size: 1.05rem;
+  color: var(--color-primary-500, #3b82f6);
+}
+
+.mistake-tag-editor-hint {
+  font-size: 0.74rem;
+  color: var(--color-text-muted, #94a3b8);
+  margin-left: 4px;
+}
+
+.mistake-preset-tags-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mistake-custom-tags-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mistake-custom-tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mistake-custom-tag-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mistake-custom-tag-input {
+  flex: 1;
+  max-width: 320px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--color-border-default, #cbd5e1);
+  background: var(--color-bg-surface, #ffffff);
+  color: var(--color-text, #1e293b);
+}
+
+.mistake-custom-tag-input:focus {
+  outline: none;
+  border-color: var(--color-primary-500, #3b82f6);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.mistake-custom-tag-submit {
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--color-border-default, #cbd5e1);
+  background: var(--color-bg-surface, #ffffff);
+  color: var(--color-text, #1e293b);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mistake-custom-tag-submit:hover:not(:disabled) {
+  border-color: var(--color-primary-500, #3b82f6);
+  color: var(--color-primary-600, #2563eb);
+}
+
+/* 批量打标签弹窗 (BatchTagDialog) */
+.batch-tag-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 0;
+}
+
+.batch-tag-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 3px;
+  background: var(--color-bg-subtle, #f1f5f9);
+  border-radius: var(--radius-md, 8px);
+}
+
+.batch-tag-mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm, 6px);
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary, #475569);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.batch-tag-mode-btn.is-active {
+  background: var(--color-bg-surface, #ffffff);
+  color: var(--color-primary-600, #2563eb);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.batch-tag-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.batch-tag-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text, #1e293b);
+}
+
+.batch-tag-section-hint {
+  font-size: 0.72rem;
+  color: var(--color-text-muted, #94a3b8);
+  font-weight: 400;
+}
+
+.batch-tag-chips-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.batch-tag-input-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.batch-tag-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--color-bg-subtle, #f8fafc);
+  border: 1px solid var(--color-border-subtle, #e2e8f0);
+  border-radius: var(--radius-md, 6px);
+  font-size: 0.78rem;
+  color: var(--color-text-secondary, #475569);
+}
+
+.batch-tag-summary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.batch-tag-summary-empty {
+  color: var(--color-text-muted, #94a3b8);
+  font-style: italic;
+}
+
+.batch-tag-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border-subtle, #e2e8f0);
+}
