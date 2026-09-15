@@ -1747,6 +1747,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn non_workbook_role_document_questions_generate_scheme_queue() {
         let directory = tempdir().expect("temporary directory should exist");
         SqliteWorkspaceRepository::new(directory.path())

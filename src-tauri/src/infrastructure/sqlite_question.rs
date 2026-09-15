@@ -1003,6 +1003,7 @@ fn load_knowledge_links(
         .collect()
 }
 
+#[allow(clippy::too_many_lines)]
 fn load_question_history(
     connection: &Connection,
     question_id: &str,
@@ -1063,9 +1064,8 @@ fn load_question_history(
             let mistake_count = u32::try_from(mistake_count.max(0)).unwrap_or(0);
             let consecutive_failure_count =
                 u32::try_from(consecutive_failure_count.max(0)).unwrap_or(0);
-            let successful_streak = successful_streak
-                .map(|v| u32::try_from(v.max(0)).unwrap_or(0))
-                .unwrap_or(0);
+            let successful_streak =
+                successful_streak.map_or(0, |v| u32::try_from(v.max(0)).unwrap_or(0));
             (
                 first_mistake_at,
                 last_mistake_at,
@@ -1333,6 +1333,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn question_history_retrieves_attempts_and_review_events() {
         let directory = tempdir().expect("temporary directory should exist");
         let workspace = SqliteWorkspaceRepository::new(directory.path());
