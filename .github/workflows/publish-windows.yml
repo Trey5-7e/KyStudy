@@ -70,28 +70,28 @@ jobs:
           tagName: ${{ env.RELEASE_TAG }}
           releaseName: KyStudy ${{ env.RELEASE_TAG }}
           releaseBody: |
-            ## KyStudy v0.1.4 更新内容
+            ## KyStudy v0.1.5 更新内容
 
-            **AI 学习助手**
-            - 主导航新增独立 AI 工作区：历史会话、模型切换、Markdown/LaTeX 渲染、失败重试与协作式取消
-            - 原生 SSE 流式输出与思考链（CoT）隔离，移除人为 Token 截断
-            - 剪贴板粘贴 / 拖拽图片的多模态发送；本地 PDF（含扫描件）解析后参与问答
+            **错题本与复习**
+            - 新增独立错题本工作台、筛选、分栏浏览、题目预览和批量管理
+            - 支持错题标签、遗忘曲线排序、作答轨迹、单题特训和 PDF 错题卷导出
+            - 连续复习新增完成总结、错题重试，并修复今日错题任务异常归零
 
-            **模型与 API 管理中心**
-            - Provider 卡片、连接测试、多模型与默认模型管理，主流供应商预设
-            - API Key 由 Rust 凭据层隔离保存，不进入前端与日志
-            - 资料能力校准（图片/文件/PDF），不支持原生传输时自动降级为本地文本索引
+            **做题本与组卷**
+            - 快速记录支持保存后继续、直接入口和已有作答状态颜色
+            - 组卷新增完成总结、错题重做和不重复的下一批练习
+            - 修复手动索引覆盖分段题目，补充题目恢复与连续提取体验
 
-            **做题本 PDF 适配**
-            - 内置六册 Profile：李永乐 660 高数/线概、李艳芳 900 高数/线代概率、张宇 1000 题高数/线概
-            - 无标点题号、子章节、测试卷与跨页题目识别；稀疏页按需本地 OCR
-            - 导入诊断卡片与 JSON 基线导出；分段回收站支持“彻底删除”与“一键清空”
+            **界面与操作效率**
+            - 更新侧边导航、移动端底部导航和主要页面响应式布局
+            - 新增 `Ctrl+K` 全局命令面板和显示密度设置
+            - 统一按钮、对话框、卡片、工具栏和图标样式
 
-            **其他**
-            - 低干扰 Token 预算（默认仅警告）与临时附件生命周期管理
-            - 安装版数据目录迁移至安装目录内（旧数据自动迁移）
+            **AI 对话**
+            - 题目图片和已有辅助解析可以进入普通 AI 对话继续讨论
+            - 本版本不包含仍在开发中的 Agent Harness 或资料研读功能
 
-            OCR 组件独立下载，见 [ocr-v0.1.4 Release](https://github.com/Trey5-7e/KyStudy/releases/tag/ocr-v0.1.4)；完整发布说明见仓库 `docs/V0_1_4_RELEASE_NOTES.md`。
+            OCR 组件独立下载，见 [ocr-v0.1.4 Release](https://github.com/Trey5-7e/KyStudy/releases/tag/ocr-v0.1.4)；完整发布说明见仓库 `docs/V0_1_5_RELEASE_NOTES.md`。
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true

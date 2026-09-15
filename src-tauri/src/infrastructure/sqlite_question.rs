@@ -1063,8 +1063,9 @@ fn load_question_history(
             let mistake_count = u32::try_from(mistake_count.max(0)).unwrap_or(0);
             let consecutive_failure_count =
                 u32::try_from(consecutive_failure_count.max(0)).unwrap_or(0);
-            let successful_streak =
-                successful_streak.map(|v| u32::try_from(v.max(0)).unwrap_or(0)).unwrap_or(0);
+            let successful_streak = successful_streak
+                .map(|v| u32::try_from(v.max(0)).unwrap_or(0))
+                .unwrap_or(0);
             (
                 first_mistake_at,
                 last_mistake_at,
@@ -1405,7 +1406,10 @@ mod tests {
         assert_eq!(history_after_first.attempts.len(), 1);
         assert_eq!(history_after_first.mistake_count, 1);
         assert!(history_after_first.first_mistake_at.is_some());
-        assert_eq!(history_after_first.attempts[0].result, AttemptResult::Incorrect);
+        assert_eq!(
+            history_after_first.attempts[0].result,
+            AttemptResult::Incorrect
+        );
         assert_eq!(history_after_first.attempts[0].duration_seconds, Some(300));
         assert!(history_after_first.attempts[0].review_rating.is_none());
 
@@ -1482,7 +1486,13 @@ mod tests {
             .get_question_history(&created.question.id)
             .expect("history should load even when document role is reference");
         assert_eq!(history_after_role_change.attempts.len(), 3);
-        assert_eq!(history_after_role_change.attempts[0].result, AttemptResult::Uncertain);
-        assert_eq!(history_after_role_change.attempts[0].duration_seconds, Some(45));
+        assert_eq!(
+            history_after_role_change.attempts[0].result,
+            AttemptResult::Uncertain
+        );
+        assert_eq!(
+            history_after_role_change.attempts[0].duration_seconds,
+            Some(45)
+        );
     }
 }

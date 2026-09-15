@@ -606,7 +606,9 @@ impl QuestionBankRepository for SqliteQuestionBankRepository {
             active_source_keys.insert(question.source_key.as_str());
         }
 
-        let is_manual_import = questions.iter().all(|q| q.source_key.starts_with("manual|"));
+        let is_manual_import = questions
+            .iter()
+            .all(|q| q.source_key.starts_with("manual|"));
         if !is_manual_import {
             let mut statement = transaction
                 .prepare(
@@ -2473,8 +2475,7 @@ mod tests {
         CreateWorkbookCategoryInput, DeleteTrashedWorkbookSegmentInput, ImportQuestionIndexInput,
         ImportRequest, IndexedQuestionDraftInput, IndexedQuestionRegionUpdateInput,
         InsertIndexedQuestionInput, QuestionBankUseCases, QuestionRegionInput,
-        ReassignWorkbookSegmentInput,
-        RecordBulkQuestionAttemptsInput, RenameWorkbookCategoryInput,
+        ReassignWorkbookSegmentInput, RecordBulkQuestionAttemptsInput, RenameWorkbookCategoryInput,
         ReplaceIndexedQuestionRegionsInput, ResourceRepository, RestoreWorkbookSegmentInput,
         ScheduleUseCases, SetQuestionGapAcknowledgementInput, TrashWorkbookSegmentInput,
         UpdateIndexedQuestionInput, WorkbookSegmentAssignmentInput, WorkspaceRepository,

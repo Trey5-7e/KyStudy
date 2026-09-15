@@ -355,7 +355,7 @@ fn download_archive(
         return Err(OcrError::ComponentDownloadUnavailable);
     }
     let client = reqwest::blocking::Client::builder()
-        .user_agent("KyStudy-Desktop/0.1.4")
+        .user_agent(concat!("KyStudy-Desktop/", env!("CARGO_PKG_VERSION")))
         .https_only(true)
         .connect_timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::limited(5))

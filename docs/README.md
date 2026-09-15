@@ -13,6 +13,7 @@
 - [README 截图演示工作区](DEMO_SCREENSHOT_WORKSPACE.md)
 - [v0.1.4 开发方案](V0_1_4_DEVELOPMENT_PLAN.md)
 - [v0.1.4 发布说明](V0_1_4_RELEASE_NOTES.md)
+- [v0.1.5 发布说明](V0_1_5_RELEASE_NOTES.md)
 - [v0.1.4 做题本 PDF 适配基线](V0_1_4_WORKBOOK_PDF_BASELINES.md)
 - [v0.1.4 供应商预设目录](V0_1_4_PROVIDER_CATALOGUE.md)
 - [v0.1.4 UI 参考与闭环记录](V0_1_4_UI_REFERENCE_MAP.md)

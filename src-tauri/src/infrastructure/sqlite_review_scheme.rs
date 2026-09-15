@@ -1826,7 +1826,8 @@ mod tests {
             .update_role(&document.id, "reference")
             .expect("document role should update to reference");
 
-        let schemes = ReviewSchemeUseCases::new(SqliteReviewSchemeRepository::new(directory.path()));
+        let schemes =
+            ReviewSchemeUseCases::new(SqliteReviewSchemeRepository::new(directory.path()));
         let dashboard = schemes
             .save_scheme(SaveReviewSchemeInput {
                 scheme_id: None,
@@ -1862,7 +1863,10 @@ mod tests {
             .as_ref()
             .expect("today queue must exist and not be empty");
         assert_eq!(queue.items.len(), 1);
-        assert_eq!(queue.items[0].question.question.id, question_one.question.id);
+        assert_eq!(
+            queue.items[0].question.question.id,
+            question_one.question.id
+        );
         assert_eq!(generated.schemes[0].due_count, 0); // Assigned today
     }
 

@@ -709,7 +709,7 @@ fn provider_client() -> Result<Client, AiError> {
     Client::builder()
         .timeout(PROVIDER_TIMEOUT)
         .redirect(reqwest::redirect::Policy::none())
-        .user_agent("KyStudy/0.1.4")
+        .user_agent(concat!("KyStudy/", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|_| AiError::ProviderUnavailable)
 }
