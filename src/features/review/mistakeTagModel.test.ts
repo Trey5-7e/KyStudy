@@ -4,6 +4,7 @@ import {
   batchAddTagsToQuestions,
   batchRemoveTagsFromQuestions,
   getAllAvailableTags,
+  getConflictingPriorityTag,
   getMistakeTagTone,
   getQuestionTags,
   loadAllQuestionTags,
@@ -11,6 +12,7 @@ import {
   MISTAKE_TAGS_STORAGE_KEY,
   PRESET_MISTAKE_TAGS,
   removeTagFromQuestion,
+  sanitizeQuestionTags,
   saveAllQuestionTags,
   saveCustomTags,
 } from "./mistakeTagModel";
@@ -140,6 +142,70 @@ describe("mistakeTagModel", () => {
       expect(all).toContain("计算失误");
       expect(all).toContain("定积分定义");
       expect(all.length).toBe(PRESET_MISTAKE_TAGS.length + 1);
+    });
+  });
+
+  describe("priority tags mutual exclusivity & sanitization", () => {
+    it("identifies conflicting priority tags correctly", () => {
+      expect(getConflictingPriorityTag("必做")).toBe("选做");
+      expect(getConflictingPriorityTag("选做")).toBe("必做");
+      expect(getConflictingPriorityTag("计算失误")).toBeUndefined();
+    });
+
+    it("sanitizes conflicting tags and preserves the later one when no preferred tag is specified", () => {
+      expect(sanitizeQuestionTags(["选做", "必做"])).toEqual(["必做"]);
+      expect(sanitizeQuestionTags(["必做", "选做"])).toEqual(["选做"]);
+      expect(sanitizeQuestionTags(["选做", "计算失误", "必做"])).toEqual([
+        "计算失误",
+        "必做",
+      ]);
+    });
+
+    it("sanitizes conflicting tags respecting preferredTag override", () => {
+      expect(sanitizeQuestionTags(["必做", "选做"], "必做")).toEqual(["必做"]);
+      expect(sanitizeQuestionTags(["必做", "选做"], "选做")).toEqual(["选做"]);
+    });
+
+    it("loadAllQuestionTags self-heals corrupted storage containing both 必做 and 选做", () => {
+      mockStorage[MISTAKE_TAGS_STORAGE_KEY] = JSON.stringify({
+        q1: ["选做", "必做"],
+        q2: ["计算失误", "必做", "选做"],
+        q3: ["典型好题"],
+      });
+      const result = loadAllQuestionTags();
+      expect(result.q1).toEqual(["必做"]);
+      expect(result.q2).toEqual(["计算失误", "选做"]);
+      expect(result.q3).toEqual(["典型好题"]);
+
+      // Verify that cleaned data was written back to localStorage
+      const savedInStorage = JSON.parse(mockStorage[MISTAKE_TAGS_STORAGE_KEY]!);
+      expect(savedInStorage.q1).toEqual(["必做"]);
+      expect(savedInStorage.q2).toEqual(["计算失误", "选做"]);
+    });
+
+    it("addTagToQuestion automatically removes 选做 when adding 必做", () => {
+      addTagToQuestion("q1", "选做");
+      expect(getQuestionTags("q1")).toEqual(["选做"]);
+
+      addTagToQuestion("q1", "必做");
+      expect(getQuestionTags("q1")).toEqual(["必做"]);
+    });
+
+    it("addTagToQuestion automatically removes 必做 when adding 选做", () => {
+      addTagToQuestion("q1", "必做");
+      expect(getQuestionTags("q1")).toEqual(["必做"]);
+
+      addTagToQuestion("q1", "选做");
+      expect(getQuestionTags("q1")).toEqual(["选做"]);
+    });
+
+    it("batchAddTagsToQuestions enforces mutual exclusivity across questions", () => {
+      addTagToQuestion("q1", "选做");
+      addTagToQuestion("q2", "选做");
+
+      batchAddTagsToQuestions(["q1", "q2"], ["必做", "典型好题"]);
+      expect(getQuestionTags("q1")).toEqual(["必做", "典型好题"]);
+      expect(getQuestionTags("q2")).toEqual(["必做", "典型好题"]);
     });
   });
 });

@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { EditorDialog } from "../../shared/components/EditorDialog";
 import { Button } from "../../shared/ui/Button";
-import { PRESET_MISTAKE_TAGS, getMistakeTagTone } from "./mistakeTagModel";
+import {
+  PRESET_MISTAKE_TAGS,
+  getConflictingPriorityTag,
+  getMistakeTagTone,
+} from "./mistakeTagModel";
 
 export interface BatchTagDialogProps {
   isOpen: boolean;
@@ -18,9 +22,7 @@ export function BatchTagDialog({
   onClose,
   onApply,
 }: BatchTagDialogProps) {
-  const [selectedTags, setSelectedTags] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<"add" | "remove">("add");
   const [customInput, setCustomInput] = useState("");
 
@@ -35,6 +37,10 @@ export function BatchTagDialog({
       if (next.has(tag)) {
         next.delete(tag);
       } else {
+        const conflicting = getConflictingPriorityTag(tag);
+        if (conflicting !== undefined) {
+          next.delete(conflicting);
+        }
         next.add(tag);
       }
       return next;

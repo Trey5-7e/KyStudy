@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { EditorDialog } from "../../shared/components/EditorDialog";
 import { Button } from "../../shared/ui/Button";
 import {
+  getQuestionBank,
   recordBulkQuestionAttempts,
   type IndexedQuestion,
   type QuestionBankSnapshot,
@@ -10,8 +11,9 @@ import type { AttemptResult } from "../../shared/tauri/questionClient";
 import type { ReviewSchemeRating } from "../../shared/tauri/reviewSchemeClient";
 import { QuestionReviewContent } from "./ContinuousReviewPanel";
 import { QuestionAiAnalysis } from "./QuestionAiAnalysis";
-import { QuestionRegionCard } from "./QuestionRegionCard";
+import { QuestionRegionCard, questionRegionsKey } from "./QuestionRegionCard";
 import { PaperExportDialog } from "../workbook/PaperExportDialog";
+import { ManualIndexDialog } from "../workbook/ManualIndexDialog";
 import {
   indexedQuestionToReviewItem,
   selectInstantMistakeQuestions,
@@ -24,6 +26,7 @@ export function InstantMistakeDrillDialog({
   targetCount,
   subjectId,
   workbookId,
+  snapshot,
   onClose,
   onComplete,
   onSnapshotUpdated,
@@ -34,6 +37,7 @@ export function InstantMistakeDrillDialog({
   targetCount: number;
   subjectId?: string;
   workbookId?: string;
+  snapshot?: QuestionBankSnapshot;
   onClose(): void;
   onComplete?(): void;
   onSnapshotUpdated?(snapshot: QuestionBankSnapshot): void;
@@ -52,6 +56,50 @@ export function InstantMistakeDrillDialog({
   const [busy, setBusy] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [bannerNotice, setBannerNotice] = useState<string>();
+  const [editingRegionQuestion, setEditingRegionQuestion] =
+    useState<IndexedQuestion>();
+  const [localSnapshot, setLocalSnapshot] = useState<QuestionBankSnapshot>();
+  const activeSnapshot = localSnapshot ?? snapshot;
+
+  const openRegionEditor = async (q: IndexedQuestion) => {
+    let snap = activeSnapshot;
+    if (!snap) {
+      try {
+        snap = await getQuestionBank();
+        setLocalSnapshot(snap);
+      } catch {
+        // ignore
+      }
+    }
+    setEditingRegionQuestion(q);
+  };
+
+  const handleRegionSaved = (nextSnapshot: QuestionBankSnapshot) => {
+    setLocalSnapshot(nextSnapshot);
+    if (editingRegionQuestion) {
+      const updated = nextSnapshot.questions.find(
+        (item) => item.id === editingRegionQuestion.id,
+      );
+      if (updated) {
+        setCurrentBatch((prev) =>
+          prev.map((q) => (q.id === updated.id ? updated : q)),
+        );
+        setRetryQueue((prev) =>
+          prev
+            ? prev.map((q) => (q.id === updated.id ? updated : q))
+            : undefined,
+        );
+        setPoolQuestions((prev) =>
+          prev.map((q) => (q.id === updated.id ? updated : q)),
+        );
+        if (aiAnalysisQuestion?.id === updated.id) {
+          setAiAnalysisQuestion(updated);
+        }
+      }
+    }
+    onSnapshotUpdated?.(nextSnapshot);
+    setEditingRegionQuestion(undefined);
+  };
 
   // Retry state for uncertain/failed questions in this session
   const [retryQueue, setRetryQueue] = useState<IndexedQuestion[]>();
@@ -226,7 +274,7 @@ export function InstantMistakeDrillDialog({
       >
         {inRetry && activeRetryQuestion ? (
           <QuestionReviewContent
-            key={`retry-${activeRetryQuestion.id}-${retryIndex}`}
+            key={`retry-${activeRetryQuestion.id}-${retryIndex}-${questionRegionsKey(activeRetryQuestion.regions)}`}
             item={indexedQuestionToReviewItem(
               activeRetryQuestion,
               retryIndex,
@@ -236,12 +284,13 @@ export function InstantMistakeDrillDialog({
             busy={busy}
             canUndo={retryIndex > 0}
             defaultRevealed
+            onEditRegions={() => void openRegionEditor(activeRetryQuestion)}
             onFeedback={handleFeedback}
             onUndo={handleUndo}
           />
         ) : !isFinished && activeQuestion ? (
           <QuestionReviewContent
-            key={`drill-${activeQuestion.id}-${currentIndex}`}
+            key={`drill-${activeQuestion.id}-${currentIndex}-${questionRegionsKey(activeQuestion.regions)}`}
             item={indexedQuestionToReviewItem(
               activeQuestion,
               currentIndex,
@@ -251,6 +300,7 @@ export function InstantMistakeDrillDialog({
             busy={busy}
             canUndo={currentIndex > 0}
             defaultRevealed
+            onEditRegions={() => void openRegionEditor(activeQuestion)}
             onFeedback={handleFeedback}
             onUndo={handleUndo}
           />
@@ -433,7 +483,28 @@ export function InstantMistakeDrillDialog({
           size="review"
         >
           <div className="mistake-preview-dialog-content">
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginBottom: "8px",
+              }}
+            >
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => void openRegionEditor(aiAnalysisQuestion)}
+                title="调整题目在 PDF 中的框选区域"
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  crop
+                </span>
+                <span>调整题目区域</span>
+              </Button>
+            </div>
             <QuestionRegionCard
+              key={`${aiAnalysisQuestion.id}-${questionRegionsKey(aiAnalysisQuestion.regions)}`}
               documentId={aiAnalysisQuestion.documentId}
               regions={aiAnalysisQuestion.regions}
               title={aiAnalysisQuestion.title}
@@ -450,6 +521,15 @@ export function InstantMistakeDrillDialog({
             />
           </div>
         </EditorDialog>
+      ) : null}
+
+      {editingRegionQuestion !== undefined && activeSnapshot !== undefined ? (
+        <ManualIndexDialog
+          snapshot={activeSnapshot}
+          existingQuestion={editingRegionQuestion}
+          onClose={() => setEditingRegionQuestion(undefined)}
+          onSaved={handleRegionSaved}
+        />
       ) : null}
     </>
   );

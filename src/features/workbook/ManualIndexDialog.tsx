@@ -96,7 +96,11 @@ export function ManualIndexDialog({
     relativeInsert,
   );
   const [segmentId, setSegmentId] = useState(initialSegmentId);
-  const segment = snapshot.segments.find((item) => item.id === segmentId);
+  const segment =
+    snapshot.segments.find((item) => item.id === segmentId) ??
+    snapshot.segments.find(
+      (item) => item.documentId === existingQuestion?.documentId,
+    );
   const initialChapter =
     existingQuestion?.chapter ??
     anchorQuestion?.chapter ??
@@ -147,9 +151,10 @@ export function ManualIndexDialog({
     questionType !== initialQuestionType;
 
   useEffect(() => {
-    if (segment === undefined) return;
+    const docId = segment?.documentId ?? existingQuestion?.documentId;
+    if (docId === undefined) return;
     let active = true;
-    void getResourceReaderDescriptor(segment.documentId).then(
+    void getResourceReaderDescriptor(docId).then(
       (next) => {
         if (active) setDescriptor(next);
       },
@@ -163,10 +168,15 @@ export function ManualIndexDialog({
     return () => {
       active = false;
     };
-  }, [segment]);
+  }, [existingQuestion?.documentId, segment]);
 
   const save = useCallback(async () => {
-    if (segment === undefined || workingRegions.length === 0) return;
+    if (
+      (existingQuestion === undefined && segment === undefined) ||
+      workingRegions.length === 0
+    ) {
+      return;
+    }
     setBusy(true);
     setMessage("");
     setSuccessNotice("");
@@ -197,7 +207,7 @@ export function ManualIndexDialog({
             regions: workingRegions.map(toRegionInput),
           }),
         );
-      } else {
+      } else if (segment !== undefined) {
         onSaved(
           await appendIndexedQuestion({
             segmentId: segment.id,

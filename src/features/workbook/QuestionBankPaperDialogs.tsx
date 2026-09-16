@@ -28,6 +28,10 @@ import type {
 } from "../../shared/tauri/questionClient";
 import { localDateForTimezone } from "../../shared/tauri/scheduleClient";
 import { QuestionAiAnalysis } from "../review/QuestionAiAnalysis";
+import {
+  loadAllQuestionTags,
+  MISTAKE_TAGS_CHANGED_EVENT,
+} from "../review/mistakeTagModel";
 import { PaperQuestionCard } from "./PaperQuestionCard";
 import { PaperExportDialog } from "./PaperExportDialog";
 import {
@@ -166,14 +170,25 @@ export function PaperSetupDialog({
   const [statuses, setStatuses] = useState<Set<PracticeStatus>>(
     () => new Set(initialSetup.statuses),
   );
+  const [tagsMap, setTagsMap] = useState<Record<string, string[]>>(() =>
+    loadAllQuestionTags(),
+  );
+  useEffect(() => {
+    const handler = () => setTagsMap(loadAllQuestionTags());
+    window.addEventListener(MISTAKE_TAGS_CHANGED_EVENT, handler);
+    return () =>
+      window.removeEventListener(MISTAKE_TAGS_CHANGED_EVENT, handler);
+  }, []);
   const [message, setMessage] = useState("");
   const eligibleQuestions = useMemo(
     () => questions.filter((question) => subjectIds.has(question.subjectId)),
     [questions, subjectIds],
   );
   const scopedQuestionCount = useMemo(
-    () => questionsInPaperScopeGroups(eligibleQuestions, scopeGroups).length,
-    [eligibleQuestions, scopeGroups],
+    () =>
+      questionsInPaperScopeGroups(eligibleQuestions, scopeGroups, tagsMap)
+        .length,
+    [eligibleQuestions, scopeGroups, tagsMap],
   );
   const requestedCount = useMemo(
     () =>
@@ -209,6 +224,7 @@ export function PaperSetupDialog({
       choiceCount: 0,
       blankCount: 0,
       solutionCount: 0,
+      tagsMap,
     });
     const requested = requestedCount;
     if (generated.length === 0) {
@@ -335,6 +351,7 @@ export function PaperSetupDialog({
         <PaperScopeFilters
           questions={eligibleQuestions}
           value={scopeGroups}
+          tagsMap={tagsMap}
           onChange={setScopeGroups}
         />
         <fieldset>
@@ -1458,6 +1475,7 @@ function createPaperScopeGroup(index: number): PaperScopeGroup {
     chapterKeys: new Set(),
     sectionParts: new Set(),
     questionTypes: new Set(),
+    tags: new Set(),
   };
 }
 
@@ -1470,6 +1488,7 @@ function clonePaperScopeGroups(
     chapterKeys: new Set(group.chapterKeys),
     sectionParts: new Set(group.sectionParts),
     questionTypes: new Set(group.questionTypes),
+    tags: new Set(group.tags ?? []),
   }));
 }
 
@@ -1490,7 +1509,8 @@ function paperScopeGroupsEqual(
         setsEqual(group.workbookIds, other.workbookIds) &&
         setsEqual(group.chapterKeys, other.chapterKeys) &&
         setsEqual(group.sectionParts, other.sectionParts) &&
-        setsEqual(group.questionTypes, other.questionTypes)
+        setsEqual(group.questionTypes, other.questionTypes) &&
+        setsEqual(group.tags ?? new Set(), other.tags ?? new Set())
       );
     })
   );
@@ -1499,10 +1519,12 @@ function paperScopeGroupsEqual(
 export function PaperScopeFilters({
   questions,
   value,
+  tagsMap,
   onChange,
 }: {
   questions: readonly IndexedQuestion[];
   value: readonly PaperScopeGroup[];
+  tagsMap?: Record<string, string[]>;
   onChange(value: PaperScopeGroup[]): void;
 }) {
   const updateGroup = (id: string, patch: Partial<PaperScopeGroup>) =>
@@ -1527,12 +1549,17 @@ export function PaperScopeFilters({
         chapterKeys: new Set(source.chapterKeys),
         sectionParts: new Set(source.sectionParts),
         questionTypes: new Set(source.questionTypes),
+        tags: new Set(source.tags ?? []),
       },
     ]);
   };
   const removeGroup = (id: string) =>
     onChange(value.filter((group) => group.id !== id));
-  const scopedCount = questionsInPaperScopeGroups(questions, value).length;
+  const scopedCount = questionsInPaperScopeGroups(
+    questions,
+    value,
+    tagsMap,
+  ).length;
 
   return (
     <section
@@ -1559,26 +1586,40 @@ export function PaperScopeFilters({
       ) : (
         <div className="paper-scope-group-list">
           {value.map((group, index) => {
-            const groupCount = questionsInPaperScope(questions, group).length;
+            const groupCount = questionsInPaperScope(
+              questions,
+              group,
+              tagsMap,
+            ).length;
             const workbookOptions = paperScopeOptions(
               questions,
               group,
               "workbookIds",
+              tagsMap,
             );
             const chapterOptions = paperScopeOptions(
               questions,
               group,
               "chapterKeys",
+              tagsMap,
             );
             const sectionPartOptions = paperScopeOptions(
               questions,
               group,
               "sectionParts",
+              tagsMap,
             );
             const questionTypeOptions = paperScopeOptions(
               questions,
               group,
               "questionTypes",
+              tagsMap,
+            );
+            const tagOptions = paperScopeOptions(
+              questions,
+              group,
+              "tags",
+              tagsMap,
             );
             return (
               <fieldset
@@ -1683,6 +1724,18 @@ export function PaperScopeFilters({
                       })
                     }
                   />
+                  <PaperScopeMultiChoice
+                    label="题目标签"
+                    className="is-tags"
+                    options={tagOptions}
+                    selected={group.tags ?? new Set()}
+                    disabled={!group.enabled}
+                    onChange={(next) =>
+                      updateGroup(group.id, {
+                        tags: next,
+                      })
+                    }
+                  />
                 </div>
                 <p className="paper-scope-group-count">
                   {group.mode === "exclude" ? "将排除 " : "当前范围匹配 "}
@@ -1706,25 +1759,27 @@ export function PaperScopeFilters({
 }
 
 type PaperScopeOptionField =
-  "workbookIds" | "chapterKeys" | "sectionParts" | "questionTypes";
+  "workbookIds" | "chapterKeys" | "sectionParts" | "questionTypes" | "tags";
 
 function paperScopeOptions(
   questions: readonly IndexedQuestion[],
   group: PaperScopeGroup,
   field: PaperScopeOptionField,
+  tagsMap?: Record<string, string[]>,
 ): Array<{ value: string; label: string; stale?: boolean }> {
   const matchingQuestions = questions.filter((question) =>
-    matchesPaperScopeExcept(question, group, field),
+    matchesPaperScopeExcept(question, group, field, tagsMap),
   );
-  const allOptions = paperScopeOptionsFromQuestions(questions, field);
+  const allOptions = paperScopeOptionsFromQuestions(questions, field, tagsMap);
   const availableOptions = paperScopeOptionsFromQuestions(
     matchingQuestions,
     field,
+    tagsMap,
   );
   const availableValues = new Set(
     availableOptions.map((option) => option.value),
   );
-  const selectedValues = group[field];
+  const selectedValues = group[field] ?? new Set();
   const staleOptions = [...selectedValues]
     .filter((value) => !availableValues.has(value))
     .map((value) => ({
@@ -1741,8 +1796,10 @@ function matchesPaperScopeExcept(
   question: IndexedQuestion,
   group: PaperScopeGroup,
   excludedField: PaperScopeOptionField,
+  tagsMap?: Record<string, string[]>,
 ): boolean {
   const chapterKey = paperChapterKey(question.workbookId, question.chapter);
+  const qTags = tagsMap?.[question.id] ?? [];
   return (
     (excludedField === "workbookIds" ||
       group.workbookIds.size === 0 ||
@@ -1755,13 +1812,18 @@ function matchesPaperScopeExcept(
       group.sectionParts.has(question.sectionPart)) &&
     (excludedField === "questionTypes" ||
       group.questionTypes.size === 0 ||
-      group.questionTypes.has(question.questionType))
+      group.questionTypes.has(question.questionType)) &&
+    (excludedField === "tags" ||
+      !group.tags ||
+      group.tags.size === 0 ||
+      [...group.tags].some((t) => qTags.includes(t)))
   );
 }
 
 function paperScopeOptionsFromQuestions(
   questions: readonly IndexedQuestion[],
   field: PaperScopeOptionField,
+  tagsMap?: Record<string, string[]>,
 ): Array<{ value: string; label: string }> {
   if (field === "workbookIds") {
     return uniqueBy(questions, (question) => question.workbookId).map(
@@ -1785,13 +1847,28 @@ function paperScopeOptionsFromQuestions(
     );
     return PART_OPTIONS.filter((option) => available.has(option.value));
   }
-  const available = new Set(questions.map((question) => question.questionType));
-  return TYPE_OPTIONS.filter((option) => available.has(option.value));
+  if (field === "questionTypes") {
+    const available = new Set(
+      questions.map((question) => question.questionType),
+    );
+    return TYPE_OPTIONS.filter((option) => available.has(option.value));
+  }
+  const tags = new Set<string>(["必做", "选做"]);
+  for (const q of questions) {
+    for (const tag of tagsMap?.[q.id] ?? []) {
+      tags.add(tag);
+    }
+  }
+  return [...tags].map((tag) => ({
+    value: tag,
+    label: tag,
+  }));
 }
 
 function PaperScopeMultiChoice({
   label,
   singleColumn = false,
+  className,
   options,
   selected,
   disabled,
@@ -1799,6 +1876,7 @@ function PaperScopeMultiChoice({
 }: {
   label: string;
   singleColumn?: boolean;
+  className?: string;
   options: ReadonlyArray<{
     value: string;
     label: string;
@@ -1809,7 +1887,10 @@ function PaperScopeMultiChoice({
   onChange(value: Set<string>): void;
 }) {
   return (
-    <div className="paper-scope-choice" aria-disabled={disabled}>
+    <div
+      className={`paper-scope-choice${className ? ` ${className}` : ""}`}
+      aria-disabled={disabled}
+    >
       <strong>{label}</strong>
       <label className="paper-scope-all">
         <input

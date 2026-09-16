@@ -16,15 +16,27 @@ import {
   calculateReviewSessionSummary,
   type ContinuousReviewSession,
 } from "./continuousReview";
-import { QuestionRegionCard } from "./QuestionRegionCard";
+import { QuestionRegionCard, questionRegionsKey } from "./QuestionRegionCard";
 import { QuestionAiAnalysis } from "./QuestionAiAnalysis";
 import { reviewRatingForShortcut } from "./reviewFeedback";
+import {
+  getQuestionBank,
+  type IndexedQuestion,
+  type QuestionBankSnapshot,
+} from "../../shared/tauri/questionBankClient";
+import type {
+  QuestionBundle,
+  QuestionRegion,
+} from "../../shared/tauri/questionClient";
+import { ManualIndexDialog } from "../workbook/ManualIndexDialog";
 
 export function ContinuousReviewPanel({
   session,
   openRequest,
   onClose,
   busy,
+  questionBankSnapshot,
+  onSnapshotUpdated,
   onPrepare,
   onFeedback,
   onUndo,
@@ -37,6 +49,8 @@ export function ContinuousReviewPanel({
   openRequest?: number;
   onClose(): void;
   busy: boolean;
+  questionBankSnapshot?: QuestionBankSnapshot;
+  onSnapshotUpdated?(snapshot: QuestionBankSnapshot): void;
   onPrepare(): Promise<boolean>;
   onFeedback(
     queueId: string,
@@ -58,6 +72,82 @@ export function ContinuousReviewPanel({
   const [aiAnalysisQuestion, setAiAnalysisQuestion] =
     useState<ReviewSchemeQueueItem>();
   const [bannerNotice, setBannerNotice] = useState<string>();
+  const [editingRegionQuestion, setEditingRegionQuestion] =
+    useState<IndexedQuestion>();
+  const [localSnapshot, setLocalSnapshot] = useState<QuestionBankSnapshot>();
+  const activeSnapshot = localSnapshot ?? questionBankSnapshot;
+  const [regionOverrides, setRegionOverrides] = useState<
+    Record<string, QuestionRegion[]>
+  >({});
+
+  const openRegionEditor = async (q: QuestionBundle | IndexedQuestion) => {
+    let snap = activeSnapshot;
+    if (!snap) {
+      try {
+        snap = await getQuestionBank();
+        setLocalSnapshot(snap);
+      } catch {
+        // ignore
+      }
+    }
+    const targetId = "question" in q ? q.question.id : q.id;
+    let indexedQ = snap?.questions.find((item) => item.id === targetId);
+    if (!indexedQ) {
+      if ("question" in q) {
+        indexedQ = {
+          id: q.question.id,
+          documentId: q.question.documentId,
+          documentTitle: q.question.documentTitle,
+          subjectId: q.question.subjectId ?? "",
+          subjectName: q.question.subjectName ?? "",
+          workbookId: "",
+          workbookName: "",
+          segmentId: "",
+          chapter: q.question.chapter ?? "",
+          sectionPart: "basic",
+          questionType: q.question.questionType ?? "choice",
+          questionNumber: q.question.questionNumber ?? "",
+          title: q.question.title,
+          indexConfidence: 1,
+          sortOrder: 0,
+          attemptCount: 0,
+          incorrectCount: 0,
+          partialCount: 0,
+          regions: regionOverrides[targetId] ?? q.regions,
+        };
+      } else {
+        indexedQ = {
+          ...q,
+          regions: regionOverrides[targetId] ?? q.regions,
+        };
+      }
+    } else {
+      if (regionOverrides[targetId]) {
+        indexedQ = {
+          ...indexedQ,
+          regions: regionOverrides[targetId],
+        };
+      }
+    }
+    setEditingRegionQuestion(indexedQ);
+  };
+
+  const handleRegionSaved = (nextSnapshot: QuestionBankSnapshot) => {
+    setLocalSnapshot(nextSnapshot);
+    if (editingRegionQuestion) {
+      const updated = nextSnapshot.questions.find(
+        (item) => item.id === editingRegionQuestion.id,
+      );
+      if (updated) {
+        setRegionOverrides((prev) => ({
+          ...prev,
+          [updated.id]: updated.regions,
+        }));
+      }
+    }
+    onSnapshotUpdated?.(nextSnapshot);
+    setEditingRegionQuestion(undefined);
+  };
 
   const prepareRef = useRef<HTMLButtonElement>(null);
 
@@ -106,6 +196,51 @@ export function ContinuousReviewPanel({
 
   const inRetry = retryQueue !== undefined && retryIndex < retryQueue.length;
   const activeRetryItem = inRetry ? retryQueue[retryIndex] : undefined;
+
+  const effectiveActive = useMemo(() => {
+    if (!active) return undefined;
+    const qid = active.question.question.id;
+    if (regionOverrides[qid]) {
+      return {
+        ...active,
+        question: {
+          ...active.question,
+          regions: regionOverrides[qid],
+        },
+      };
+    }
+    return active;
+  }, [active, regionOverrides]);
+
+  const effectiveActiveRetryItem = useMemo(() => {
+    if (!activeRetryItem) return undefined;
+    const qid = activeRetryItem.question.question.id;
+    if (regionOverrides[qid]) {
+      return {
+        ...activeRetryItem,
+        question: {
+          ...activeRetryItem.question,
+          regions: regionOverrides[qid],
+        },
+      };
+    }
+    return activeRetryItem;
+  }, [activeRetryItem, regionOverrides]);
+
+  const effectiveAiAnalysisQuestion = useMemo(() => {
+    if (!aiAnalysisQuestion) return undefined;
+    const qid = aiAnalysisQuestion.question.question.id;
+    if (regionOverrides[qid]) {
+      return {
+        ...aiAnalysisQuestion,
+        question: {
+          ...aiAnalysisQuestion.question,
+          regions: regionOverrides[qid],
+        },
+      };
+    }
+    return aiAnalysisQuestion;
+  }, [aiAnalysisQuestion, regionOverrides]);
 
   const shouldOpen =
     openRequest !== undefined &&
@@ -336,25 +471,31 @@ export function ContinuousReviewPanel({
           returnFocusRef={prepareRef}
           size={!inRetry && !active ? "large" : "review"}
         >
-          {inRetry && activeRetryItem ? (
+          {inRetry && effectiveActiveRetryItem ? (
             <QuestionReviewContent
-              key={`retry-${activeRetryItem.question.question.id}-${retryIndex}`}
-              item={activeRetryItem}
+              key={`retry-${effectiveActiveRetryItem.question.question.id}-${retryIndex}-${questionRegionsKey(effectiveActiveRetryItem.question.regions)}`}
+              item={effectiveActiveRetryItem}
               queueId=""
               busy={busy}
               canUndo={retryIndex > 0}
               defaultRevealed
+              onEditRegions={() =>
+                void openRegionEditor(effectiveActiveRetryItem.question)
+              }
               onFeedback={handleRetryFeedback}
               onUndo={handleRetryUndo}
             />
-          ) : active && session.activeScheme ? (
+          ) : effectiveActive && session.activeScheme ? (
             <QuestionReviewContent
-              key={active.question.question.id}
-              item={active}
+              key={`${effectiveActive.question.question.id}-${questionRegionsKey(effectiveActive.question.regions)}`}
+              item={effectiveActive}
               queueId={session.activeScheme.queue?.id ?? ""}
               busy={busy}
               canUndo={!!session.latestCompletedQueueId}
               defaultRevealed
+              onEditRegions={() =>
+                void openRegionEditor(effectiveActive.question)
+              }
               onFeedback={onFeedback}
               onUndo={onUndo}
             />
@@ -538,10 +679,10 @@ export function ContinuousReviewPanel({
           )}
         </EditorDialog>
       )}
-      {aiAnalysisQuestion !== undefined ? (
+      {effectiveAiAnalysisQuestion !== undefined ? (
         <EditorDialog
           title="辅助参考解析"
-          description={`${aiAnalysisQuestion.question.question.title} · ${aiAnalysisQuestion.question.question.documentTitle}`}
+          description={`${effectiveAiAnalysisQuestion.question.question.title} · ${effectiveAiAnalysisQuestion.question.question.documentTitle}`}
           dirty={false}
           onRequestClose={() => setAiAnalysisQuestion(undefined)}
           onRequestBack={() => setAiAnalysisQuestion(undefined)}
@@ -550,17 +691,51 @@ export function ContinuousReviewPanel({
           size="review"
         >
           <div className="mistake-preview-dialog-content">
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginBottom: "8px",
+              }}
+            >
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  void openRegionEditor(effectiveAiAnalysisQuestion.question)
+                }
+                title="调整题目在 PDF 中的框选区域"
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  crop
+                </span>
+                <span>调整题目区域</span>
+              </Button>
+            </div>
             <QuestionRegionCard
-              documentId={aiAnalysisQuestion.question.question.documentId}
-              regions={aiAnalysisQuestion.question.regions}
-              title={aiAnalysisQuestion.question.question.title}
+              key={`${effectiveAiAnalysisQuestion.question.question.id}-${questionRegionsKey(effectiveAiAnalysisQuestion.question.regions)}`}
+              documentId={
+                effectiveAiAnalysisQuestion.question.question.documentId
+              }
+              regions={effectiveAiAnalysisQuestion.question.regions}
+              title={effectiveAiAnalysisQuestion.question.question.title}
             />
             <QuestionAiAnalysis
-              question={aiAnalysisQuestion.question.question}
-              regions={aiAnalysisQuestion.question.regions}
+              question={effectiveAiAnalysisQuestion.question.question}
+              regions={effectiveAiAnalysisQuestion.question.regions}
             />
           </div>
         </EditorDialog>
+      ) : null}
+
+      {editingRegionQuestion !== undefined && activeSnapshot !== undefined ? (
+        <ManualIndexDialog
+          snapshot={activeSnapshot}
+          existingQuestion={editingRegionQuestion}
+          onClose={() => setEditingRegionQuestion(undefined)}
+          onSaved={handleRegionSaved}
+        />
       ) : null}
     </>
   );
@@ -572,6 +747,7 @@ export function QuestionReviewContent({
   busy,
   canUndo,
   defaultRevealed = true,
+  onEditRegions,
   onFeedback,
   onUndo,
 }: {
@@ -580,6 +756,7 @@ export function QuestionReviewContent({
   busy: boolean;
   canUndo: boolean;
   defaultRevealed?: boolean;
+  onEditRegions?(): void;
   onFeedback(
     queueId: string,
     questionId: string,
@@ -630,12 +807,36 @@ export function QuestionReviewContent({
       aria-label="current review question"
       onKeyDown={key}
     >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <h4 style={{ margin: 0 }}>{q.title}</h4>
+        {onEditRegions && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onEditRegions}
+            title="调整题目在 PDF 中的框选区域"
+          >
+            <span className="material-symbols-rounded" aria-hidden="true">
+              crop
+            </span>
+            <span>调整题目区域</span>
+          </Button>
+        )}
+      </div>
+
       <QuestionRegionCard
+        key={`${q.id}-${questionRegionsKey(item.question.regions)}`}
         documentId={q.documentId}
         title={q.title}
         regions={item.question.regions}
       />
-      <h4>{q.title}</h4>
 
       {!revealed ? (
         <div className="review-reveal-container">

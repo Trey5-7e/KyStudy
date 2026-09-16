@@ -606,7 +606,9 @@ impl QuestionBankRepository for SqliteQuestionBankRepository {
             active_source_keys.insert(question.source_key.as_str());
         }
 
-        let is_manual_import = questions.iter().all(|q| q.source_key.starts_with("manual|"));
+        let is_manual_import = questions
+            .iter()
+            .all(|q| q.source_key.starts_with("manual|"));
         if !is_manual_import {
             let mut statement = transaction
                 .prepare(
@@ -729,6 +731,64 @@ impl QuestionBankRepository for SqliteQuestionBankRepository {
                 .execute(
                     "UPDATE question SET updated_at = ?2 WHERE id = ?1",
                     params![attempt.question_id, attempt.attempted_at],
+                )
+                .map_err(database_error)?;
+        }
+        transaction.commit().map_err(database_error)?;
+        load_snapshot(&connection)
+    }
+
+    fn clear_attempts(
+        &self,
+        question_ids: &[String],
+        updated_at: i64,
+    ) -> Result<QuestionBankSnapshot, QuestionBankError> {
+        let mut connection = self.open()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(database_error)?;
+        for question_id in question_ids {
+            let exists = transaction
+                .query_row(
+                    "SELECT 1 FROM question q
+                     JOIN question_index_metadata m ON m.question_id = q.id
+                     JOIN workbook_document_segment s ON s.id = m.segment_id
+                     WHERE q.id = ?1 AND q.deleted_at IS NULL
+                       AND s.deleted_at IS NULL",
+                    params![question_id],
+                    |_| Ok(()),
+                )
+                .optional()
+                .map_err(database_error)?
+                .is_some();
+            if !exists {
+                return Err(QuestionBankError::QuestionNotFound);
+            }
+            transaction
+                .execute(
+                    "DELETE FROM question_attempt WHERE question_id = ?1",
+                    params![question_id],
+                )
+                .map_err(database_error)?;
+            transaction
+                .execute(
+                    "UPDATE mistake_profile
+                     SET active = 0, first_mistake_at = NULL, last_mistake_at = NULL,
+                         mistake_count = 0, consecutive_failure_count = 0, updated_at = ?2
+                     WHERE question_id = ?1",
+                    params![question_id, updated_at],
+                )
+                .map_err(database_error)?;
+            transaction
+                .execute(
+                    "DELETE FROM review_state WHERE question_id = ?1",
+                    params![question_id],
+                )
+                .map_err(database_error)?;
+            transaction
+                .execute(
+                    "UPDATE question SET updated_at = ?2 WHERE id = ?1",
+                    params![question_id, updated_at],
                 )
                 .map_err(database_error)?;
         }
@@ -2473,8 +2533,7 @@ mod tests {
         CreateWorkbookCategoryInput, DeleteTrashedWorkbookSegmentInput, ImportQuestionIndexInput,
         ImportRequest, IndexedQuestionDraftInput, IndexedQuestionRegionUpdateInput,
         InsertIndexedQuestionInput, QuestionBankUseCases, QuestionRegionInput,
-        ReassignWorkbookSegmentInput,
-        RecordBulkQuestionAttemptsInput, RenameWorkbookCategoryInput,
+        ReassignWorkbookSegmentInput, RecordBulkQuestionAttemptsInput, RenameWorkbookCategoryInput,
         ReplaceIndexedQuestionRegionsInput, ResourceRepository, RestoreWorkbookSegmentInput,
         ScheduleUseCases, SetQuestionGapAcknowledgementInput, TrashWorkbookSegmentInput,
         UpdateIndexedQuestionInput, WorkbookSegmentAssignmentInput, WorkspaceRepository,

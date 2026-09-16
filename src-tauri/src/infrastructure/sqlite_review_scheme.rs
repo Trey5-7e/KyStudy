@@ -1747,6 +1747,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn non_workbook_role_document_questions_generate_scheme_queue() {
         let directory = tempdir().expect("temporary directory should exist");
         SqliteWorkspaceRepository::new(directory.path())
@@ -1826,7 +1827,8 @@ mod tests {
             .update_role(&document.id, "reference")
             .expect("document role should update to reference");
 
-        let schemes = ReviewSchemeUseCases::new(SqliteReviewSchemeRepository::new(directory.path()));
+        let schemes =
+            ReviewSchemeUseCases::new(SqliteReviewSchemeRepository::new(directory.path()));
         let dashboard = schemes
             .save_scheme(SaveReviewSchemeInput {
                 scheme_id: None,
@@ -1862,7 +1864,10 @@ mod tests {
             .as_ref()
             .expect("today queue must exist and not be empty");
         assert_eq!(queue.items.len(), 1);
-        assert_eq!(queue.items[0].question.question.id, question_one.question.id);
+        assert_eq!(
+            queue.items[0].question.question.id,
+            question_one.question.id
+        );
         assert_eq!(generated.schemes[0].due_count, 0); // Assigned today
     }
 

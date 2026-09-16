@@ -34,6 +34,7 @@ export interface PaperDraftScopeGroup {
   chapterKeys: string[];
   sectionParts: SectionPart[];
   questionTypes: QuestionType[];
+  tags?: string[];
 }
 
 export interface PaperDraftRecipe {
@@ -134,6 +135,7 @@ export function createPaperDraftRecipe(input: {
       chapterKeys: [...group.chapterKeys],
       sectionParts: [...group.sectionParts],
       questionTypes: [...group.questionTypes],
+      ...(group.tags && group.tags.size > 0 ? { tags: [...group.tags] } : {}),
     })),
     subjectQuotas: Object.fromEntries(
       [...input.subjectQuotas].map(([subjectId, quota]) => [
@@ -157,6 +159,7 @@ export function paperSpecFromDraftRecipe(recipe: PaperDraftRecipe): PaperSpec {
       chapterKeys: new Set(group.chapterKeys),
       sectionParts: new Set(group.sectionParts),
       questionTypes: new Set(group.questionTypes),
+      tags: new Set(group.tags ?? []),
     })),
     subjectQuotas: new Map(
       Object.entries(recipe.subjectQuotas).map(([subjectId, quota]) => [
@@ -275,6 +278,7 @@ function parseScopeGroup(value: unknown): PaperDraftScopeGroup | undefined {
   ) {
     return undefined;
   }
+  const tags = parseStringArray(value.tags);
   return {
     id: value.id,
     name: value.name,
@@ -284,6 +288,7 @@ function parseScopeGroup(value: unknown): PaperDraftScopeGroup | undefined {
     chapterKeys: parseStringArray(value.chapterKeys),
     sectionParts: subjectParts,
     questionTypes,
+    ...(tags.length > 0 ? { tags } : {}),
   };
 }
 

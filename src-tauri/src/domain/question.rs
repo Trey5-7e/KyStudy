@@ -264,4 +264,3 @@ pub(crate) struct QuestionHistory {
     pub(crate) successful_streak: u32,
     pub(crate) attempts: Vec<QuestionAttemptTimelineItem>,
 }
-

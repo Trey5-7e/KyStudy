@@ -50,6 +50,18 @@ export const PRESET_MISTAKE_TAGS: readonly MistakeTagMeta[] = [
     tone: "info",
     description: "高频失分盲点、考前冲刺重点过一遍",
   },
+  {
+    id: "must_do",
+    label: "必做",
+    tone: "danger",
+    description: "习题重点核心必做题，优先攻克",
+  },
+  {
+    id: "optional_do",
+    label: "选做",
+    tone: "info",
+    description: "机动或拔高拓展选做题，按需练习",
+  },
 ];
 
 export const MISTAKE_TAGS_STORAGE_KEY =
@@ -68,7 +80,57 @@ export function getMistakeTagTone(label: string): BadgeTone {
 }
 
 /**
+ * 互斥重点标签映射（必做与选做互斥，绝不能同时存在）
+ */
+export function getConflictingPriorityTag(label: string): string | undefined {
+  if (label === "必做") return "选做";
+  if (label === "选做") return "必做";
+  return undefined;
+}
+
+/**
+ * 清洗题目标签数组：
+ * 1. 过滤空值与非法类型并去重；
+ * 2. 保证“必做”与“选做”互斥，绝不同时存在：
+ *    - 若指定了 preferredTag（如用户刚操作添加的标签），则保留 preferredTag，移除其对立标签；
+ *    - 若未指定且同时包含两者，则保留数组中较后出现的那一个（即最新赋予的标签），移除较早的那个。
+ */
+export function sanitizeQuestionTags(
+  tags: readonly string[],
+  preferredTag?: string,
+): string[] {
+  const seen = new Set<string>();
+  const list: string[] = [];
+  for (const t of tags) {
+    if (typeof t !== "string") continue;
+    const trimmed = t.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    list.push(trimmed);
+  }
+
+  const hasMust = list.includes("必做");
+  const hasOptional = list.includes("选做");
+  if (hasMust && hasOptional) {
+    let removeTag: string;
+    if (preferredTag === "必做") {
+      removeTag = "选做";
+    } else if (preferredTag === "选做") {
+      removeTag = "必做";
+    } else {
+      const mustIndex = list.lastIndexOf("必做");
+      const optIndex = list.lastIndexOf("选做");
+      removeTag = mustIndex > optIndex ? "选做" : "必做";
+    }
+    return list.filter((t) => t !== removeTag);
+  }
+
+  return list;
+}
+
+/**
  * 加载所有题目的标签映射表 { [questionId]: string[] }
+ * 自动对历史遗留数据进行清洗自愈，若发现“必做”与“选做”共存等冲突脏数据，自动写回 localStorage
  */
 export function loadAllQuestionTags(): Record<string, string[]> {
   try {
@@ -77,11 +139,29 @@ export function loadAllQuestionTags(): Record<string, string[]> {
     const parsed = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return {};
     const result: Record<string, string[]> = {};
+    let hasChanges = false;
     for (const [qid, tags] of Object.entries(parsed)) {
       if (Array.isArray(tags)) {
-        result[qid] = tags.filter(
+        const rawList = tags.filter(
           (t): t is string => typeof t === "string" && t.trim().length > 0,
         );
+        const cleaned = sanitizeQuestionTags(rawList);
+        if (cleaned.length > 0) {
+          result[qid] = cleaned;
+        }
+        if (
+          cleaned.length !== rawList.length ||
+          cleaned.some((t, i) => t !== rawList[i])
+        ) {
+          hasChanges = true;
+        }
+      }
+    }
+    if (hasChanges) {
+      try {
+        localStorage.setItem(MISTAKE_TAGS_STORAGE_KEY, JSON.stringify(result));
+      } catch {
+        // ignore
       }
     }
     return result;
@@ -112,7 +192,19 @@ export function loadCustomTags(): string[] {
  */
 export function saveAllQuestionTags(tagsMap: Record<string, string[]>): void {
   try {
-    localStorage.setItem(MISTAKE_TAGS_STORAGE_KEY, JSON.stringify(tagsMap));
+    const sanitizedMap: Record<string, string[]> = {};
+    for (const [qid, tags] of Object.entries(tagsMap)) {
+      if (Array.isArray(tags)) {
+        const cleaned = sanitizeQuestionTags(tags);
+        if (cleaned.length > 0) {
+          sanitizedMap[qid] = cleaned;
+        }
+      }
+    }
+    localStorage.setItem(
+      MISTAKE_TAGS_STORAGE_KEY,
+      JSON.stringify(sanitizedMap),
+    );
     dispatchMistakeTagsChanged();
   } catch {
     // ignore
@@ -169,8 +261,14 @@ export function addTagToQuestion(
 
   const map = loadAllQuestionTags();
   const current = map[questionId] ?? [];
-  if (!current.includes(trimmed)) {
-    map[questionId] = [...current, trimmed];
+  const conflicting = getConflictingPriorityTag(trimmed);
+  const base =
+    conflicting !== undefined
+      ? current.filter((t) => t !== conflicting)
+      : current;
+
+  if (!base.includes(trimmed) || base.length !== current.length) {
+    map[questionId] = sanitizeQuestionTags([...base, trimmed], trimmed);
     saveAllQuestionTags(map);
   }
 
@@ -212,14 +310,25 @@ export function batchAddTagsToQuestions(
   questionIds: Iterable<string>,
   tags: string[],
 ): Record<string, string[]> {
-  const validTags = tags.map((t) => t.trim()).filter(Boolean);
+  const validTags = sanitizeQuestionTags(tags);
   if (validTags.length === 0) return loadAllQuestionTags();
 
   const map = loadAllQuestionTags();
   for (const qid of questionIds) {
     const current = map[qid] ?? [];
-    const merged = Array.from(new Set([...current, ...validTags]));
-    map[qid] = merged;
+    let merged = current;
+    for (const tag of validTags) {
+      const conflicting = getConflictingPriorityTag(tag);
+      if (conflicting !== undefined) {
+        merged = merged.filter((t) => t !== conflicting);
+      }
+    }
+    const cleanList = sanitizeQuestionTags([...merged, ...validTags]);
+    if (cleanList.length > 0) {
+      map[qid] = cleanList;
+    } else {
+      delete map[qid];
+    }
   }
   saveAllQuestionTags(map);
 
