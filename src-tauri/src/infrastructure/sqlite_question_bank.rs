@@ -2974,6 +2974,61 @@ mod tests {
     }
 
     #[test]
+    fn clear_attempts_resets_question_history_and_review_state() {
+        let (directory, bank, _segment_id, indexed) = question_bank_fixture(1);
+        let question_id = indexed.questions[0].id.clone();
+        bank.record_attempts(RecordBulkQuestionAttemptsInput {
+            attempted_on: "2026-09-16".to_owned(),
+            entries: vec![BulkQuestionAttemptInput {
+                question_id: question_id.clone(),
+                result: "incorrect".to_owned(),
+            }],
+        })
+        .expect("attempt should persist before clearing");
+
+        let cleared = bank
+            .clear_attempts(std::slice::from_ref(&question_id))
+            .expect("attempt history should clear");
+        let question = cleared
+            .questions
+            .iter()
+            .find(|question| question.id == question_id)
+            .expect("question should remain after clearing history");
+        assert_eq!(question.current_result, None);
+        assert_eq!(question.attempt_count, 0);
+        assert_eq!(question.incorrect_count, 0);
+        assert_eq!(question.partial_count, 0);
+        assert_eq!(question.last_attempt_at, None);
+        assert_eq!(question.due_date, None);
+
+        let repository = SqliteQuestionBankRepository::new(directory.path());
+        let connection = repository.open().expect("database should reopen");
+        let state: (i64, i64, i64, i64, i64, i64) = connection
+            .query_row(
+                "SELECT
+                     (SELECT COUNT(*) FROM question_attempt WHERE question_id = ?1),
+                     (SELECT COUNT(*) FROM review_state WHERE question_id = ?1),
+                     (SELECT active FROM mistake_profile WHERE question_id = ?1),
+                     (SELECT mistake_count FROM mistake_profile WHERE question_id = ?1),
+                     (SELECT consecutive_failure_count FROM mistake_profile WHERE question_id = ?1),
+                     (SELECT COUNT(*) FROM question WHERE id = ?1)",
+                params![question_id],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
+            )
+            .expect("cleared history state should load");
+        assert_eq!(state, (0, 0, 0, 0, 0, 1));
+    }
+
+    #[test]
     fn segment_restore_does_not_revive_question_trashed_before_segment() {
         let (directory, bank, segment_id, indexed) = question_bank_fixture(2);
         let first_id = indexed.questions[0].id.clone();

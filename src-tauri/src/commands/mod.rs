@@ -7029,7 +7029,7 @@ pub(crate) async fn clear_question_attempts(
     state: State<'_, AppState>,
 ) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
     let use_cases = state.question_bank.clone();
-    tauri::async_runtime::spawn_blocking(move || use_cases.clear_attempts(request.question_ids))
+    tauri::async_runtime::spawn_blocking(move || use_cases.clear_attempts(&request.question_ids))
         .await
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)

@@ -674,16 +674,16 @@ impl<R: QuestionBankRepository> QuestionBankUseCases<R> {
 
     pub(crate) fn clear_attempts(
         &self,
-        question_ids: Vec<String>,
+        question_ids: &[String],
     ) -> Result<QuestionBankSnapshot, QuestionBankError> {
         if question_ids.is_empty() {
             return self.repository.snapshot();
         }
-        for qid in &question_ids {
+        for qid in question_ids {
             validate_id(qid)?;
         }
         let updated_at = current_utc_millis()?;
-        self.repository.clear_attempts(&question_ids, updated_at)
+        self.repository.clear_attempts(question_ids, updated_at)
     }
 
     pub(crate) fn update_question(
