@@ -2702,6 +2702,12 @@ impl From<RecordBulkQuestionAttemptsRequestDto> for RecordBulkQuestionAttemptsIn
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ClearQuestionAttemptsRequestDto {
+    pub(crate) question_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct UpdateIndexedQuestionRequestDto {
     question_id: String,
     title: String,
@@ -7011,6 +7017,19 @@ pub(crate) async fn record_bulk_question_attempts(
 ) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
     let use_cases = state.question_bank.clone();
     tauri::async_runtime::spawn_blocking(move || use_cases.record_attempts(request.into()))
+        .await
+        .map_err(|_| AppErrorDto::task_failed())?
+        .map(Into::into)
+        .map_err(|error| AppErrorDto::from_question_bank(&error))
+}
+
+#[tauri::command]
+pub(crate) async fn clear_question_attempts(
+    request: ClearQuestionAttemptsRequestDto,
+    state: State<'_, AppState>,
+) -> Result<QuestionBankSnapshotDto, AppErrorDto> {
+    let use_cases = state.question_bank.clone();
+    tauri::async_runtime::spawn_blocking(move || use_cases.clear_attempts(request.question_ids))
         .await
         .map_err(|_| AppErrorDto::task_failed())?
         .map(Into::into)

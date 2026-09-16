@@ -431,6 +431,7 @@ macro_rules! kystudy_command_handler {
             commands::save_workbook_segments,
             commands::import_question_index,
             commands::record_bulk_question_attempts,
+            commands::clear_question_attempts,
             commands::update_indexed_question,
             commands::replace_indexed_question_regions,
             commands::insert_indexed_question,
