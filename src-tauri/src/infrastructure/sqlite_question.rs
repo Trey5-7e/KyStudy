@@ -1003,11 +1003,21 @@ fn load_knowledge_links(
         .collect()
 }
 
-#[allow(clippy::too_many_lines)]
-fn load_question_history(
+#[derive(Default)]
+struct QuestionHistoryProfile {
+    first_mistake_at: Option<i64>,
+    last_mistake_at: Option<i64>,
+    mistake_count: u32,
+    consecutive_failure_count: u32,
+    mastery_level: Option<ReviewMastery>,
+    due_date: Option<LocalDate>,
+    successful_streak: u32,
+}
+
+fn load_question_history_profile(
     connection: &Connection,
     question_id: &str,
-) -> Result<QuestionHistory, QuestionError> {
+) -> Result<QuestionHistoryProfile, QuestionError> {
     let profile_row = connection
         .query_row(
             "SELECT mp.first_mistake_at, mp.last_mistake_at, mp.mistake_count,
@@ -1038,16 +1048,7 @@ fn load_question_history(
         )
         .optional()
         .map_err(database_error)?;
-
-    let (
-        first_mistake_at,
-        last_mistake_at,
-        mistake_count,
-        consecutive_failure_count,
-        mastery_level,
-        due_date,
-        successful_streak,
-    ) = match profile_row {
+    Ok(match profile_row {
         Some((
             first_mistake_at,
             last_mistake_at,
@@ -1065,8 +1066,8 @@ fn load_question_history(
             let consecutive_failure_count =
                 u32::try_from(consecutive_failure_count.max(0)).unwrap_or(0);
             let successful_streak =
-                successful_streak.map_or(0, |v| u32::try_from(v.max(0)).unwrap_or(0));
-            (
+                successful_streak.map_or(0, |value| u32::try_from(value.max(0)).unwrap_or(0));
+            QuestionHistoryProfile {
                 first_mistake_at,
                 last_mistake_at,
                 mistake_count,
@@ -1074,11 +1075,16 @@ fn load_question_history(
                 mastery_level,
                 due_date,
                 successful_streak,
-            )
+            }
         }
-        None => (None, None, 0, 0, None, None, 0),
-    };
+        None => QuestionHistoryProfile::default(),
+    })
+}
 
+fn load_question_attempt_timeline(
+    connection: &Connection,
+    question_id: &str,
+) -> Result<Vec<QuestionAttemptTimelineItem>, QuestionError> {
     let mut statement = connection
         .prepare(
             "SELECT qa.id, qa.question_id, qa.result, qa.attempted_at,
@@ -1091,7 +1097,7 @@ fn load_question_history(
         )
         .map_err(database_error)?;
 
-    let attempts = statement
+    statement
         .query_map(params![question_id], |row| {
             let result_str = row.get::<_, String>(2)?;
             let rating_str = row.get::<_, Option<String>>(7)?;
@@ -1124,17 +1130,25 @@ fn load_question_history(
         })
         .map_err(database_error)?
         .map(|row| row.map_err(database_error).map_err(QuestionError::from))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect()
+}
+
+fn load_question_history(
+    connection: &Connection,
+    question_id: &str,
+) -> Result<QuestionHistory, QuestionError> {
+    let profile = load_question_history_profile(connection, question_id)?;
+    let attempts = load_question_attempt_timeline(connection, question_id)?;
 
     Ok(QuestionHistory {
         question_id: question_id.to_string(),
-        first_mistake_at,
-        last_mistake_at,
-        mistake_count,
-        consecutive_failure_count,
-        mastery_level,
-        due_date,
-        successful_streak,
+        first_mistake_at: profile.first_mistake_at,
+        last_mistake_at: profile.last_mistake_at,
+        mistake_count: profile.mistake_count,
+        consecutive_failure_count: profile.consecutive_failure_count,
+        mastery_level: profile.mastery_level,
+        due_date: profile.due_date,
+        successful_streak: profile.successful_streak,
         attempts,
     })
 }

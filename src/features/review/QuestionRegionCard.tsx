@@ -78,6 +78,18 @@ export function questionRegionShouldCloseOnKey(key: string): boolean {
   return key === "Escape";
 }
 
+export function questionRegionsKey(
+  regions?: readonly QuestionRegion[],
+): string {
+  if (!regions || regions.length === 0) return "empty";
+  return regions
+    .map(
+      (r) =>
+        `${r.pageNumber}:${r.x.toFixed(4)},${r.y.toFixed(4)},${r.width.toFixed(4)},${r.height.toFixed(4)}`,
+    )
+    .join(";");
+}
+
 export function QuestionRegionCard({
   documentId,
   title,

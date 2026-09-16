@@ -24,6 +24,12 @@ import {
 } from "../review/QuestionRegionCard";
 import { QuestionOcrPanel } from "./QuestionOcrPanel";
 import { QuestionAiAnalysis } from "../review/QuestionAiAnalysis";
+import {
+  getMistakeTagTone,
+  loadAllQuestionTags,
+  MISTAKE_TAGS_CHANGED_EVENT,
+  sanitizeQuestionTags,
+} from "../review/mistakeTagModel";
 import type { PdfRegionOverlay } from "../library/pdf/PdfReader";
 import { questionsInScope, type QuestionScope } from "./questionBankModel";
 import {
@@ -82,6 +88,14 @@ export function questionBrowserNavigationIndex(
     return selectedIndex + 1;
   }
   return undefined;
+}
+
+export function getQuestionPreviewTags(
+  questionId: string | undefined,
+  tagsMap: Record<string, string[]>,
+): string[] {
+  if (!questionId) return [];
+  return sanitizeQuestionTags(tagsMap[questionId] ?? []);
 }
 
 export interface RelativeQuestionInsert {
@@ -143,6 +157,17 @@ export function QuestionIndexBrowserDialog({
   >();
   const [acknowledgementMessage, setAcknowledgementMessage] = useState("");
   const [navigationAnnouncement, setNavigationAnnouncement] = useState("");
+  const [tagsMap, setTagsMap] = useState<Record<string, string[]>>(() =>
+    typeof window !== "undefined" ? loadAllQuestionTags() : {},
+  );
+
+  useEffect(() => {
+    const handler = () => setTagsMap(loadAllQuestionTags());
+    window.addEventListener(MISTAKE_TAGS_CHANGED_EVENT, handler);
+    return () =>
+      window.removeEventListener(MISTAKE_TAGS_CHANGED_EVENT, handler);
+  }, []);
+
   const mountedRef = useRef(true);
   const acknowledgementBusyRef = useRef<string | undefined>(undefined);
   const browserFocusRef = useRef<HTMLDivElement | null>(null);
@@ -713,6 +738,23 @@ export function QuestionIndexBrowserDialog({
                       <span>做过 {question.attemptCount} 次</span>
                       <span>做错 {question.incorrectCount} 次</span>
                       <span>不全对 {question.partialCount} 次</span>
+                      {getQuestionPreviewTags(question.id, tagsMap).map(
+                        (tag) => (
+                          <span
+                            key={tag}
+                            className={`question-preview-tag tone-${getMistakeTagTone(tag)}`}
+                            title={`题目标签：${tag}`}
+                          >
+                            <span
+                              className="material-symbols-rounded tag-chip-icon"
+                              aria-hidden="true"
+                            >
+                              label
+                            </span>
+                            {tag}
+                          </span>
+                        ),
+                      )}
                     </div>
                     <QuestionAiAnalysis
                       key={question.id}
@@ -1072,7 +1114,7 @@ export function QuestionScopeFilters({
   value: QuestionScope;
   onChange(value: QuestionScope): void;
   disabled?: boolean;
-  allowAll?: boolean;
+  allowAll?: boolean | "parts-and-types";
   requireExact?: boolean;
   hideSubject?: boolean;
 }) {
@@ -1096,8 +1138,16 @@ export function QuestionScopeFilters({
   ];
   const set = (patch: Partial<QuestionScope>) =>
     onChange({ ...value, ...patch });
-  const allOption =
-    allowAll && !requireExact ? <option value="">全部</option> : null;
+  const allMajorOption =
+    allowAll === true && !requireExact ? <option value="">全部</option> : null;
+  const allPartOption =
+    Boolean(allowAll) && !requireExact ? (
+      <option value="">全部篇章</option>
+    ) : null;
+  const allTypeOption =
+    Boolean(allowAll) && !requireExact ? (
+      <option value="">全部题型</option>
+    ) : null;
   return (
     <div className="question-scope-filters">
       {hideSubject ? null : (
@@ -1117,7 +1167,7 @@ export function QuestionScopeFilters({
               })
             }
           >
-            {allOption}
+            {allMajorOption}
             {subjects.map((item) => (
               <option key={item.subjectId} value={item.subjectId}>
                 {item.subjectName}
@@ -1141,7 +1191,7 @@ export function QuestionScopeFilters({
             })
           }
         >
-          {allOption}
+          {allMajorOption}
           {workbooks.map((item) => (
             <option key={item.workbookId} value={item.workbookId}>
               {item.workbookName}
@@ -1163,7 +1213,7 @@ export function QuestionScopeFilters({
             })
           }
         >
-          {allOption}
+          {allMajorOption}
           {chapters.map((chapter) => (
             <option key={chapter}>{chapter}</option>
           ))}
@@ -1182,7 +1232,7 @@ export function QuestionScopeFilters({
             })
           }
         >
-          {allOption}
+          {allPartOption}
           {PART_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -1203,7 +1253,7 @@ export function QuestionScopeFilters({
             })
           }
         >
-          {allOption}
+          {allTypeOption}
           {TYPE_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -1218,7 +1268,9 @@ export function QuestionScopeFilters({
 export function completeScope(
   questions: readonly IndexedQuestion[],
   scope: QuestionScope,
+  options?: { requirePartsAndTypes?: boolean },
 ): QuestionScope {
+  const requirePartsAndTypes = options?.requirePartsAndTypes ?? true;
   const subjectId = scope.subjectId ?? questions[0]?.subjectId;
   const subjectQuestions = questions.filter(
     (question) => question.subjectId === subjectId,
@@ -1231,11 +1283,18 @@ export function completeScope(
   const chapterQuestions = workbookQuestions.filter(
     (question) => question.chapter === chapter,
   );
-  const sectionPart = scope.sectionPart ?? chapterQuestions[0]?.sectionPart;
-  const partQuestions = chapterQuestions.filter(
-    (question) => question.sectionPart === sectionPart,
-  );
-  const questionType = scope.questionType ?? partQuestions[0]?.questionType;
+  const sectionPart = requirePartsAndTypes
+    ? (scope.sectionPart ?? chapterQuestions[0]?.sectionPart)
+    : scope.sectionPart;
+  const partQuestions =
+    sectionPart === undefined
+      ? chapterQuestions
+      : chapterQuestions.filter(
+          (question) => question.sectionPart === sectionPart,
+        );
+  const questionType = requirePartsAndTypes
+    ? (scope.questionType ?? partQuestions[0]?.questionType)
+    : scope.questionType;
   return { subjectId, workbookId, chapter, sectionPart, questionType };
 }
 

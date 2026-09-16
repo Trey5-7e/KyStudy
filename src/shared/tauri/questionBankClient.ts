@@ -341,6 +341,16 @@ export async function recordBulkQuestionAttempts(
   );
 }
 
+export async function clearQuestionAttempts(
+  questionIds: string[],
+): Promise<QuestionBankSnapshot> {
+  return parseQuestionBankSnapshot(
+    await invoke("clear_question_attempts", {
+      request: { questionIds },
+    }),
+  );
+}
+
 export async function updateIndexedQuestion(
   request: IndexedQuestionUpdate,
 ): Promise<QuestionBankSnapshot> {

@@ -469,6 +469,7 @@ export function ReviewPanel({
           workbooks={workbooks}
           busy={busy}
           today={today}
+          snapshot={questionBankSnapshot}
           onSnapshotUpdated={(next) => setQuestionBankSnapshot(next)}
           onStartDrill={async (selectedQuestions, count, subjectId) => {
             let snap = questionBankSnapshot;
@@ -513,6 +514,8 @@ export function ReviewPanel({
           }}
           onStartReview={() => setInternalOpenRequest(Date.now())}
           busy={busy}
+          questionBankSnapshot={questionBankSnapshot}
+          onSnapshotUpdated={(next) => setQuestionBankSnapshot(next)}
           onPrepare={() =>
             run(
               () => prepareReviewSchemeQueues(today, dashboard),
@@ -564,6 +567,7 @@ export function ReviewPanel({
           today={today}
           targetCount={drillSession.targetCount}
           subjectId={drillSession.subjectId}
+          snapshot={questionBankSnapshot}
           onSnapshotUpdated={(next) => setQuestionBankSnapshot(next)}
           onClose={() => setDrillSession(undefined)}
           onComplete={() => {

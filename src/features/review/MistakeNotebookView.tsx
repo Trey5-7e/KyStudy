@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  getQuestionBank,
   recordBulkQuestionAttempts,
   type IndexedQuestion,
   type QuestionBankSnapshot,
@@ -12,12 +13,13 @@ import type {
 import { Badge } from "../../shared/ui/Badge";
 import { Button } from "../../shared/ui/Button";
 import { EditorDialog } from "../../shared/components/EditorDialog";
-import { QuestionRegionCard } from "./QuestionRegionCard";
+import { QuestionRegionCard, questionRegionsKey } from "./QuestionRegionCard";
 import { QuestionAiAnalysis } from "./QuestionAiAnalysis";
 import { QuestionAttemptTimeline } from "./QuestionAttemptTimeline";
 import { QuestionMistakeTagEditor } from "./QuestionMistakeTagEditor";
 import { BatchTagDialog } from "./BatchTagDialog";
 import { PaperExportDialog } from "../workbook/PaperExportDialog";
+import { ManualIndexDialog } from "../workbook/ManualIndexDialog";
 import {
   calculateForgettingMeta,
   createBatchAttempts,
@@ -46,6 +48,7 @@ export interface MistakeNotebookViewProps {
   workbooks?: readonly { id: string; name?: string; title?: string }[];
   busy?: boolean;
   today?: string;
+  snapshot?: QuestionBankSnapshot;
   onSnapshotUpdated?(snapshot: QuestionBankSnapshot): void;
   onStartDrill(
     questions: IndexedQuestion[],
@@ -60,6 +63,7 @@ export function MistakeNotebookView({
   workbooks,
   busy,
   today,
+  snapshot,
   onSnapshotUpdated,
   onStartDrill,
 }: MistakeNotebookViewProps) {
@@ -73,6 +77,30 @@ export function MistakeNotebookView({
     query: "",
     sortBy: "priority",
   });
+
+  const [editingRegionQuestion, setEditingRegionQuestion] =
+    useState<IndexedQuestion>();
+  const [localSnapshot, setLocalSnapshot] = useState<QuestionBankSnapshot>();
+  const activeSnapshot = localSnapshot ?? snapshot;
+
+  const openRegionEditor = async (q: IndexedQuestion) => {
+    let snap = activeSnapshot;
+    if (!snap) {
+      try {
+        snap = await getQuestionBank();
+        setLocalSnapshot(snap);
+      } catch {
+        // ignore
+      }
+    }
+    setEditingRegionQuestion(q);
+  };
+
+  const handleRegionSaved = (nextSnapshot: QuestionBankSnapshot) => {
+    setLocalSnapshot(nextSnapshot);
+    onSnapshotUpdated?.(nextSnapshot);
+    setEditingRegionQuestion(undefined);
+  };
 
   const [tagsMap, setTagsMap] = useState<Record<string, string[]>>(() =>
     loadAllQuestionTags(),
@@ -134,11 +162,16 @@ export function MistakeNotebookView({
     [workbooks],
   );
 
-  const summary = useMemo(() => summarizeMistakes(questions), [questions]);
+  const sourceQuestions = activeSnapshot?.questions ?? questions;
+
+  const summary = useMemo(
+    () => summarizeMistakes(sourceQuestions),
+    [sourceQuestions],
+  );
 
   const filteredQuestions = useMemo(
-    () => filterMistakeNotebook(questions, filter, tagsMap, today),
-    [questions, filter, tagsMap, today],
+    () => filterMistakeNotebook(sourceQuestions, filter, tagsMap, today),
+    [sourceQuestions, filter, tagsMap, today],
   );
 
   const selectedQuestions = useMemo(
@@ -184,8 +217,8 @@ export function MistakeNotebookView({
         ? filteredQuestions[previewIndex]
         : previewQuestionId === undefined
           ? undefined
-          : questions.find((q) => q.id === previewQuestionId),
-    [filteredQuestions, previewIndex, previewQuestionId, questions],
+          : sourceQuestions.find((q) => q.id === previewQuestionId),
+    [filteredQuestions, previewIndex, previewQuestionId, sourceQuestions],
   );
 
   const toggleSelect = useCallback((questionId: string) => {
@@ -965,6 +998,20 @@ export function MistakeNotebookView({
                       </span>
                       <span>题目切片</span>
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void openRegionEditor(q)}
+                      title="调整题目在 PDF 中的框选区域"
+                    >
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        crop
+                      </span>
+                      <span>调整区域</span>
+                    </Button>
                   </div>
                 </footer>
               </article>
@@ -1300,6 +1347,20 @@ export function MistakeNotebookView({
                       </span>
                       <span>全屏</span>
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void openRegionEditor(activeSplitQuestion)}
+                      title="调整题目在 PDF 中的框选区域"
+                    >
+                      <span
+                        className="material-symbols-rounded"
+                        aria-hidden="true"
+                      >
+                        crop
+                      </span>
+                      <span>调整区域</span>
+                    </Button>
                   </div>
                 </div>
 
@@ -1359,7 +1420,7 @@ export function MistakeNotebookView({
                   </div>
 
                   <QuestionRegionCard
-                    key={`split-region-${activeSplitQuestion.id}`}
+                    key={`split-region-${activeSplitQuestion.id}-${questionRegionsKey(activeSplitQuestion.regions)}`}
                     documentId={activeSplitQuestion.documentId}
                     regions={activeSplitQuestion.regions}
                     title={activeSplitQuestion.title}
@@ -1543,6 +1604,17 @@ export function MistakeNotebookView({
                     </Button>
                   )
                 ) : null}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void openRegionEditor(previewQuestion)}
+                  title="调整题目在 PDF 中的框选区域"
+                >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    crop
+                  </span>
+                  <span>调整区域</span>
+                </Button>
               </div>
             </div>
 
@@ -1598,7 +1670,7 @@ export function MistakeNotebookView({
                 </span>
               </div>
               <QuestionRegionCard
-                key={`preview-region-${previewQuestion.id}`}
+                key={`preview-region-${previewQuestion.id}-${questionRegionsKey(previewQuestion.regions)}`}
                 documentId={previewQuestion.documentId}
                 regions={previewQuestion.regions}
                 title={previewQuestion.title}
@@ -1630,6 +1702,15 @@ export function MistakeNotebookView({
         onClose={() => setBatchTagDialogOpen(false)}
         onApply={handleBatchTagApply}
       />
+
+      {editingRegionQuestion !== undefined && activeSnapshot !== undefined ? (
+        <ManualIndexDialog
+          snapshot={activeSnapshot}
+          existingQuestion={editingRegionQuestion}
+          onClose={() => setEditingRegionQuestion(undefined)}
+          onSaved={handleRegionSaved}
+        />
+      ) : null}
     </div>
   );
 }

@@ -805,4 +805,116 @@ describe("question bank model", () => {
       ]).map((value) => value.id),
     ).toEqual(["2"]);
   });
+
+  it("filters questions by tags in paper scope groups", () => {
+    const questions = [
+      { ...question("1", "choice"), workbookId: "w1" },
+      { ...question("2", "choice"), workbookId: "w1" },
+      { ...question("3", "choice"), workbookId: "w1" },
+    ];
+    const tagsMap: Record<string, string[]> = {
+      "1": ["必做"],
+      "2": ["选做"],
+      // "3" has no tags
+    };
+
+    // 1. Matching only 必做
+    expect(
+      questionsInPaperScope(
+        questions,
+        {
+          workbookIds: new Set(["w1"]),
+          chapterKeys: new Set(),
+          sectionParts: new Set(),
+          questionTypes: new Set(),
+          tags: new Set(["必做"]),
+        },
+        tagsMap,
+      ).map((q) => q.id),
+    ).toEqual(["1"]);
+
+    // 2. Matching 必做 or 选做
+    expect(
+      questionsInPaperScope(
+        questions,
+        {
+          workbookIds: new Set(["w1"]),
+          chapterKeys: new Set(),
+          sectionParts: new Set(),
+          questionTypes: new Set(),
+          tags: new Set(["必做", "选做"]),
+        },
+        tagsMap,
+      ).map((q) => q.id),
+    ).toEqual(["1", "2"]);
+
+    // 3. Exclude group filtering out 选做
+    expect(
+      questionsInPaperScopeGroups(
+        questions,
+        [
+          {
+            id: "all-w1",
+            name: "All",
+            enabled: true,
+            mode: "include",
+            workbookIds: new Set(["w1"]),
+            chapterKeys: new Set(),
+            sectionParts: new Set(),
+            questionTypes: new Set(),
+            tags: new Set(),
+          },
+          {
+            id: "exclude-optional",
+            name: "Exclude optional",
+            enabled: true,
+            mode: "exclude",
+            workbookIds: new Set(["w1"]),
+            chapterKeys: new Set(),
+            sectionParts: new Set(),
+            questionTypes: new Set(),
+            tags: new Set(["选做"]),
+          },
+        ],
+        tagsMap,
+      ).map((q) => q.id),
+    ).toEqual(["1", "3"]);
+  });
+
+  it("generates paper restricted to questions with must_do tag", () => {
+    const questions = [
+      { ...question("1", "choice"), workbookId: "w1", subjectId: "math" },
+      { ...question("2", "choice"), workbookId: "w1", subjectId: "math" },
+      { ...question("3", "choice"), workbookId: "w1", subjectId: "math" },
+    ];
+    const tagsMap: Record<string, string[]> = {
+      "1": ["必做"],
+      "2": ["选做"],
+    };
+
+    const paper = generateWeightedPaper(questions, {
+      subjectIds: new Set(["math"]),
+      scopeGroups: [
+        {
+          id: "must-do-scope",
+          name: "Must Do Only",
+          enabled: true,
+          mode: "include",
+          workbookIds: new Set(["w1"]),
+          chapterKeys: new Set(),
+          sectionParts: new Set(),
+          questionTypes: new Set(),
+          tags: new Set(["必做"]),
+        },
+      ],
+      statuses: new Set(["unattempted"]),
+      choiceCount: 3,
+      blankCount: 0,
+      solutionCount: 0,
+      tagsMap,
+    });
+
+    // Only question 1 has the "必做" tag
+    expect(paper.map((q) => q.id)).toEqual(["1"]);
+  });
 });

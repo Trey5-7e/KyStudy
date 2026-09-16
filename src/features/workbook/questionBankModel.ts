@@ -9,6 +9,7 @@ import {
   type WorkbookDocumentSegment,
 } from "../../shared/tauri/questionBankClient";
 import type { QuestionType } from "../../shared/tauri/questionClient";
+import { loadAllQuestionTags } from "../review/mistakeTagModel";
 
 export type QuestionSegmentVisibility = "pending" | "browsable";
 export type PaperScopeMode = "include" | "exclude";
@@ -35,6 +36,7 @@ export interface PaperScopeGroup {
   chapterKeys: ReadonlySet<string>;
   sectionParts: ReadonlySet<SectionPart>;
   questionTypes: ReadonlySet<QuestionType>;
+  tags?: ReadonlySet<string>;
 }
 
 export interface PaperTypeQuotas {
@@ -53,6 +55,7 @@ export interface PaperSpec extends QuestionScope {
   choiceCount: number;
   blankCount: number;
   solutionCount: number;
+  tagsMap?: Record<string, string[]>;
 }
 
 export interface SegmentDeletionSummary {
@@ -429,10 +432,14 @@ export function questionsInPaperScope(
   group: Pick<
     PaperScopeGroup,
     "workbookIds" | "chapterKeys" | "sectionParts" | "questionTypes"
-  >,
+  > & { tags?: ReadonlySet<string> },
+  tagsMap?: Record<string, string[]>,
 ): IndexedQuestion[] {
+  const map =
+    tagsMap ?? (typeof window !== "undefined" ? loadAllQuestionTags() : {});
   return questions.filter((question) => {
     const chapterKey = paperChapterKey(question.workbookId, question.chapter);
+    const qTags = map[question.id] ?? [];
     return (
       (group.workbookIds.size === 0 ||
         group.workbookIds.has(question.workbookId)) &&
@@ -440,7 +447,10 @@ export function questionsInPaperScope(
       (group.sectionParts.size === 0 ||
         group.sectionParts.has(question.sectionPart)) &&
       (group.questionTypes.size === 0 ||
-        group.questionTypes.has(question.questionType))
+        group.questionTypes.has(question.questionType)) &&
+      (!group.tags ||
+        group.tags.size === 0 ||
+        [...group.tags].some((tag) => qTags.includes(tag)))
     );
   });
 }
@@ -452,6 +462,7 @@ export function questionsInPaperScope(
 export function questionsInPaperScopeGroups(
   questions: readonly IndexedQuestion[],
   groups: readonly PaperScopeGroup[],
+  tagsMap?: Record<string, string[]>,
 ): IndexedQuestion[] {
   if (groups.length === 0) return [...questions];
   const enabledGroups = groups.filter((group) => group.enabled);
@@ -466,13 +477,13 @@ export function questionsInPaperScopeGroups(
     includeGroups.length === 0 ? questions.map((question) => question.id) : [],
   );
   for (const group of includeGroups) {
-    for (const question of questionsInPaperScope(questions, group)) {
+    for (const question of questionsInPaperScope(questions, group, tagsMap)) {
       matchingIds.add(question.id);
     }
   }
   const excludedIds = new Set<string>();
   for (const group of excludeGroups) {
-    for (const question of questionsInPaperScope(questions, group)) {
+    for (const question of questionsInPaperScope(questions, group, tagsMap)) {
       excludedIds.add(question.id);
     }
   }
@@ -510,12 +521,16 @@ export function generateWeightedPaper(
   random: () => number = Math.random,
   avoidQuestionIds?: ReadonlySet<string>,
 ): IndexedQuestion[] {
+  const tagsMap =
+    spec.tagsMap ??
+    (typeof window !== "undefined" ? loadAllQuestionTags() : undefined);
   const scopedQuestions =
     spec.scopeGroups === undefined
       ? questionsInScope(questions, spec)
       : questionsInPaperScopeGroups(
           questionsInScope(questions, spec),
           spec.scopeGroups,
+          tagsMap,
         );
   const candidates = scopedQuestions.filter(
     (question) =>

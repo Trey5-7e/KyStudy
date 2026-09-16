@@ -338,6 +338,11 @@ pub(crate) trait QuestionBankRepository: Clone + Send + Sync + 'static {
         attempts: &[ValidatedBulkAttempt],
         attempted_on: &LocalDate,
     ) -> Result<QuestionBankSnapshot, QuestionBankError>;
+    fn clear_attempts(
+        &self,
+        question_ids: &[String],
+        updated_at: i64,
+    ) -> Result<QuestionBankSnapshot, QuestionBankError>;
     fn update_question(
         &self,
         update: &ValidatedIndexedQuestionUpdate,
@@ -665,6 +670,20 @@ impl<R: QuestionBankRepository> QuestionBankUseCases<R> {
             })
             .collect::<Result<Vec<_>, QuestionBankError>>()?;
         self.repository.record_attempts(&attempts, &attempted_on)
+    }
+
+    pub(crate) fn clear_attempts(
+        &self,
+        question_ids: Vec<String>,
+    ) -> Result<QuestionBankSnapshot, QuestionBankError> {
+        if question_ids.is_empty() {
+            return self.repository.snapshot();
+        }
+        for qid in &question_ids {
+            validate_id(qid)?;
+        }
+        let updated_at = current_utc_millis()?;
+        self.repository.clear_attempts(&question_ids, updated_at)
     }
 
     pub(crate) fn update_question(

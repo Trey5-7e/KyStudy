@@ -69,6 +69,7 @@ describe("paper setup preferences", () => {
           chapterKeys: new Set(["workbook-1::第一章"]),
           sectionParts: new Set(["basic"]),
           questionTypes: new Set(["choice"]),
+          tags: new Set(["必做"]),
         },
       ],
       subjectQuotas: new Map([["math", { choice: 8, blank: 2, solution: 4 }]]),
@@ -86,6 +87,7 @@ describe("paper setup preferences", () => {
     const spec = paperSpecFromDraftRecipe(loaded!.recipe);
     expect(spec.subjectIds).toEqual(new Set(["math"]));
     expect(spec.scopeGroups?.[0]?.questionTypes).toEqual(new Set(["choice"]));
+    expect(spec.scopeGroups?.[0]?.tags).toEqual(new Set(["必做"]));
     expect(spec.subjectQuotas).toEqual(
       new Map([["math", { choice: 8, blank: 2, solution: 4 }]]),
     );
