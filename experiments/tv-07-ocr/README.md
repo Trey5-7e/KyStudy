@@ -1,8 +1,7 @@
 # TV-07 本地 OCR 技术验证
 
 这个目录只用于验证 Windows 本地 OCR 的效果、资源占用、离线运行、取消和打包，
-不是 KyStudy 的正式 OCR 实现。结论与测量数据见
-[TV-07 Spike 报告](../../docs/spikes/TV-07-ocr.md)。
+不是 KyStudy 的正式 OCR 实现。详细架构与决策见 [ADR-006](../../docs/adr/006-ocr-deployment.md)。
 
 ## 方案
 

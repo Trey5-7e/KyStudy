@@ -91,7 +91,7 @@ jobs:
             - 低干扰 Token 预算（默认仅警告）与临时附件生命周期管理
             - 安装版数据目录迁移至安装目录内（旧数据自动迁移）
 
-            OCR 组件独立下载，见 [ocr-v0.1.4 Release](https://github.com/Trey5-7e/KyStudy/releases/tag/ocr-v0.1.4)；完整发布说明见仓库 `docs/V0_1_4_RELEASE_NOTES.md`。
+            OCR 组件独立下载，见 [ocr-v0.1.4 Release](https://github.com/Trey5-7e/KyStudy/releases/tag/ocr-v0.1.4)。
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true

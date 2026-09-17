@@ -51,7 +51,7 @@ Cargo 全目标解析图包含 535 个非工作区包，当前没有缺失许可
 
 ### 后续增量：2026-09-06 M0-C 开发实验
 
-`png = 0.17.16` 增加为 Rust dev-dependency，版本已存在于 Cargo.lock；包元数据为 `MIT OR Apache-2.0`，仅供 `examples/agent_render_host.rs` 的合成 PNG 解码实验与测试。没有新增生产 Runtime/Sidecar，未复制外部 Harness 源码；不能将此增量视为全量依赖重新审计。固定外部参考 commit 与 LICENSE/NOTICE 记录见 [TV-08](spikes/TV-08-learning-agent-harness.md)。
+`png = 0.17.16` 增加为 Rust dev-dependency，版本已存在于 Cargo.lock；包元数据为 `MIT OR Apache-2.0`，仅供 `examples/agent_render_host.rs` 的合成 PNG 解码实验与测试。没有新增生产 Runtime/Sidecar，未复制外部 Harness 源码；不能将此增量视为全量依赖重新审计。固定外部参考与 LICENSE/NOTICE 记录保持不变。
 
 ### 2026-09-07 M1 运行内核
 
@@ -94,7 +94,7 @@ M1 只生成内部验收用的未签名 EXE，不发布正式安装包或 GitHub
 pnpm licenses list --prod --json
 pnpm licenses list --json
 cargo metadata --locked --format-version 1 --manifest-path src-tauri\Cargo.toml
-F:\develop\KyStudy-deps\ocr-py312\Scripts\python.exe -m pip show rapidocr onnxruntime opencv-python pillow psutil pyinstaller
+python -m pip show rapidocr onnxruntime opencv-python pillow psutil pyinstaller
 ```
 
 新增依赖时，Pull Request 必须说明用途、锁定版本、许可证、是否进入分发产物及可替代方案。GPL、AGPL、SSPL、来源不明或缺失许可证元数据的依赖不能未经单独决策直接引入。

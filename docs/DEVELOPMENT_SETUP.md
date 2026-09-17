@@ -18,57 +18,36 @@
 
 ## 2. 已验证工具链
 
-| 工具                      | 版本                      | 位置或说明                                 |
-| ------------------------- | ------------------------- | ------------------------------------------ |
-| Node.js                   | `v22.18.0`                | 系统已有                                   |
-| npm                       | `10.9.3`                  | 缓存位于 `F:\DevTools\cache\npm`           |
-| pnpm                      | `11.9.0`                  | store 位于 `F:\DevTools\cache\pnpm-store`  |
-| Git                       | `2.50.1.windows.1`        | 系统已有                                   |
-| rustup                    | `1.29.0`                  | `F:\DevTools\cargo` / `F:\DevTools\rustup` |
-| rustc / cargo             | `1.97.1`                  | stable `x86_64-pc-windows-msvc`            |
-| rustfmt / clippy          | `1.9.0-stable` / `0.1.97` | rustup component                           |
-| Visual Studio Build Tools | 2026 `18.8.12009.203`     | `F:\DevTools\VisualStudio\BuildTools`      |
-| MSVC                      | `19.51.36248` x64         | VC Tools `14.51.36231`                     |
-| Windows SDK               | `10.0.26100`              | 由 Build Tools 管理                        |
-| Edge WebView2 Runtime     | `150.0.4078.65`           | 系统已有                                   |
+| 工具                      | 版本                      | 说明                                  |
+| ------------------------- | ------------------------- | ------------------------------------- |
+| Node.js                   | `v22.18.0`                | 推荐 LTS 版本                         |
+| npm                       | `10.9.3`                  | 包管理与 scripts                      |
+| pnpm                      | `11.9.0`                  | 主包管理器                            |
+| Git                       | `2.50.1.windows.1`        | 版本控制                              |
+| rustup                    | `1.29.0`                  | Rust 工具链安装管理                   |
+| rustc / cargo             | `1.97.1`                  | stable `x86_64-pc-windows-msvc`       |
+| rustfmt / clippy          | `1.9.0-stable` / `0.1.97` | rustup component                      |
+| Visual Studio Build Tools | 2026 或兼容版本           | C++ 编译工具链（MSVC 与 Windows SDK） |
+| MSVC                      | `19.51.36248` x64         | VC Tools                              |
+| Windows SDK               | `10.0.26100`              | 由 Build Tools 管理                   |
+| Edge WebView2 Runtime     | `150.0.4078.65` 或更高    | 系统自带（Win 10/11 内置）            |
 
-安装器保留在 `F:\DevTools\installers`。本次下载记录：
+Visual Studio Installer 引擎、VC++ 共享运行库等系统组件由 Windows 安装到标准系统位置。
 
-| 文件                | SHA-256                                                            |
-| ------------------- | ------------------------------------------------------------------ |
-| `rustup-init.exe`   | `86478E53F769379D7F0EBFA7C9AA97CB76CA92233F79AA2CC0DBEE2EFAAC73C7` |
-| `vs_buildtools.exe` | `2FC8D62937E67AD744AA5EC6125E9D936FC305EEE41175BBA0836792407A9014` |
+## 3. 终端环境配置
 
-Visual Studio Installer 引擎、VC++ 共享运行库等系统组件仍由 Windows 安装到系统位置；无法也不应强制把所有共享组件迁移到 F 盘。
+安装工具链后，请确保系统或用户环境变量 `PATH` 已包含以下命令路径：
 
-## 3. 新终端的环境
+- Cargo bin 目录（例如 `%USERPROFILE%\.cargo\bin`）
+- pnpm 全局 bin 目录
 
-安装过程已经写入当前用户环境变量：
-
-```text
-RUSTUP_HOME=F:\DevTools\rustup
-CARGO_HOME=F:\DevTools\cargo
-PNPM_HOME=F:\DevTools\pnpm
-```
-
-用户 `PATH` 已包含：
-
-```text
-F:\DevTools\cargo\bin
-F:\DevTools\pnpm
-F:\DevTools\pnpm\bin
-```
-
-新开的 PowerShell 应能直接执行：
+新开的 PowerShell 终端应能直接执行：
 
 ```powershell
 rustc --version
 cargo --version
 pnpm --version
-pnpm config get store-dir --global
 ```
-
-最后一条应返回 `F:\DevTools\cache\pnpm-store`。如果当前终端早于安装过程打开，可重新打开终端，或只在该终端临时设置上述变量。
 
 ## 4. 正式工程锁定依赖
 
@@ -91,7 +70,6 @@ Rust 工具链由根目录 `rust-toolchain.toml` 固定为 `1.97.1`，同时声�
 ## 5. 正式工程常用命令
 
 ```powershell
-cd F:\develop\KyStudy
 pnpm install --frozen-lockfile
 pnpm format
 pnpm lint
@@ -108,7 +86,7 @@ pnpm tauri build --no-bundle
 
 ### 5.1 Windows CI
 
-`.github/workflows/windows-ci.yml` 在固定的 `windows-2025` GitHub 托管 Runner 上重复执行上述质量门槛和 Release 构建。`scripts/test-release-smoke.ps1` 随后把 EXE 复制到隔离安装目录，在程序旁的 `data` 下验证主窗口启动、进程稳定性和“启动不自动创建工作区”，并将 EXE 与 JSON 报告上传为短期 Artifact。详细边界与首次验收步骤见 [M1 Windows CI 文档](archive/v0.1.0/M1_WINDOWS_CI.md)。
+`.github/workflows/windows-ci.yml` 在固定的 `windows-2025` GitHub 托管 Runner 上重复执行上述质量门槛和 Release 构建。`scripts/test-release-smoke.ps1` 随后把 EXE 复制到隔离安装目录，在程序旁的 `data` 下验证主窗口启动、进程稳定性和“启动不自动创建工作区”，并将 EXE 与 JSON 报告上传为短期 Artifact。
 
 ### 5.2 本地干净首启预览
 
@@ -144,12 +122,12 @@ Debug/Tauri 开发构建使用 `%APPDATA%\io.github.kystudy.desktop-dev`，并�
 | 构建             | `vite` / `typescript` | `7.3.6` / `5.8.3`   |
 | 哈希与操作编号   | `sha2` / `uuid`       | `0.10.9` / `1.24.0` |
 
-`pnpm-workspace.yaml` 只允许 `esbuild` 执行安装脚本，没有全局允许第三方包脚本。WiX 与 NSIS 使用 Tauri 的 `useLocalToolsDir` 配置，缓存到 `src-tauri/target/.tauri/`，仍位于 F 盘。
+`pnpm-workspace.yaml` 只允许 `esbuild` 执行安装脚本，没有全局允许第三方包脚本。WiX 与 NSIS 使用 Tauri 的 `useLocalToolsDir` 配置，缓存到 `src-tauri/target/.tauri/`。
 
 ## 7. TV-01 常用命令
 
 ```powershell
-cd F:\develop\KyStudy\experiments\tv-01-tauri-shell
+cd experiments\tv-01-tauri-shell
 pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm build
@@ -188,11 +166,11 @@ KyStudy 的正式 Windows 版通过 Tauri updater 从 GitHub Release 获取 `lat
 1. `<app-data>/components/ocr/kystudy-ocr-worker`；
 2. `experiments/tv-07-ocr/output/pyinstaller/dist/kystudy-ocr-worker`。
 
-如果第二个目录不存在，可使用 F 盘现有 Python 环境重建：
+如果第二个目录不存在，可使用 Python 环境重建：
 
 ```powershell
-cd F:\develop\KyStudy\experiments\tv-07-ocr
-$OcrPython = 'F:\develop\KyStudy-deps\ocr-py312\Scripts\python.exe'
+cd experiments\tv-07-ocr
+$OcrPython = 'python' # 或虚拟环境中的 python 解释器路径
 & $OcrPython -m ruff check .
 & $OcrPython -m unittest discover -s .\tests -v
 .\build_sidecar.ps1 -PythonExecutable $OcrPython
@@ -202,7 +180,7 @@ $OcrPython = 'F:\develop\KyStudy-deps\ocr-py312\Scripts\python.exe'
 
 R52 新增 `scripts/package-ocr-component.ps1` 与 `scripts/test-ocr-package.ps1`：前者从已验证的 PyInstaller 目录生成 ZIP、SHA-256 和 manifest，后者使用无用户数据的临时 fixture 验证归档结构。脚本本身不上传 Release；OCR 组件变更时单独更新 `ocr-v*` Release，普通应用发布工作流只注入固定下载清单，仍不替代许可证和 NOTICE 复核。
 
-R54 将 AI Provider 管理窗口收敛为“当前 Provider、Token 摘要、Provider 卡片和按需管理”四层主路径；卡片的编辑/删除移入默认折叠的“更多操作”，上下文与输出上限继续在编辑表单的“高级限制”中默认折叠。行为契约、密钥边界、预算、连接测试和调用历史不变，详见 `docs/R54_AI_PROVIDER_SURFACE_REFINEMENT_ACCEPTANCE.md`。
+R54 将 AI Provider 管理窗口收敛为“当前 Provider、Token 摘要、Provider 卡片和按需管理”四层主路径；卡片的编辑/删除移入默认折叠的“更多操作”，上下文与输出上限继续在编辑表单的“高级限制”中默认折叠。行为契约、密钥边界、预算、连接测试和调用历史保持稳定。
 
 仍暂缓引入 React Flow、本地嵌入模型、向量数据库和各 AI 提供商 SDK。它们只在实际里程碑需要时依据已接受 ADR 或新的技术验证锁定版本。
 

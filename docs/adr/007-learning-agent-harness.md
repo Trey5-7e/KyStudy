@@ -5,7 +5,7 @@
 | 状态       | accepted（原生内核与首个协议组合；非产品验收）     |
 | 日期       | 2026-09-06 提议；2026-09-07 接受                   |
 | 相关需求   | v0.1.5 R1～R8                                      |
-| 相关 Spike | [TV-08](../spikes/TV-08-learning-agent-harness.md) |
+| 相关验证   | TV-08（Learning Agent 运行时验证）                 |
 
 ## 上下文与候选
 

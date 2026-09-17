@@ -6,7 +6,7 @@
 | 日期        | 2026-07-18                                           |
 | 决策者      | KyStudy 项目                                         |
 | 相关需求    | 本地 PDF、习题区域、多页题目、缩放、旋转、扫描页降级 |
-| 相关 Spike  | [TV-04](../spikes/TV-04-pdf-viewer.md)               |
+| 相关验证    | TV-04（PDF.js 渲染与受控 RangeSource 验证）          |
 | 替代/被替代 | 无                                                   |
 
 ## 上下文
@@ -68,7 +68,7 @@ Range 和浏览器兼容性成熟，但增加端口、生命周期、防火墙�
 - 中文、英文文字层可以提取，无文字层页返回 0 个文字项但仍可渲染和框选；
 - 三轮共 216 次渲染结束后的 JS Heap 为 3.16、3.24、3.51 MiB，销毁后为 3.06 MiB，低于 3.29 MiB 基线；
 - 截断 PDF、旧 RenderTask 取消、路径穿越、未登记 ID、无效 Range 和非 GET 均有自动失败样本；
-- 22 个 TypeScript/Vitest 测试、9 个 Rust 测试、production build、Clippy 零警告和 Tauri Release 构建通过；项目维护者确认 `direct-id-v2` Release 能正常加载 PDF。完整数据见 [TV-04](../spikes/TV-04-pdf-viewer.md)。
+- 22 个 TypeScript/Vitest 测试、9 个 Rust 测试、production build、Clippy 零警告和 Tauri Release 构建通过；项目维护者确认 `direct-id-v2` Release 能正常加载 PDF。完整数据见 TV-04 技术验证记录。
 
 ## 后果
 
