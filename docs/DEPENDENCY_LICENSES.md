@@ -47,6 +47,7 @@
 
 Cargo 全目标解析图包含 535 个非工作区包，当前没有缺失许可证元数据的包。解析图包含不同操作系统的条件依赖，不能直接当作 Windows 二进制的实际分发清单。
 
+
 ## TV-07 OCR 技术验证候选
 
 以下依赖只存在于 `experiments/tv-07-ocr/requirements.lock.txt` 和项目外的验证环境，尚未
@@ -84,7 +85,7 @@ M1 只生成内部验收用的未签名 EXE，不发布正式安装包或 GitHub
 pnpm licenses list --prod --json
 pnpm licenses list --json
 cargo metadata --locked --format-version 1 --manifest-path src-tauri\Cargo.toml
-F:\develop\KyStudy-deps\ocr-py312\Scripts\python.exe -m pip show rapidocr onnxruntime opencv-python pillow psutil pyinstaller
+python -m pip show rapidocr onnxruntime opencv-python pillow psutil pyinstaller
 ```
 
 新增依赖时，Pull Request 必须说明用途、锁定版本、许可证、是否进入分发产物及可替代方案。GPL、AGPL、SSPL、来源不明或缺失许可证元数据的依赖不能未经单独决策直接引入。

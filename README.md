@@ -9,7 +9,7 @@
     ·
     <a href="https://github.com/Trey5-7e/KyStudy/issues">反馈问题</a>
     ·
-    <a href="docs/V0_1_0_DEVELOPMENT_HANDOFF.md">开发交接文档</a>
+    <a href="docs/DEVELOPMENT_SETUP.md">环境搭建指南</a>
   </p>
 </div>
 
@@ -294,19 +294,15 @@ NSIS 安装包输出到 src-tauri\target\release\bundle\nsis\，便携版输出�
 ## 开发文档
 
 - [文档导航](docs/README.md)
-- [v0.1.0 开发交接文档](docs/V0_1_0_DEVELOPMENT_HANDOFF.md)
-- [v0.1.0 最终验收记录](docs/V0_1_0_FINAL_ACCEPTANCE.md)
-- [v0.1.1 发布说明](docs/V0_1_1_RELEASE_NOTES.md)
-- [精简开发流程](docs/DEVELOPMENT_WORKFLOW.md)
-- [开发环境与依赖说明](docs/DEVELOPMENT_SETUP.md)
-- [README 截图演示工作区](docs/DEMO_SCREENSHOT_WORKSPACE.md)
-- [产品需求文档](docs/PRD.md)
+- [产品需求文档 (PRD)](docs/PRD.md)
+- [系统数据模型](docs/DATA_MODEL.md)
 - [页面信息架构](docs/INFORMATION_ARCHITECTURE.md)
+- [开发环境与依赖说明](docs/DEVELOPMENT_SETUP.md)
+- [开发工作流与门禁](docs/DEVELOPMENT_WORKFLOW.md)
+- [架构决策记录 (ADR)](docs/adr/README.md)
+- [浏览器 UI 预览工作流](docs/CODEX_IN_APP_BROWSER_UI_WORKFLOW.md)
 - [依赖许可证审计](docs/DEPENDENCY_LICENSES.md)
-- [OCR 组件管理验收](docs/R50_OCR_COMPONENT_MANAGEMENT_ACCEPTANCE.md)
-- [OCR 在线下载与发布边界](docs/R52_OCR_COMPONENT_PACKAGING_ACCEPTANCE.md)
-
-历史里程碑与 R1–R65 验收记录归档在 [docs/archive/v0.1.0/](docs/archive/v0.1.0/)，用于追溯行为契约和测试证据。
+- [README 截图演示工作区](docs/DEMO_SCREENSHOT_WORKSPACE.md)
 
 ## 后续开发方向
 

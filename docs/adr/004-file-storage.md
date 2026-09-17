@@ -6,7 +6,7 @@
 | 日期        | 2026-07-18                                             |
 | 决策者      | KyStudy 项目                                           |
 | 相关需求    | 本地优先、大型 PDF、物理去重、取消、异常恢复、完整备份 |
-| 相关 Spike  | [TV-03](../spikes/TV-03-blob-store.md)                 |
+| 相关验证    | TV-03（Blob 存储、流式导入与快照验证）              |
 | 替代/被替代 | 无                                                     |
 
 ## 上下文
@@ -74,7 +74,7 @@ KyStudy 需要保存用户导入的 PDF、图片和思维导图源文件。文�
 - TV-03 本机 release 实测：10 MiB、300 MiB、1 GiB 首次导入分别为 31 ms、488 ms、1,352 ms；重复导入 1 GiB 为 2,161 ms，未产生第二个物理 Blob；
 - 包含约 1.30 GiB 数据的完整备份和恢复分别为 3,916 ms 与 3,874 ms，备份大小为 1,398,846,402 bytes；
 - 测量进程峰值工作集为 7.46 MiB、峰值分页内存为 2.12 MiB，证明实验实现的内存占用不随 1 GiB 文件线性增长；
-- `cargo fmt --check`、`cargo test --locked` 与全目标/全特性 Clippy 零警告通过。完整证据与复现命令见 [TV-03](../spikes/TV-03-blob-store.md)。
+- `cargo fmt --check`、`cargo test --locked` 与全目标/全特性 Clippy 零警告通过。完整证据与复现命令见 TV-03 技术验证记录。
 
 ## 后果
 

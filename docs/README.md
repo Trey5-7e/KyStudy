@@ -1,41 +1,23 @@
 # KyStudy 文档导航
 
-这里保留当前版本用户、开发和发布所需的核心文档。历史开发计划、阶段验收和旧版设计材料统一放在 [`archive/v0.1.0/`](archive/v0.1.0/)，避免根目录被历史记录淹没，同时保留完整追溯证据。
+欢迎查阅 KyStudy 开发者与架构文档库。本目录收录了项目的核心需求、系统架构设计、开发规范及架构决策记录。
 
-## 当前文档
+## 1. 核心设计与架构
 
-- [产品需求](PRD.md)
-- [数据模型](DATA_MODEL.md)
-- [页面信息架构](INFORMATION_ARCHITECTURE.md)
-- [开发环境与依赖](DEVELOPMENT_SETUP.md)
-- [开发工作流](DEVELOPMENT_WORKFLOW.md)
-- [依赖许可证审计](DEPENDENCY_LICENSES.md)
-- [README 截图演示工作区](DEMO_SCREENSHOT_WORKSPACE.md)
-- [v0.1.4 开发方案](V0_1_4_DEVELOPMENT_PLAN.md)
-- [v0.1.4 发布说明](V0_1_4_RELEASE_NOTES.md)
-- [v0.1.5 发布说明](V0_1_5_RELEASE_NOTES.md)
-- [v0.1.4 做题本 PDF 适配基线](V0_1_4_WORKBOOK_PDF_BASELINES.md)
-- [v0.1.4 供应商预设目录](V0_1_4_PROVIDER_CATALOGUE.md)
-- [v0.1.4 UI 参考与闭环记录](V0_1_4_UI_REFERENCE_MAP.md)
-- [v0.1.4 网页版可行性分析](V0_1_4_WEB_VERSION_FEASIBILITY.md)
-- [v0.1.4 API 管理项目选型 Spike](V0_1_4_API_GATEWAY_SPIKE.md)
-- [v0.1.3 开发方案与验收记录](V0_1_3_DEVELOPMENT_PLAN.md)
-- [v0.1.2 开发方案](V0_1_2_DEVELOPMENT_PLAN.md)
-- [v0.1.2 发布说明](V0_1_2_RELEASE_NOTES.md)
-- [v0.1.1 发布跟踪](V0_1_1_RELEASE_TRACKER.md)
-- [v0.1.1 发布说明](V0_1_1_RELEASE_NOTES.md)
-- [v0.1.0 开发交接](V0_1_0_DEVELOPMENT_HANDOFF.md)
-- [v0.1.0 最终验收](V0_1_0_FINAL_ACCEPTANCE.md)
-- [OCR 组件管理验收](R50_OCR_COMPONENT_MANAGEMENT_ACCEPTANCE.md)
-- [OCR 在线下载与打包边界](R51_OCR_COMPONENT_ONLINE_DOWNLOAD_ACCEPTANCE.md)
-- [OCR 组件打包验收](R52_OCR_COMPONENT_PACKAGING_ACCEPTANCE.md)
-- [OCR 下载发布配置](R53_OCR_DOWNLOAD_RELEASE_CONFIGURATION_ACCEPTANCE.md)
+- [产品需求文档 (PRD)](PRD.md)：核心产品理念、考研业务目标、功能边界与非功能要求。
+- [系统数据模型](DATA_MODEL.md)：本地 SQLite 数据库架构、表结构设计、实体关系与迁移策略。
+- [页面信息架构](INFORMATION_ARCHITECTURE.md)：界面层级结构、视图与导航模型、交互状态定义。
+- [架构决策记录 (ADR)](adr/README.md)：系统重大架构决策与技术选型记录（ADR-001 ~ ADR-006）。
 
-## 架构与技术验证
+## 2. 开发与工作流
 
-- [ADR](adr/README.md)
-- [技术 Spike](spikes/README.md)
+- [开发环境与依赖说明](DEVELOPMENT_SETUP.md)：Windows 本地构建依赖（Rust、Node.js、pnpm、MSVC 等）与快速上手指南。
+- [开发工作流与质量门禁](DEVELOPMENT_WORKFLOW.md)：Git 分支管理、代码风格规范、测试要求与发布门禁。
+- [浏览器 UI 预览工作流](CODEX_IN_APP_BROWSER_UI_WORKFLOW.md)：基于合成 Fixture 的前端页面快速预览与自检流程。
+- [README 截图演示工作区](DEMO_SCREENSHOT_WORKSPACE.md)：README 与文档所用合成演示环境规范与截图流程。
 
-## 历史归档
+## 3. 开源合规与资产
 
-[`archive/v0.1.0/`](archive/v0.1.0/) 保存 M1–M13、R1–R65、旧 UI 方案和旧技术验证材料。它们不参与应用构建，也不会进入 NSIS 或 ZIP 安装包。
+- [依赖许可证审计](DEPENDENCY_LICENSES.md)：全量前端与 Rust 核心依赖的开源许可证说明与合规审计记录。
+- [静态资产与品牌](branding/kystudy-icon-concept-v4-transparent-tight.png)：项目官方图标与视觉资源。
+- [演示截图](screenshots/demo-workspace/README.md)：公开展示的各模块界面效果图。

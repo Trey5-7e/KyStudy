@@ -91,7 +91,7 @@ jobs:
             - 题目图片和已有辅助解析可以进入普通 AI 对话继续讨论
             - 本版本不包含仍在开发中的 Agent Harness 或资料研读功能
 
-            OCR 组件独立下载，见 [ocr-v0.1.4 Release](https://github.com/Trey5-7e/KyStudy/releases/tag/ocr-v0.1.4)；完整发布说明见仓库 `docs/V0_1_5_RELEASE_NOTES.md`。
+            OCR 组件独立下载，见 [ocr-v0.1.4 Release](https://github.com/Trey5-7e/KyStudy/releases/tag/ocr-v0.1.4)。
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true
