@@ -300,9 +300,7 @@ NSIS 安装包输出到 src-tauri\target\release\bundle\nsis\，便携版输出�
 - [开发环境与依赖说明](docs/DEVELOPMENT_SETUP.md)
 - [开发工作流与门禁](docs/DEVELOPMENT_WORKFLOW.md)
 - [架构决策记录 (ADR)](docs/adr/README.md)
-- [浏览器 UI 预览工作流](docs/CODEX_IN_APP_BROWSER_UI_WORKFLOW.md)
 - [依赖许可证审计](docs/DEPENDENCY_LICENSES.md)
-- [README 截图演示工作区](docs/DEMO_SCREENSHOT_WORKSPACE.md)
 
 ## 后续开发方向
 

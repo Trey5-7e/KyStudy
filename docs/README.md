@@ -13,8 +13,6 @@
 
 - [开发环境与依赖说明](DEVELOPMENT_SETUP.md)：Windows 本地构建依赖（Rust、Node.js、pnpm、MSVC 等）与快速上手指南。
 - [开发工作流与质量门禁](DEVELOPMENT_WORKFLOW.md)：Git 分支管理、代码风格规范、测试要求与发布门禁。
-- [浏览器 UI 预览工作流](CODEX_IN_APP_BROWSER_UI_WORKFLOW.md)：基于合成 Fixture 的前端页面快速预览与自检流程。
-- [README 截图演示工作区](DEMO_SCREENSHOT_WORKSPACE.md)：README 与文档所用合成演示环境规范与截图流程。
 
 ## 3. 开源合规与资产
 
