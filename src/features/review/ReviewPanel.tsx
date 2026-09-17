@@ -245,7 +245,12 @@ export function ReviewPanel({
   const { today, dashboard, subjects, workbooks } = state.value;
   const session = buildContinuousReviewSession(dashboard.schemes);
   const currentTab: ReviewTab =
-    activeTab ?? (dashboard.schemes.length === 0 ? "schemes" : "queue");
+    activeTab ??
+    (dashboard.schemes.length === 0
+      ? pendingMistakesCount > 0
+        ? "notebook"
+        : "schemes"
+      : "queue");
   const open = (d: SchemeDraft) => {
     setDraft(d);
     setInitial(d);

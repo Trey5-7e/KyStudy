@@ -80,27 +80,37 @@ KyStudy 的目标不是记录更多数据，而是减少备考中重复、麻烦
 
 ## 界面概览
 
-README 只展示四个核心页面，具体的导入、组卷、错题反馈、PDF 阅读、思维导图和设置操作放在后面的使用流程中说明。
+README 展示 KyStudy 核心工作台页面，具体的导入、组卷、错题反馈、PDF 阅读、思维导图和设置操作放在后面的使用流程中说明。
 
 <p align="center">
   <img src="docs/screenshots/demo-workspace/today-demo.png" alt="今日页面" width="100%">
 </p>
-<p align="center"><strong>今日</strong>：集中处理当前任务</p>
+<p align="center"><strong>今日</strong>：集中处理当前任务与快捷行动入口</p>
 
 <p align="center">
   <img src="docs/screenshots/demo-workspace/planning-demo.png" alt="计划页面" width="100%">
 </p>
-<p align="center"><strong>计划</strong>：查看周期安排和进度</p>
+<p align="center"><strong>计划</strong>：查看周期安排、阶段日历与复习进度</p>
 
 <p align="center">
   <img src="docs/screenshots/demo-workspace/workbook-demo.png" alt="习题册页面" width="100%">
 </p>
-<p align="center"><strong>习题册</strong>：管理题目和索引</p>
+<p align="center"><strong>习题册</strong>：管理科目与习题册分类、题目索引、快速登记与组卷</p>
+
+<p align="center">
+  <img src="docs/screenshots/demo-workspace/review-demo.png" alt="错题页面" width="100%">
+</p>
+<p align="center"><strong>错题</strong>：双栏沉浸复盘工作台、考点归因标签与做题轨迹</p>
 
 <p align="center">
   <img src="docs/screenshots/demo-workspace/library-demo.png" alt="资料页面" width="100%">
 </p>
-<p align="center"><strong>资料</strong>：统一管理 PDF 与导图</p>
+<p align="center"><strong>资料</strong>：统一管理本地 PDF 教材与思维导图源文件</p>
+
+<p align="center">
+  <img src="docs/screenshots/demo-workspace/ai-chat-demo.png" alt="AI 学习助手页面" width="100%">
+</p>
+<p align="center"><strong>AI 学习助手</strong>：公式渲染、题目解题讨论与本地资料引用</p>
 
 ## 技术栈
 

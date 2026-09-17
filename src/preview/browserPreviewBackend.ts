@@ -561,47 +561,87 @@ const PREVIEW_QUESTION_BANK = {
   questions: PREVIEW_QUESTIONS,
 };
 
-const PREVIEW_CYCLE_PLAN = {
-  restWeekdays: [6],
-  plans: [
-    {
-      plan: {
-        id: "preview-cycle-plan",
-        name: "考研数学基础强化",
-        totalUnits: 20,
-        unitLabel: "章",
-        startDate: "2026-08-01",
-        deadline: "2026-12-24",
-        studyDaysPerUnit: 2,
-        scheduleMode: "rhythm",
-        calendarVisible: true,
-        createdAt: PREVIEW_TIME,
-        updatedAt: PREVIEW_TIME,
+function toDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function buildPreviewCyclePlan() {
+  const now = new Date();
+  const todayTime = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const baseOffsetDays = -6;
+
+  const items = Array.from({ length: 12 }, (_, index) => {
+    const startDay = new Date(
+      todayTime + (baseOffsetDays + index * 2) * dayMs,
+    );
+    const endDay = new Date(
+      todayTime + (baseOffsetDays + index * 2 + 1) * dayMs,
+    );
+    const plannedStartDate = toDateKey(startDay);
+    const plannedEndDate = toDateKey(endDay);
+    const isCompleted = index < 3;
+    return {
+      id: `preview-cycle-item-${index + 1}`,
+      planId: "preview-cycle-plan",
+      unitIndex: index + 1,
+      plannedStartDate,
+      plannedEndDate,
+      originalStartDate: plannedStartDate,
+      originalEndDate: plannedEndDate,
+      state: isCompleted ? ("completed" as const) : ("pending" as const),
+      completedAt: isCompleted ? PREVIEW_TIME : null,
+      skippedAt: null,
+      shiftCount: 0,
+      updatedAt: PREVIEW_TIME + index,
+    };
+  });
+
+  const year = now.getFullYear();
+  const startDate = toDateKey(new Date(todayTime + baseOffsetDays * dayMs));
+  const deadline = `${year}-12-24`;
+  const estimatedEndDate = toDateKey(
+    new Date(todayTime + (baseOffsetDays + 20 * 2) * dayMs),
+  );
+
+  return {
+    restWeekdays: [6],
+    plans: [
+      {
+        plan: {
+          id: "preview-cycle-plan",
+          name: "考研数学基础强化",
+          totalUnits: 20,
+          unitLabel: "章",
+          startDate,
+          deadline,
+          studyDaysPerUnit: 2,
+          scheduleMode: "rhythm",
+          calendarVisible: true,
+          createdAt: PREVIEW_TIME,
+          updatedAt: PREVIEW_TIME,
+        },
+        items,
+        completedCount: 3,
+        skippedCount: 0,
+        progressPercent: 15,
+        estimatedEndDate,
+        exceedsDeadline: false,
+        recommendedStudyDaysPerUnit: null,
+        recommendedTotalUnits: null,
       },
-      items: Array.from({ length: 12 }, (_, index) => ({
-        id: `preview-cycle-item-${index + 1}`,
-        planId: "preview-cycle-plan",
-        unitIndex: index + 1,
-        plannedStartDate: `2026-08-${String(index * 2 + 1).padStart(2, "0")}`,
-        plannedEndDate: `2026-08-${String(index * 2 + 2).padStart(2, "0")}`,
-        originalStartDate: `2026-08-${String(index * 2 + 1).padStart(2, "0")}`,
-        originalEndDate: `2026-08-${String(index * 2 + 2).padStart(2, "0")}`,
-        state: index < 3 ? "completed" : "pending",
-        completedAt: index < 3 ? PREVIEW_TIME : null,
-        skippedAt: null,
-        shiftCount: 0,
-        updatedAt: PREVIEW_TIME + index,
-      })),
-      completedCount: 3,
-      skippedCount: 0,
-      progressPercent: 15,
-      estimatedEndDate: "2026-09-10",
-      exceedsDeadline: false,
-      recommendedStudyDaysPerUnit: null,
-      recommendedTotalUnits: null,
-    },
-  ],
-};
+    ],
+  };
+}
+
+const PREVIEW_CYCLE_PLAN = buildPreviewCyclePlan();
 
 function previewKnowledgeMap() {
   const nodes = [
@@ -698,6 +738,43 @@ function previewStudyPlans() {
   return [];
 }
 
+function previewQuestionHistory(questionId: string) {
+  return {
+    questionId,
+    firstMistakeAt: PREVIEW_TIME - 3 * 24 * 3600 * 1000,
+    lastMistakeAt: PREVIEW_TIME - 24 * 3600 * 1000,
+    mistakeCount: 2,
+    consecutiveFailureCount: 1,
+    masteryLevel: "learning",
+    dueDate: "2026-09-18",
+    successfulStreak: 0,
+    attempts: [
+      {
+        id: `preview-attempt-${questionId}-1`,
+        questionId,
+        result: "incorrect",
+        attemptedAt: PREVIEW_TIME - 3 * 24 * 3600 * 1000,
+        createdAt: PREVIEW_TIME - 3 * 24 * 3600 * 1000,
+        durationSeconds: 120,
+        answerNote: "导数符号判断失误",
+        nextDueDate: "2026-09-15",
+        intervalDays: 1,
+      },
+      {
+        id: `preview-attempt-${questionId}-2`,
+        questionId,
+        result: "incorrect",
+        attemptedAt: PREVIEW_TIME - 24 * 3600 * 1000,
+        createdAt: PREVIEW_TIME - 24 * 3600 * 1000,
+        durationSeconds: 95,
+        answerNote: "计算积分时漏掉了负号",
+        nextDueDate: "2026-09-18",
+        intervalDays: 2,
+      },
+    ],
+  };
+}
+
 function previewReaderDescriptor(documentId: string) {
   const resource = PREVIEW_RESOURCES.find((item) => item.id === documentId);
   if (resource === undefined || resource.kind !== "pdf") {
@@ -755,6 +832,10 @@ export async function invokeBrowserPreview(
       return [];
     case "list_resources":
       return PREVIEW_RESOURCES;
+    case "list_resource_index_statuses":
+      return [];
+    case "find_latest_agent_run":
+      return null;
     case "list_subjects":
       return PREVIEW_SUBJECTS;
     case "get_workspace_status":
@@ -778,6 +859,8 @@ export async function invokeBrowserPreview(
       return String(args.questionId ?? "") === OCR_PREVIEW_QUESTION_ID
         ? [PREVIEW_OCR_RECOGNITION]
         : [];
+    case "get_question_history":
+      return previewQuestionHistory(String(args.questionId ?? ""));
     case "get_cycle_plan_dashboard":
       return PREVIEW_CYCLE_PLAN;
     case "get_review_scheme_dashboard":
