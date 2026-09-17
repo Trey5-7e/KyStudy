@@ -6,6 +6,16 @@ tmp/
 AGENTS.md
 KyStudy-frontend-source.zip
 
+# Private planning, operation docs and local dev guides (keep locally, never push)
+docs/local/
+docs/internal/
+docs/CODEX_IN_APP_BROWSER_UI_WORKFLOW.md
+docs/DEMO_SCREENSHOT_WORKSPACE.md
+docs/*_HANDOFF*.md
+docs/*_ACCEPTANCE*.md
+docs/SPRINT_*.md
+experiments/**/MANUAL_TESTING.md
+
 # JavaScript dependencies and build output
 node_modules/
 dist/
