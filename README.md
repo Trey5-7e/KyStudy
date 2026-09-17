@@ -5,7 +5,7 @@
   <h1>KyStudy</h1>
   <p>面向中国考研学生的本地优先学习规划、习题管理与错题复习桌面应用。</p>
   <p>
-    <a href="https://github.com/Trey5-7e/KyStudy/releases">下载 v0.1.4</a>
+    <a href="https://github.com/Trey5-7e/KyStudy/releases">下载 v0.1.5</a>
     ·
     <a href="https://github.com/Trey5-7e/KyStudy/issues">反馈问题</a>
     ·
@@ -21,10 +21,10 @@
     <img src="https://img.shields.io/badge/license-GPL--3.0--only-blue.svg" alt="GPL-3.0-only license">
   </a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4.svg" alt="Windows 10 and 11 x64">
-  <img src="https://img.shields.io/badge/status-v0.1.4%20ready-success.svg" alt="v0.1.4 release ready">
+  <img src="https://img.shields.io/badge/status-v0.1.5%20ready-success.svg" alt="v0.1.5 release ready">
 </p>
 
-> 当前首版支持 Windows 10/11 x64。v0.1.4 已完成独立 AI 学习助手、模型与 API 管理中心、做题本 PDF 结构化识别基线与低干扰 Token 预算；OCR 组件复用独立的 `ocr-v0.1.0` Release。
+> 当前版本支持 Windows 10/11 x64。v0.1.5 聚焦界面体验、错题本、连续复习、做题与题目历史；通用 Agent Harness 不在本次发布范围。OCR 组件继续复用独立的 `ocr-v0.1.4` Release。
 
 ## 目录
 
@@ -80,27 +80,37 @@ KyStudy 的目标不是记录更多数据，而是减少备考中重复、麻烦
 
 ## 界面概览
 
-README 只展示四个核心页面，具体的导入、组卷、错题反馈、PDF 阅读、思维导图和设置操作放在后面的使用流程中说明。
+README 展示 KyStudy 核心工作台页面，具体的导入、组卷、错题反馈、PDF 阅读、思维导图和设置操作放在后面的使用流程中说明。
 
 <p align="center">
   <img src="docs/screenshots/demo-workspace/today-demo.png" alt="今日页面" width="100%">
 </p>
-<p align="center"><strong>今日</strong>：集中处理当前任务</p>
+<p align="center"><strong>今日</strong>：集中处理当前任务与快捷行动入口</p>
 
 <p align="center">
   <img src="docs/screenshots/demo-workspace/planning-demo.png" alt="计划页面" width="100%">
 </p>
-<p align="center"><strong>计划</strong>：查看周期安排和进度</p>
+<p align="center"><strong>计划</strong>：查看周期安排、阶段日历与复习进度</p>
 
 <p align="center">
   <img src="docs/screenshots/demo-workspace/workbook-demo.png" alt="习题册页面" width="100%">
 </p>
-<p align="center"><strong>习题册</strong>：管理题目和索引</p>
+<p align="center"><strong>习题册</strong>：管理科目与习题册分类、题目索引、快速登记与组卷</p>
+
+<p align="center">
+  <img src="docs/screenshots/demo-workspace/review-demo.png" alt="错题页面" width="100%">
+</p>
+<p align="center"><strong>错题</strong>：双栏沉浸复盘工作台、考点归因标签与做题轨迹</p>
 
 <p align="center">
   <img src="docs/screenshots/demo-workspace/library-demo.png" alt="资料页面" width="100%">
 </p>
-<p align="center"><strong>资料</strong>：统一管理 PDF 与导图</p>
+<p align="center"><strong>资料</strong>：统一管理本地 PDF 教材与思维导图源文件</p>
+
+<p align="center">
+  <img src="docs/screenshots/demo-workspace/ai-chat-demo.png" alt="AI 学习助手页面" width="100%">
+</p>
+<p align="center"><strong>AI 学习助手</strong>：公式渲染、题目解题讨论与本地资料引用</p>
 
 ## 技术栈
 
