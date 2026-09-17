@@ -579,9 +579,7 @@ function buildPreviewCyclePlan() {
   const baseOffsetDays = -6;
 
   const items = Array.from({ length: 12 }, (_, index) => {
-    const startDay = new Date(
-      todayTime + (baseOffsetDays + index * 2) * dayMs,
-    );
+    const startDay = new Date(todayTime + (baseOffsetDays + index * 2) * dayMs);
     const endDay = new Date(
       todayTime + (baseOffsetDays + index * 2 + 1) * dayMs,
     );
